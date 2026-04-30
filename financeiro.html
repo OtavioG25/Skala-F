@@ -382,7 +382,7 @@ function calcDRE(year){
     // Impostos e Custos Operacionais
     r.impostos   = r['d_impostos']||0;
     r.custosOp   = r['d_custos_operacionais']||0;
-    r.recOpLiq   = r.recOpBruta - r.ded - r.impostos - r.custosOp;
+    r.recOpLiq   = r.recOpBruta - r.impostos - r.custosOp - r.ded;
     // Custo pessoal
     r.cusPessoal = (r['d_pro_labores']||0)+(r['d_empregados']||0)+(r['d_recrutamento']||0);
     r.lucOpBruto = r.recOpLiq - r.cusPessoal;
@@ -696,11 +696,11 @@ function renderDRE(c){
       <tbody>
         ${row('RECEITAS OPERACIONAIS','','sep')}
         ${recOpCats.map(cat=>groupRows(cat,'R')).join('')}
-        ${row('(–) Deduções / Impostos s/ Receita','ded','sub')}
         ${row('(=) RECEITA OPERACIONAL BRUTA','recOpBruta','result')}
 
         ${row('IMPOSTOS','','sep')}
         ${g(impostoCat,'D')}
+        ${row('(–) Deduções sobre Receita','ded','sub')}
         ${row('CUSTOS OPERACIONAIS','','sep')}
         ${g(custosOpCat,'D')}
         ${row('(=) RECEITA OPERACIONAL LÍQUIDA','recOpLiq','result')}
