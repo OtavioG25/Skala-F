@@ -1,0 +1,1532 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+<meta charset="UTF-8"/>
+<meta name="viewport" content="width=device-width, initial-scale=1.0"/>
+<title>Financeiro — Escritório</title>
+<style>
+:root{
+  --bg:#0d1117;--s1:#161b22;--s2:#21262d;--s3:#30363d;
+  --bd:rgba(255,255,255,.08);--bd2:rgba(255,255,255,.15);
+  --tx:#e6edf3;--tx2:#8b949e;--tx3:#484f58;
+  --teal:#39d353;--teal2:#2ea043;--blue:#58a6ff;
+  --purple:#bc8cff;--pink:#f778ba;--yellow:#e3b341;
+  --orange:#f0883e;--red:#f85149;--green:#56d364;
+  --sw:230px;
+}
+*,*::before,*::after{box-sizing:border-box;margin:0;padding:0}
+body{font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',system-ui,sans-serif;
+  background:var(--bg);color:var(--tx);font-size:14px;line-height:1.5;overflow:hidden;height:100vh}
+#login-screen{position:fixed;inset:0;background:var(--bg);display:flex;align-items:center;justify-content:center;z-index:99999}
+.login-box{background:var(--s1);border:1px solid var(--bd2);border-radius:18px;padding:40px 36px;width:100%;max-width:360px;text-align:center}
+.login-ico{width:52px;height:52px;background:linear-gradient(135deg,var(--teal),var(--blue));border-radius:14px;display:flex;align-items:center;justify-content:center;font-size:24px;font-weight:900;color:#0d1117;margin:0 auto 20px}
+.login-title{font-size:20px;font-weight:700;color:var(--tx);margin-bottom:4px}
+.login-sub{font-size:13px;color:var(--tx2);margin-bottom:28px}
+.login-field input{width:100%;background:var(--s2);border:1px solid var(--bd2);border-radius:10px;color:var(--tx);padding:11px 14px;font-size:15px;outline:none;transition:border-color .15s;text-align:center;letter-spacing:4px}
+.login-field input:focus{border-color:var(--blue)}
+.login-field input::placeholder{letter-spacing:0;color:var(--tx3)}
+.login-btn{width:100%;padding:11px;background:linear-gradient(135deg,var(--teal2),var(--blue));border:none;border-radius:10px;color:#fff;font-size:14px;font-weight:600;cursor:pointer;transition:opacity .12s;margin-top:12px}
+.login-btn:hover{opacity:.88}
+.login-err{color:var(--red);font-size:12.5px;margin-top:10px;min-height:18px}
+button{cursor:pointer;font-family:inherit}
+input,select,textarea{font-family:inherit}
+#app{display:flex;height:100vh}
+#sidebar{width:var(--sw);min-width:var(--sw);background:var(--s1);border-right:1px solid var(--bd);
+  display:flex;flex-direction:column;overflow:hidden}
+.brand{display:flex;align-items:center;gap:12px;padding:20px 16px;border-bottom:1px solid var(--bd)}
+.brand-ico{width:34px;height:34px;background:linear-gradient(135deg,var(--teal),var(--blue));
+  border-radius:8px;display:flex;align-items:center;justify-content:center;
+  font-size:16px;font-weight:900;color:#0d1117;flex-shrink:0}
+.brand-name{font-weight:700;font-size:14px;color:var(--tx)}
+.brand-sub{font-size:11px;color:var(--tx3);margin-top:1px}
+nav{flex:1;padding:10px 8px;display:flex;flex-direction:column;gap:2px}
+.nv{display:flex;align-items:center;gap:9px;padding:8px 10px;border-radius:8px;
+  border:1px solid transparent;background:none;color:var(--tx2);font-size:13px;
+  width:100%;text-align:left;transition:all .12s}
+.nv:hover{background:var(--s2);color:var(--tx)}
+.nv.on{background:rgba(88,166,255,.1);color:var(--blue);border-color:rgba(88,166,255,.2)}
+.nv-ico{font-size:16px;width:20px;text-align:center;flex-shrink:0}
+.nb{margin-left:auto;background:var(--yellow);color:#0d1117;font-size:10px;font-weight:700;padding:1px 6px;border-radius:99px}
+.sidebar-foot{padding:12px 8px;border-top:1px solid var(--bd);display:flex;flex-direction:column;gap:6px}
+.btn-exp{display:flex;align-items:center;gap:8px;width:100%;padding:8px 10px;
+  background:var(--s2);border:1px solid var(--bd2);border-radius:8px;color:var(--tx2);font-size:12.5px;transition:all .12s}
+.btn-exp:hover{background:var(--s3);color:var(--tx)}
+.sync-status{display:flex;align-items:center;gap:6px;padding:4px 10px;font-size:11px;color:var(--tx3)}
+.sync-dot{width:7px;height:7px;border-radius:50%;background:var(--tx3);flex-shrink:0}
+.sync-dot.ok{background:var(--teal)}
+.sync-dot.err{background:var(--red)}
+.sync-dot.loading{background:var(--yellow);animation:pulse 1s infinite}
+@keyframes pulse{0%,100%{opacity:1}50%{opacity:.3}}
+#main{flex:1;display:flex;flex-direction:column;overflow:hidden}
+.topbar{display:flex;align-items:center;justify-content:space-between;
+  padding:14px 24px;border-bottom:1px solid var(--bd);background:var(--s1);gap:12px}
+.page-ttl{font-size:18px;font-weight:700;color:var(--tx)}
+.topbar-r{display:flex;align-items:center;gap:10px}
+.yr-sel select{background:var(--s2);border:1px solid var(--bd2);color:var(--tx);border-radius:8px;padding:6px 10px;font-size:13px}
+.content{flex:1;overflow-y:auto;padding:20px 24px;background:var(--bg)}
+.btn{display:inline-flex;align-items:center;gap:6px;padding:7px 14px;border-radius:8px;font-size:13px;font-weight:500;border:none;transition:all .12s}
+.btn-pri{background:linear-gradient(135deg,var(--teal2),var(--blue));color:#fff;font-weight:600}
+.btn-pri:hover{opacity:.88;transform:translateY(-1px)}
+.btn-ghost{background:var(--s2);border:1px solid var(--bd2);color:var(--tx2)}
+.btn-ghost:hover{background:var(--s3);color:var(--tx)}
+.kpi-grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(185px,1fr));gap:14px;margin-bottom:20px}
+.kpi{background:var(--s1);border:1px solid var(--bd);border-radius:14px;padding:16px 18px;position:relative;overflow:hidden;transition:transform .12s,box-shadow .12s}
+.kpi:hover{transform:translateY(-2px);box-shadow:0 8px 20px rgba(0,0,0,.3)}
+.kpi::before{content:'';position:absolute;top:0;left:0;right:0;height:3px;border-radius:14px 14px 0 0}
+.k-teal::before{background:linear-gradient(90deg,var(--teal),var(--blue))}
+.k-green::before{background:linear-gradient(90deg,var(--green),var(--teal))}
+.k-blue::before{background:linear-gradient(90deg,var(--blue),var(--purple))}
+.k-orange::before{background:linear-gradient(90deg,var(--orange),var(--pink))}
+.k-yellow::before{background:linear-gradient(90deg,var(--yellow),var(--orange))}
+.k-red::before{background:linear-gradient(90deg,var(--red),var(--pink))}
+.kpi-lbl{font-size:10.5px;color:var(--tx2);text-transform:uppercase;letter-spacing:.6px;font-weight:500;margin-bottom:8px}
+.kpi-val{font-size:20px;font-weight:700;color:var(--tx);margin-bottom:3px}
+.kpi-sub{font-size:11.5px;color:var(--tx2)}
+.charts-row{display:grid;grid-template-columns:1fr 340px;gap:14px;margin-bottom:14px}
+.card{background:var(--s1);border:1px solid var(--bd);border-radius:14px;padding:18px 20px;margin-bottom:14px}
+.card.wide{margin-bottom:0}
+.card-ttl{font-size:13px;font-weight:600;color:var(--tx);margin-bottom:14px;display:flex;align-items:center;gap:8px}
+.yr-pill{background:var(--s2);border:1px solid var(--bd2);padding:2px 8px;border-radius:99px;font-size:11px;color:var(--tx2);font-weight:400}
+canvas{display:block}
+.pend-card{background:var(--s1);border:1px solid rgba(227,179,65,.18);border-radius:14px;padding:18px 20px}
+.pend-list{display:flex;flex-direction:column;gap:5px;margin-top:10px}
+.pend-row{display:flex;align-items:center;gap:10px;padding:7px 10px;border-radius:8px;background:var(--s2)}
+.pend-row:hover{background:var(--s3)}
+.pt{font-size:12px;font-weight:700;width:16px;text-align:center}
+.pt.r{color:var(--teal)}.pt.d{color:var(--red)}
+.pdesc{flex:1;font-size:12.5px;color:var(--tx);overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.pcat{font-size:11px;color:var(--tx3);min-width:110px}
+.pdata{font-size:11px;color:var(--tx2);min-width:80px}
+.pval{font-size:12.5px;font-weight:600;min-width:95px;text-align:right}
+.pval.r{color:var(--teal)}.pval.d{color:var(--red)}
+.tbl-wrap{background:var(--s1);border:1px solid var(--bd);border-radius:14px;overflow:hidden}
+.tbl-hdr{padding:18px 20px 14px;border-bottom:1px solid var(--bd)}
+.sec-ttl{font-size:15px;font-weight:700;display:flex;align-items:center;gap:10px}
+.tbl-scroll{overflow-x:auto}
+table{width:100%;border-collapse:collapse}
+.fin-tbl{min-width:1050px}
+.fin-tbl th{background:var(--s2);padding:9px 11px;text-align:right;font-size:11px;font-weight:600;color:var(--tx2);border-bottom:1px solid var(--bd);white-space:nowrap}
+.fin-tbl th:first-child{text-align:left;min-width:210px}
+.fin-tbl .tc{background:var(--s3)}
+.dr td{padding:7px 11px;text-align:right;border-bottom:1px solid var(--bd);font-size:12px;color:var(--tx2)}
+.dr td:first-child{text-align:left}
+.dr.bold td{font-weight:600;color:var(--tx)!important}
+.dr.hl td{background:rgba(88,166,255,.04)}
+.dr.tot td{background:rgba(57,211,83,.07);font-weight:700!important;color:var(--teal)!important}
+.sep td{background:var(--s2);padding:6px 16px;font-size:10px;font-weight:700;color:var(--tx3);text-transform:uppercase;letter-spacing:1px;border-bottom:1px solid var(--bd)}
+.neg{color:var(--red)!important}.pos{color:var(--tx)}
+.toolbar{display:flex;align-items:center;justify-content:space-between;gap:10px;margin-bottom:14px;flex-wrap:wrap}
+.filters{display:flex;gap:8px;flex-wrap:wrap}
+.fg{display:flex;align-items:center;gap:5px;background:var(--s1);border:1px solid var(--bd2);border-radius:8px;padding:5px 10px;color:var(--tx2);font-size:12.5px}
+.fg select{background:none;border:none;color:var(--tx);font-size:12.5px;outline:none}
+.sinp{background:var(--s1);border:1px solid var(--bd2);border-radius:8px;padding:6px 10px;color:var(--tx);font-size:12.5px;outline:none;width:185px}
+.sinp::placeholder{color:var(--tx3)}
+.cbadge{background:var(--s2);border:1px solid var(--bd);padding:3px 10px;border-radius:99px;font-size:11.5px;color:var(--tx2)}
+.lan-tbl{min-width:880px}
+.lan-tbl th{background:var(--s1);padding:9px 13px;text-align:left;font-size:11px;font-weight:600;color:var(--tx2);border-bottom:1px solid var(--bd);white-space:nowrap;position:sticky;top:0;z-index:1}
+.th-sort{cursor:pointer;user-select:none}
+.th-sort:hover{color:var(--tx)}
+.th-sort .sort-ico{margin-left:4px;opacity:.4;font-size:10px}
+.th-sort.asc .sort-ico::after{content:'▲'}
+.th-sort.desc .sort-ico::after{content:'▼'}
+.th-sort:not(.asc):not(.desc) .sort-ico::after{content:'⇅'}
+.lr td{padding:9px 13px;border-bottom:1px solid var(--bd);font-size:12.5px;color:var(--tx2);vertical-align:middle}
+.lr:hover td{background:rgba(255,255,255,.02)}
+.lr:last-child td{border-bottom:none}
+.tp{display:inline-block;padding:2px 8px;border-radius:99px;font-size:11px;font-weight:600}
+.tp.r{background:rgba(57,211,83,.12);color:var(--teal)}
+.tp.d{background:rgba(248,81,73,.12);color:var(--red)}
+.ct{font-size:12px;color:var(--tx)}.cs{font-size:10.5px;color:var(--tx3)}
+.dc{max-width:170px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.vc{font-variant-numeric:tabular-nums;font-weight:600}
+.vc.r{color:var(--teal)}.vc.d{color:var(--red)}
+.empty-row{text-align:center;padding:40px!important;color:var(--tx3)}
+.badge{display:inline-block;padding:2px 8px;border-radius:99px;font-size:11px;font-weight:600}
+.bg{background:rgba(86,211,100,.12);color:var(--green)}
+.by{background:rgba(227,179,65,.12);color:var(--yellow)}
+.br{background:rgba(248,81,73,.12);color:var(--red)}
+.bx{background:var(--s2);color:var(--tx3)}
+.overlay{position:fixed;inset:0;background:rgba(0,0,0,.75);backdrop-filter:blur(4px);display:flex;align-items:center;justify-content:center;z-index:1000;padding:16px}
+.modal{background:var(--s1);border:1px solid var(--bd2);border-radius:14px;width:100%;max-width:660px;max-height:92vh;overflow-y:auto;animation:su .2s ease}
+@keyframes su{from{opacity:0;transform:translateY(16px)}to{opacity:1;transform:translateY(0)}}
+.modal-hdr{display:flex;align-items:center;justify-content:space-between;padding:18px 22px 14px;border-bottom:1px solid var(--bd)}
+.modal-hdr h2{font-size:16px;font-weight:700}
+.cls{background:none;border:none;color:var(--tx2);font-size:20px;padding:2px 6px;border-radius:6px;transition:all .1s}
+.cls:hover{background:var(--s2);color:var(--tx)}
+.fgrid{display:grid;grid-template-columns:1fr 1fr;gap:14px;padding:18px 22px}
+.fl{font-size:11.5px;color:var(--tx2);font-weight:500;margin-bottom:4px}
+input[type=text],input[type=number],input[type=date],select,textarea{background:var(--s2);border:1px solid var(--bd2);border-radius:8px;color:var(--tx);padding:7px 10px;font-size:13px;outline:none;transition:border-color .12s;width:100%}
+input:focus,select:focus,textarea:focus{border-color:var(--blue)}
+input::placeholder{color:var(--tx3)}
+.ro{color:var(--tx2)!important;cursor:default}
+.tt{display:flex;gap:8px}
+.tb{flex:1;display:flex;align-items:center;justify-content:center;gap:6px;padding:8px;border-radius:8px;border:1px solid var(--bd2);background:var(--s2);color:var(--tx2);font-size:13px;transition:all .12s}
+.tb.ar{background:rgba(57,211,83,.1);border-color:var(--teal);color:var(--teal)}
+.tb.ad{background:rgba(248,81,73,.1);border-color:var(--red);color:var(--red)}
+.fa{display:flex;gap:8px;justify-content:flex-end;padding-top:4px}
+.toast{position:fixed;bottom:20px;right:20px;background:var(--s3);border:1px solid var(--bd2);border-radius:10px;padding:11px 16px;font-size:13px;z-index:9999;animation:su .2s ease;display:flex;align-items:center;gap:8px;max-width:300px}
+.toast.ok{border-left:3px solid var(--teal)}
+.toast.err{border-left:3px solid var(--red)}
+#loading-screen{position:fixed;inset:0;background:var(--bg);display:flex;flex-direction:column;align-items:center;justify-content:center;gap:16px;z-index:9000}
+.spinner{width:36px;height:36px;border:3px solid var(--s3);border-top-color:var(--blue);border-radius:50%;animation:spin .8s linear infinite}
+@keyframes spin{to{transform:rotate(360deg)}}
+::-webkit-scrollbar{width:5px;height:5px}
+::-webkit-scrollbar-track{background:transparent}
+::-webkit-scrollbar-thumb{background:var(--s3);border-radius:3px}
+</style>
+</head>
+<body>
+<div id="login-screen">
+  <div class="login-box">
+    <div class="login-ico">₢</div>
+    <div class="login-title">Financeiro Escritório</div>
+    <div class="login-sub">Digite a senha para continuar<br><span id="login-ver" style="font-size:11px;color:var(--tx3)"></span></div>
+    <div class="login-field">
+      <input type="password" id="login-inp" placeholder="Senha" onkeydown="if(event.key==='Enter')doLogin()"/>
+    </div>
+    <button class="login-btn" onclick="doLogin()">🔓 Entrar</button>
+    <div class="login-err" id="login-err"></div>
+  </div>
+</div>
+<div id="loading-screen" style="display:none">
+  <div class="spinner"></div>
+  <div style="color:var(--tx2);font-size:13px">Carregando dados...</div>
+</div>
+<div id="app" style="display:none">
+  <aside id="sidebar">
+    <div class="brand">
+      <div class="brand-ico">₢</div>
+      <div><div class="brand-name">Financeiro</div><div class="brand-sub">Escritório <span id="app-ver" style="color:var(--tx3)"></span></div></div>
+    </div>
+    <nav id="nav"></nav>
+    <div class="sidebar-foot">
+      <div class="sync-status"><div class="sync-dot" id="sync-dot"></div><span id="sync-txt">Conectando...</span></div>
+      <button class="btn-exp" onclick="exportExcel()">📥 Exportar Excel</button>
+    </div>
+  </aside>
+  <main id="main">
+    <header class="topbar">
+      <div><h1 class="page-ttl" id="page-ttl">Dashboard</h1></div>
+      <div class="topbar-r">
+        <div class="yr-sel"><select id="yr-sel" onchange="setYear(this.value)"></select></div>
+        <button class="btn btn-pri" onclick="openForm()">＋ Novo Lançamento</button>
+      </div>
+    </header>
+    <div class="content" id="content"></div>
+  </main>
+</div>
+<div class="overlay" id="overlay" style="display:none" onclick="if(event.target===this)closeForm()">
+  <div class="modal"><div class="modal-hdr"><h2 id="modal-ttl">Novo Lançamento</h2><button class="cls" onclick="closeForm()">✕</button></div><div class="fgrid" id="fgrid"></div></div>
+</div>
+<script>
+const APP_VERSION = 'v1.8.0';
+const APP_DATE = '2026-04-30';
+const SENHA = 'skala2025'; // ← altere aqui para sua senha
+
+// Preenche versão na tela de login
+document.addEventListener('DOMContentLoaded',()=>{
+  const lv=document.getElementById('login-ver');
+  if(lv) lv.textContent=`${APP_VERSION} · ${APP_DATE}`;
+});
+
+function doLogin(){
+  const val=document.getElementById('login-inp').value;
+  if(val===SENHA){
+    document.getElementById('login-screen').style.display='none';
+    document.getElementById('loading-screen').style.display='flex';
+    const verEl=document.getElementById('app-ver');
+    if(verEl) verEl.textContent=APP_VERSION;
+    startApp();
+  } else {
+    const err=document.getElementById('login-err');
+    err.textContent='Senha incorreta. Tente novamente.';
+    document.getElementById('login-inp').value='';
+    document.getElementById('login-inp').focus();
+    setTimeout(()=>err.textContent='',3000);
+  }
+}
+
+const SUPABASE_URL='https://rvymfrpugzwwgrcybwpk.supabase.co';
+const SUPABASE_KEY='eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InJ2eW1mcnB1Z3p3d2dyY3lid3BrIiwicm9sZSI6ImFub24iLCJpYXQiOjE3Nzc0ODgzNTUsImV4cCI6MjA5MzA2NDM1NX0.kgWgFOlD53kclwB62GPOHbQh55Ypxp6rjGhYCmvs-Us';
+const TABLE='lancamentos';
+
+const sbFetch=async(method,path,body=null)=>{
+  const opts={method,headers:{'apikey':SUPABASE_KEY,'Authorization':`Bearer ${SUPABASE_KEY}`,'Content-Type':'application/json','Prefer':'return=representation'}};
+  if(body)opts.body=JSON.stringify(body);
+  const r=await fetch(`${SUPABASE_URL}/rest/v1/${path}`,opts);
+  if(!r.ok){const err=await r.json().catch(()=>({message:r.statusText}));throw new Error(err.message||r.statusText);}
+  const txt=await r.text();return txt?JSON.parse(txt):null;
+};
+
+async function dbLoad(){return await sbFetch('GET',`${TABLE}?order=created_at.desc&select=*`);}
+async function dbInsert(item){const res=await sbFetch('POST',TABLE,toRow(item));return Array.isArray(res)?res[0]:res;}
+async function dbUpdate(item){await sbFetch('PATCH',`${TABLE}?id=eq.${item.id}`,toRow(item));}
+async function dbDelete(id){await sbFetch('DELETE',`${TABLE}?id=eq.${id}`);}
+
+function toRow(l){return{id:l.id,tipo:l.tipo,data_comp:l.dataComp||null,data_pgto:l.dataPgto||null,cat:l.cat,sub:l.sub||null,descricao:l.desc||null,cc:l.cc||null,forma:l.forma||null,conta:l.conta||null,doc:l.doc||null,valor_bruto:parseFloat(l.valorBruto)||0,ded:parseFloat(l.ded)||0,valor_liq:parseFloat(l.valorLiq)||0,status:l.status,obs:l.obs||null};}
+function fromRow(r){return{id:r.id,tipo:r.tipo,dataComp:r.data_comp||'',dataPgto:r.data_pgto||'',cat:r.cat||'',sub:r.sub||'',desc:r.descricao||'',cc:r.cc||'',forma:r.forma||'PIX',conta:r.conta||'Conta Corrente',doc:r.doc||'',valorBruto:r.valor_bruto||0,ded:r.ded||0,valorLiq:r.valor_liq||0,status:r.status||'Pendente',obs:r.obs||''};}
+
+function setSyncStatus(state,msg){const dot=document.getElementById('sync-dot'),txt=document.getElementById('sync-txt');if(!dot)return;dot.className='sync-dot '+state;txt.textContent=msg;}
+
+let DATA=[];
+const newId=()=>crypto.randomUUID();
+
+// CATS é dinâmico — carregado do Supabase
+// Estrutura: {R: [{id, nome, ordem, subs:[{id,nome,ordem,slug}]}], D: [...]}
+let CATS_DATA = {R:[], D:[]};
+
+// CATS compatível com o restante do código (objeto nome->array de subs)
+const CATS = {R:{}, D:{}};
+
+function rebuildCatsObj() {
+  ['R','D'].forEach(tipo => {
+    CATS[tipo] = {};
+    (CATS_DATA[tipo]||[]).sort((a,b)=>a.ordem-b.ordem).forEach(cat => {
+      CATS[tipo][cat.nome] = (cat.subs||[]).sort((a,b)=>a.ordem-b.ordem).map(s=>s.nome);
+    });
+  });
+}
+
+// Slugify: transforma nome de categoria em chave para DRE/Fluxo
+function slugify(s){return s.toLowerCase().normalize('NFD').replace(/[\u0300-\u036f]/g,'').replace(/[^a-z0-9]/g,'_').replace(/_+/g,'_').replace(/^_|_$/g,'');}
+
+// Mapeamento fixo de fallback para categorias padrão
+const SLUG_FALLBACK = {
+  'pessoal':'pessoal',
+  'impostos e taxas':'impostos_e_taxas',
+  'infraestrutura':'infraestrutura',
+  'tecnologia':'tecnologia',
+  'marketing':'marketing',
+  'administrativo':'administrativo',
+  'financeiro':'financeiro',
+};
+
+// Retorna o slug de uma categoria para uso nos cálculos
+function catSlug(nome){
+  // 1. Tenta achar no CATS_DATA carregado do Supabase
+  const d = (CATS_DATA.D||[]).find(c=>c.nome===nome);
+  if(d && d.slug) return d.slug;
+  // 2. Tenta fallback fixo
+  const k = (nome||'').toLowerCase().trim();
+  if(SLUG_FALLBACK[k]) return SLUG_FALLBACK[k];
+  // 3. Gera slug dinamicamente
+  return slugify(nome);
+}
+
+// Retorna todas as categorias de despesa com seus slugs (para DRE/Fluxo dinâmico)
+function getDespCats(){
+  return (CATS_DATA.D||[]).sort((a,b)=>a.ordem-b.ordem).map(c=>({
+    ...c,
+    slug: c.slug || SLUG_FALLBACK[(c.nome||'').toLowerCase().trim()] || slugify(c.nome)
+  }));
+}
+function getRecCats(){return (CATS_DATA.R||[]).sort((a,b)=>a.ordem-b.ordem);}
+
+// Categoria especial de receita financeira
+function isRecFinCat(nome){
+  const r=(CATS_DATA.R||[]).find(c=>c.nome===nome);
+  if(r) return (r.slug||slugify(r.nome)).includes('financeira');
+  return (nome||'').toLowerCase().includes('financeira');
+}
+
+function calcDRE(year){
+  const despCats=getDespCats();
+  const recCats=getRecCats();
+  const base={ded:0,totRec:0,totDesp:0,ebitda:0,ll:0,
+    // Totalizadores intermediários do modelo Skala
+    recOpBruta:0, impostos:0, custosOp:0, recOpLiq:0,
+    cusPessoal:0, lucOpBruto:0, despOp:0, resOp:0,
+    investimentos:0, recFin:0, outrasRec:0, doacoes:0
+  };
+  // Chave por categoria
+  recCats.forEach(c=>{ base['r_'+(c.slug||slugify(c.nome))]=0; });
+  despCats.forEach(c=>{ base['d_'+(c.slug||slugify(c.nome))]=0; });
+  // Chave por subcategoria
+  recCats.forEach(c=>{ (c.subs||[]).forEach(s=>{ base['rs_'+(s.slug||slugify(s.nome))]=0; }); });
+  despCats.forEach(c=>{ (c.subs||[]).forEach(s=>{ base['ds_'+(s.slug||slugify(s.nome))]=0; }); });
+
+  const m=Array.from({length:12},()=>({...base}));
+
+  DATA.forEach(l=>{
+    if(!l.dataComp||getY(l.dataComp)!==year||l.status==='Cancelado')return;
+    const i=getM(l.dataComp),v=parseFloat(l.valorLiq)||0;
+    if(l.tipo==='R'){
+      const rc=recCats.find(c=>c.nome===l.cat);
+      const rslug='r_'+(rc?(rc.slug||slugify(rc.nome)):slugify(l.cat));
+      m[i][rslug]=(m[i][rslug]||0)+v;
+      // Subcategoria
+      if(rc){
+        const sub=(rc.subs||[]).find(s=>s.nome===l.sub);
+        if(sub){ const sk='rs_'+(sub.slug||slugify(sub.nome)); m[i][sk]=(m[i][sk]||0)+v; }
+      }
+    } else {
+      const dc=despCats.find(c=>c.nome===l.cat);
+      const dslug='d_'+(dc?(dc.slug||slugify(dc.nome)):catSlug(l.cat));
+      m[i][dslug]=(m[i][dslug]||0)+v;
+      // Subcategoria
+      if(dc){
+        const sub=(dc.subs||[]).find(s=>s.nome===l.sub);
+        if(sub){ const sk='ds_'+(sub.slug||slugify(sub.nome)); m[i][sk]=(m[i][sk]||0)+v; }
+      }
+    }
+    m[i].ded+=parseFloat(l.ded)||0;
+  });
+
+  m.forEach(r=>{
+    // Receitas operacionais (exceto Financeiras, Outras, Doações)
+    const recFinCat  = recCats.find(c=>c.slug==='receitas_financeiras');
+    const outrasCat  = recCats.find(c=>c.slug==='outras_receitas');
+    const recFinVal  = recFinCat  ? (r['r_receitas_financeiras']||0) : 0;
+    const outrasVal  = outrasCat  ? (r['r_outras_receitas']||0)      : 0;
+    r.recOpBruta = recCats.reduce((s,c)=>s+(r['r_'+(c.slug||slugify(c.nome))]||0),0) - recFinVal - outrasVal;
+    // Impostos e Custos Operacionais
+    r.impostos   = r['d_impostos']||0;
+    r.custosOp   = r['d_custos_operacionais']||0;
+    r.recOpLiq   = r.recOpBruta - r.ded - r.impostos - r.custosOp;
+    // Custo pessoal
+    r.cusPessoal = (r['d_pro_labores']||0)+(r['d_empregados']||0)+(r['d_recrutamento']||0);
+    r.lucOpBruto = r.recOpLiq - r.cusPessoal;
+    // Despesas operacionais (admin + tec + marketing + fin)
+    r.despOp = (r['d_despesas_administrativas']||0)+(r['d_tecnologia']||0)+(r['d_marketing_comercial']||0)+(r['d_despesas_financeiras']||0);
+    r.resOp  = r.lucOpBruto - r.despOp;
+    // Investimentos, Financeiras, Outras, Doações
+    r.investimentos = r['d_investimentos']||0;
+    r.recFin        = recFinVal;
+    r.outrasRec     = outrasVal;
+    r.doacoes       = r['d_doacoes']||0;
+    // Totais gerais
+    r.totRec  = r.recOpBruta;
+    r.totDesp = despCats.reduce((s,c)=>s+(r['d_'+(c.slug||slugify(c.nome))]||0),0);
+    r.ll      = r.resOp - r.investimentos + r.recFin + r.outrasRec - r.doacoes;
+  });
+  return m;
+}
+
+function calcFluxo(year){
+  const despCats=getDespCats();
+  const recCats=getRecCats();
+  const base={entradas:0,totSaidas:0,saldoOp:0,saldoIni:0,saldoFin:0};
+  recCats.forEach(c=>{ base['r_'+(c.slug||slugify(c.nome))]=0; });
+  despCats.forEach(c=>{ base['d_'+(c.slug||slugify(c.nome))]=0; });
+  const m=Array.from({length:12},()=>({...base}));
+
+  DATA.forEach(l=>{
+    if(!l.dataPgto||getY(l.dataPgto)!==year)return;
+    if(l.status!=='Pago'&&l.status!=='Recebido')return;
+    const i=getM(l.dataPgto),v=parseFloat(l.valorLiq)||0;
+    if(l.tipo==='R'){
+      const rc=recCats.find(c=>c.nome===l.cat);
+      const rslug='r_'+(rc?(rc.slug||slugify(rc.nome)):slugify(l.cat));
+      m[i][rslug]=(m[i][rslug]||0)+v;
+    } else {
+      const slug='d_'+catSlug(l.cat);
+      m[i][slug]=(m[i][slug]||0)+v;
+    }
+  });
+
+  m.forEach((r,i)=>{
+    r.entradas=recCats.reduce((s,c)=>s+(r['r_'+(c.slug||slugify(c.nome))]||0),0);
+    r.totSaidas=despCats.reduce((s,c)=>s+(r['d_'+(c.slug||slugify(c.nome))]||0),0);
+    r.saldoOp=r.entradas-r.totSaidas;
+    r.saldoIni=i===0?0:m[i-1].saldoFin;
+    r.saldoFin=r.saldoIni+r.saldoOp;
+  });
+  return m;
+}
+
+const FORMAS=['PIX','TED','Boleto','Cartão Crédito','Cartão Débito','Dinheiro','Cheque'];
+const STATUS=['Pago','Recebido','Pendente','Cancelado'];
+const CONTAS=['Conta Corrente','Conta Poupança','Caixa','Outro'];
+const MONTHS=['Jan','Fev','Mar','Abr','Mai','Jun','Jul','Ago','Set','Out','Nov','Dez'];
+const fmt=v=>new Intl.NumberFormat('pt-BR',{style:'currency',currency:'BRL'}).format(parseFloat(v)||0);
+const fmtPct=v=>`${((parseFloat(v)||0)*100).toFixed(1)}%`;
+const getM=d=>d?parseInt(d.split('-')[1],10)-1:null;
+const getY=d=>d?parseInt(d.split('-')[0],10):null;
+
+let TAB='dashboard',YEAR=new Date().getFullYear(),editingId=null;
+const TABS=[{id:'dashboard',lbl:'Dashboard',ico:'📊'},{id:'lancamentos',lbl:'Lançamentos',ico:'📋'},{id:'dre',lbl:'DRE',ico:'📈'},{id:'fluxo',lbl:'Fluxo de Caixa',ico:'💰'},{id:'pendentes',lbl:'Pendentes',ico:'⏳'},{id:'recorrentes',lbl:'Recorrentes',ico:'🔁'},{id:'categorias',lbl:'Categorias',ico:'⚙️'}];
+
+async function init(){
+  const ys=document.getElementById('yr-sel');
+  for(let y=YEAR-1;y<=YEAR+1;y++){const o=document.createElement('option');o.value=y;o.textContent=y;if(y===YEAR)o.selected=true;ys.appendChild(o);}
+  try{
+    setSyncStatus('loading','Carregando...');
+    const [rows, cats, subs] = await Promise.all([
+      dbLoad(),
+      sbFetch('GET','categorias?order=ordem.asc&select=*'),
+      sbFetch('GET','subcategorias?order=ordem.asc&select=*'),
+    ]);
+    DATA=rows.map(fromRow);
+
+    if(cats && cats.length > 0){
+      CATS_DATA.R = cats.filter(c=>c.tipo==='R').map(c=>({...c, subs: subs.filter(s=>s.categoria_id===c.id)}));
+      CATS_DATA.D = cats.filter(c=>c.tipo==='D').map(c=>({...c, subs: subs.filter(s=>s.categoria_id===c.id)}));
+    } else {
+      await seedCategorias();
+    }
+    rebuildCatsObj();
+    setSyncStatus('ok',`${DATA.length} registros`);
+  }catch(e){
+    console.error(e);setSyncStatus('err','Erro de conexão');
+    toast('Erro ao conectar: '+e.message,'err');
+  }
+  document.getElementById('loading-screen').style.display='none';
+  document.getElementById('app').style.display='flex';
+  buildNav();render();
+}
+
+// Popula categorias padrão no Supabase na primeira vez
+async function seedCategorias(){
+  const defaults = {
+    R:[
+      {nome:'Receita de Serviços', subs:['Honorários Contábeis','Assessoria Fiscal','Consultoria Tributária','Abertura de Empresas','Folha de Pagamento','Outros Serviços']},
+      {nome:'Receita Financeira',  subs:['Juros Recebidos','Rendimento de Aplicação']},
+      {nome:'Outras Receitas',     subs:['Reembolso','Outros']},
+    ],
+    D:[
+      {nome:'Pessoal',         subs:['Salários e Encargos','Pró-Labore','FGTS','INSS Patronal','Vale Transporte','Vale Refeição','Plano de Saúde','Férias e 13º']},
+      {nome:'Impostos e Taxas',subs:['Simples Nacional','ISS','PIS/COFINS','CSLL','IRPJ','IPTU','Taxas Diversas']},
+      {nome:'Infraestrutura',  subs:['Aluguel','Condomínio','Energia Elétrica','Internet / Telefone','Água','Limpeza']},
+      {nome:'Tecnologia',      subs:['Software Contábil','Microsoft 365','Manutenção TI']},
+      {nome:'Marketing',       subs:['Site / SEO','Publicidade']},
+      {nome:'Administrativo',  subs:['Material de Escritório','Cursos / Capacitação','Correios','Despesas Bancárias','Outros']},
+      {nome:'Financeiro',      subs:['Empréstimos','Juros Pagos','Multas / Juros Mora']},
+    ]
+  };
+  for(const tipo of ['R','D']){
+    CATS_DATA[tipo] = [];
+    for(let ci=0; ci<defaults[tipo].length; ci++){
+      const cat = defaults[tipo][ci];
+      const slug = slugify(cat.nome);
+      const id = newId();
+      await sbFetch('POST','categorias',[{id, tipo, nome:cat.nome, slug, ordem:ci}]);
+      const subsRows = cat.subs.map((s,si)=>({id:newId(), categoria_id:id, nome:s, slug:slugify(s), ordem:si}));
+      if(subsRows.length) await sbFetch('POST','subcategorias',subsRows);
+      CATS_DATA[tipo].push({id, tipo, nome:cat.nome, slug, ordem:ci, subs:subsRows});
+    }
+  }
+}
+
+function buildNav(){
+  const nav=document.getElementById('nav');nav.innerHTML='';
+  const pend=DATA.filter(l=>l.status==='Pendente').length;
+  TABS.forEach(t=>{
+    const b=document.createElement('button');b.className='nv'+(t.id===TAB?' on':'');
+    b.onclick=()=>{TAB=t.id;buildNav();render();updateTitle();};
+    b.innerHTML=`<span class="nv-ico">${t.ico}</span>${t.lbl}${t.id==='pendentes'&&pend?`<span class="nb">${pend}</span>`:''}`;
+    nav.appendChild(b);
+  });
+}
+
+function updateTitle(){document.getElementById('page-ttl').textContent=TABS.find(t=>t.id===TAB)?.lbl||'';}
+function setYear(y){YEAR=parseInt(y);render();}
+function render(){
+  updateTitle();const c=document.getElementById('content');c.innerHTML='';
+  if(TAB==='dashboard')renderDashboard(c);
+  else if(TAB==='lancamentos')renderLancamentos(c);
+  else if(TAB==='dre')renderDRE(c);
+  else if(TAB==='fluxo')renderFluxo(c);
+  else if(TAB==='pendentes')renderPendentes(c);
+  else if(TAB==='recorrentes')renderRecorrentes(c);
+  else if(TAB==='categorias')renderCategorias(c);
+}
+
+function renderDashboard(c){
+  const dre=calcDRE(YEAR),fluxo=calcFluxo(YEAR),sum=k=>dre.reduce((s,m)=>s+m[k],0);
+  const totRec=sum('recLiq'),totDesp=sum('totDesp'),totEbitda=sum('ebitda'),totLL=sum('ll'),saldoFin=fluxo[11].saldoFin;
+  const pend=DATA.filter(l=>l.status==='Pendente'),totalPend=pend.reduce((s,l)=>s+(parseFloat(l.valorLiq)||0),0);
+  const kpis=[
+    {lbl:'Receita Líquida',val:fmt(totRec),sub:`Margem: ${fmtPct(totRec?totLL/totRec:0)}`,cls:'k-teal'},
+    {lbl:'Lucro Líquido',val:fmt(totLL),sub:fmtPct(totRec?totLL/totRec:0),cls:'k-green'},
+    {lbl:'EBITDA',val:fmt(totEbitda),sub:`Margem: ${fmtPct(totRec?totEbitda/totRec:0)}`,cls:'k-blue'},
+    {lbl:'Saldo de Caixa',val:fmt(saldoFin),sub:'Posição atual',cls:saldoFin>=0?'k-teal':'k-red'},
+    {lbl:'Total Despesas',val:fmt(totDesp),sub:`Índice: ${fmtPct(totRec?totDesp/totRec:0)}`,cls:'k-orange'},
+    {lbl:'Pendentes',val:fmt(totalPend),sub:`${pend.length} lançamento(s)`,cls:'k-yellow'},
+  ];
+  let html='<div class="kpi-grid">';
+  kpis.forEach(k=>{html+=`<div class="kpi ${k.cls}"><div class="kpi-lbl">${k.lbl}</div><div class="kpi-val">${k.val}</div><div class="kpi-sub">${k.sub}</div></div>`;});
+  html+=`</div><div class="charts-row"><div class="card wide"><div class="card-ttl">Receita vs Despesas vs Lucro <span class="yr-pill">${YEAR}</span></div><canvas id="chart-main" height="220"></canvas></div><div class="card" style="margin-bottom:0"><div class="card-ttl">Despesas por Categoria</div><canvas id="chart-pie" height="220"></canvas></div></div>`;
+  html+=`<div class="card"><div class="card-ttl">Fluxo de Caixa — Saldo Final Mensal <span class="yr-pill">${YEAR}</span></div><canvas id="chart-fluxo" height="170"></canvas></div>`;
+  if(pend.length>0){
+    html+=`<div class="pend-card"><div class="card-ttl">⚠️ Contas Pendentes</div><div class="pend-list">`;
+    pend.slice(0,8).forEach(l=>{const isR=l.tipo==='R';html+=`<div class="pend-row"><span class="pt ${isR?'r':'d'}">${isR?'▲':'▼'}</span><span class="pdesc">${esc(l.desc||l.sub||l.cat)}</span><span class="pcat">${esc(l.cat)}</span><span class="pdata">${l.dataPgto||'—'}</span><span class="pval ${isR?'r':'d'}">${fmt(l.valorLiq)}</span></div>`;});
+    html+='</div></div>';
+  }
+  c.innerHTML=html;
+  setTimeout(()=>{
+    drawBarChart('chart-main',MONTHS,[{label:'Receita',data:dre.map(m=>m.recLiq),color:'#39d353'},{label:'Despesas',data:dre.map(m=>m.totDesp),color:'#f85149'},{label:'Lucro',data:dre.map(m=>m.ll),color:'#58a6ff'}]);
+    const pieCategs=[{lbl:'Pessoal',val:sum('pessoal')},{lbl:'Impostos',val:sum('impostos')},{lbl:'Infra',val:sum('infra')},{lbl:'Tecnologia',val:sum('tec')},{lbl:'Marketing',val:sum('mkt')},{lbl:'Administrativo',val:sum('admin')},{lbl:'Financeiro',val:sum('despFin')}].filter(d=>d.val>0);
+    drawPieChart('chart-pie',pieCategs);
+    drawBarChartSingle('chart-fluxo',MONTHS,fluxo.map(m=>m.saldoFin));
+  },0);
+}
+
+function drawBarChart(id,labels,series){
+  const canvas=document.getElementById(id);if(!canvas)return;
+  const ctx=canvas.getContext('2d');canvas.width=canvas.offsetWidth||canvas.parentElement.offsetWidth-40;
+  const W=canvas.width,H=canvas.height;ctx.clearRect(0,0,W,H);
+  const PAD={top:20,right:20,bottom:30,left:60},cW=W-PAD.left-PAD.right,cH=H-PAD.top-PAD.bottom;
+  const allVals=series.flatMap(s=>s.data),maxV=Math.max(...allVals,0),minV=Math.min(...allVals,0),range=maxV-minV||1;
+  const toY=v=>PAD.top+cH-((v-minV)/range*cH),barW=(cW/labels.length)/(series.length+1);
+  ctx.strokeStyle='rgba(255,255,255,.06)';ctx.lineWidth=1;
+  for(let i=0;i<=4;i++){const y=PAD.top+(cH/4)*i;ctx.beginPath();ctx.moveTo(PAD.left,y);ctx.lineTo(PAD.left+cW,y);ctx.stroke();const val=maxV-(range/4*i);ctx.fillStyle='#484f58';ctx.font='10px system-ui';ctx.textAlign='right';ctx.fillText(val>=1000?`${(val/1000).toFixed(0)}k`:val.toFixed(0),PAD.left-4,y+3);}
+  if(minV<0){const zy=toY(0);ctx.strokeStyle='rgba(255,255,255,.2)';ctx.lineWidth=1;ctx.beginPath();ctx.moveTo(PAD.left,zy);ctx.lineTo(PAD.left+cW,zy);ctx.stroke();}
+  labels.forEach((lbl,li)=>{const xCenter=PAD.left+(li+0.5)*(cW/labels.length);series.forEach((s,si)=>{const x=xCenter-(series.length/2-si)*barW-barW/2,v=s.data[li],y0=toY(0),y1=toY(v),bH=Math.abs(y1-y0)||1;ctx.fillStyle=s.color+'cc';ctx.fillRect(x,Math.min(y0,y1),barW-2,bH);});ctx.fillStyle='#8b949e';ctx.font='11px system-ui';ctx.textAlign='center';ctx.fillText(lbl,xCenter,H-8);});
+  let lx=PAD.left;series.forEach(s=>{ctx.fillStyle=s.color;ctx.fillRect(lx,4,10,8);ctx.fillStyle='#8b949e';ctx.font='10px system-ui';ctx.textAlign='left';ctx.fillText(s.label,lx+13,12);lx+=80;});
+}
+
+function drawBarChartSingle(id,labels,data){
+  const canvas=document.getElementById(id);if(!canvas)return;
+  const ctx=canvas.getContext('2d');canvas.width=canvas.offsetWidth||canvas.parentElement.offsetWidth-40;
+  const W=canvas.width,H=canvas.height;ctx.clearRect(0,0,W,H);
+  const PAD={top:15,right:20,bottom:28,left:60},cW=W-PAD.left-PAD.right,cH=H-PAD.top-PAD.bottom;
+  const maxV=Math.max(...data,0),minV=Math.min(...data,0),range=maxV-minV||1;
+  const toY=v=>PAD.top+cH-((v-minV)/range*cH),barW=cW/labels.length*0.6;
+  ctx.strokeStyle='rgba(255,255,255,.06)';ctx.lineWidth=1;
+  for(let i=0;i<=3;i++){const y=PAD.top+(cH/3)*i;ctx.beginPath();ctx.moveTo(PAD.left,y);ctx.lineTo(PAD.left+cW,y);ctx.stroke();const val=maxV-(range/3*i);ctx.fillStyle='#484f58';ctx.font='10px system-ui';ctx.textAlign='right';ctx.fillText(val>=1000?`${(val/1000).toFixed(0)}k`:val.toFixed(0),PAD.left-4,y+3);}
+  const zy=toY(0);ctx.strokeStyle='rgba(255,255,255,.2)';ctx.lineWidth=1;ctx.beginPath();ctx.moveTo(PAD.left,zy);ctx.lineTo(PAD.left+cW,zy);ctx.stroke();
+  labels.forEach((lbl,i)=>{const xC=PAD.left+(i+0.5)*(cW/labels.length),v=data[i],y1=toY(v),y0=toY(0),bH=Math.abs(y1-y0)||1;ctx.fillStyle=v>=0?'#39d353bb':'#f85149bb';ctx.beginPath();ctx.roundRect(xC-barW/2,Math.min(y0,y1),barW,bH,[3,3,0,0]);ctx.fill();ctx.fillStyle='#8b949e';ctx.font='11px system-ui';ctx.textAlign='center';ctx.fillText(lbl,xC,H-8);});
+}
+
+function drawPieChart(id,data){
+  const canvas=document.getElementById(id);if(!canvas)return;
+  const ctx=canvas.getContext('2d');canvas.width=canvas.offsetWidth||300;
+  const W=canvas.width,H=canvas.height;ctx.clearRect(0,0,W,H);
+  if(!data.length){ctx.fillStyle='#484f58';ctx.font='13px system-ui';ctx.textAlign='center';ctx.fillText('Nenhuma despesa lançada',W/2,H/2);return;}
+  const COLS=['#39d353','#f778ba','#e3b341','#58a6ff','#bc8cff','#f0883e','#56d364'],total=data.reduce((s,d)=>s+d.val,0);
+  const cx=W*0.38,cy=H/2,r=Math.min(H*0.42,cx-5),ri=r*0.55;
+  let angle=-Math.PI/2;
+  data.forEach((d,i)=>{const sweep=(d.val/total)*Math.PI*2;ctx.beginPath();ctx.moveTo(cx,cy);ctx.arc(cx,cy,r,angle,angle+sweep);ctx.closePath();ctx.fillStyle=COLS[i%COLS.length];ctx.fill();ctx.strokeStyle='#0d1117';ctx.lineWidth=2;ctx.stroke();angle+=sweep;});
+  ctx.beginPath();ctx.arc(cx,cy,ri,0,Math.PI*2);ctx.fillStyle='#161b22';ctx.fill();
+  const lx=cx*2+10,ly=H/2-data.length*11;
+  data.forEach((d,i)=>{const y=ly+i*22;ctx.fillStyle=COLS[i%COLS.length];ctx.beginPath();ctx.arc(lx+5,y+4,4,0,Math.PI*2);ctx.fill();ctx.fillStyle='#8b949e';ctx.font='11px system-ui';ctx.textAlign='left';ctx.fillText(d.lbl,lx+13,y+8);ctx.fillStyle='#e6edf3';ctx.font='10px system-ui';ctx.fillText(fmtPct(d.val/total),lx+13,y+20);});
+}
+
+function renderDRE(c){
+  const dre=calcDRE(YEAR);
+  const recCats=getRecCats();
+  const despCats=getDespCats();
+  const tot=k=>dre.reduce((s,m)=>s+(m[k]||0),0);
+  const mHdr=MONTHS.map(m=>`<th>${m}</th>`).join('');
+
+  // Estado de expansão
+  if(!window._dreExpanded) window._dreExpanded={};
+
+  function row(lbl,k,type='normal',groupId=null,parentId=null){
+    const isTotal   = type==='total';
+    const isSep     = type==='sep';
+    const isGroup   = type==='group';
+    const isSub     = type==='sub';
+    const isResult  = type==='result';
+
+    if(isSep) return `<tr class="sep"><td colspan="14">${lbl}</td></tr>`;
+
+    const expanded = groupId ? (window._dreExpanded[groupId]!==false) : true;
+    const hasSubs  = groupId && !parentId;
+
+    const cells=dre.map(m=>{
+      const v=m[k]||0;
+      return`<td class="${v<0?'neg':v>0?'pos':''}" style="font-size:11.5px">${v!==0?fmt(v):'—'}</td>`;
+    }).join('');
+    const tv=tot(k);
+
+    let style='';
+    let tdStyle=`padding-left:${isSub?40:isGroup?20:12}px`;
+    let cls='dr';
+    if(isTotal||isResult) cls+=' bold';
+    if(isResult) cls+=' hl';
+    if(type==='lucro') cls+=' tot';
+
+    // Linha oculta se for subcategoria de grupo fechado
+    if(parentId&&window._dreExpanded[parentId]===false) style='display:none';
+
+    const toggleBtn = hasSubs ? `<span onclick="toggleDRE('${groupId}')" style="cursor:pointer;margin-right:6px;font-size:10px;display:inline-block;width:12px">${expanded?'▼':'▶'}</span>` : `<span style="display:inline-block;width:18px"></span>`;
+
+    return`<tr class="${cls}" id="dre-row-${groupId||k}" style="${style}">
+      <td style="${tdStyle}">${toggleBtn}${lbl}</td>${cells}
+      <td class="${tv<0?'neg':tv>0?'pos':''} tc" style="font-weight:${isTotal||isResult||type==='lucro'?700:400}">${tv!==0?fmt(tv):'—'}</td>
+    </tr>`;
+  }
+
+  function groupRows(cat, tipo){
+    const k = tipo==='R' ? 'r_'+(cat.slug||slugify(cat.nome)) : 'd_'+(cat.slug||slugify(cat.nome));
+    const gid = k;
+    const subs = (cat.subs||[]).sort((a,b)=>a.ordem-b.ordem);
+    let html = row(cat.nome, k, 'group', gid);
+    subs.forEach(sub=>{
+      const sk = tipo==='R' ? 'rs_'+(sub.slug||slugify(sub.nome)) : 'ds_'+(sub.slug||slugify(sub.nome));
+      html += row(sub.nome, sk, 'sub', sk, gid);
+    });
+    return html;
+  }
+
+  // Receitas operacionais (exceto financeiras e outras)
+  const recFinCat  = recCats.find(c=>c.slug==='receitas_financeiras');
+  const outrasCat  = recCats.find(c=>c.slug==='outras_receitas');
+  const recOpCats  = recCats.filter(c=>c.slug!=='receitas_financeiras'&&c.slug!=='outras_receitas');
+
+  // Grupos de despesas
+  const impostoCat  = despCats.find(c=>c.slug==='impostos');
+  const custosOpCat = despCats.find(c=>c.slug==='custos_operacionais');
+  const proLabCat   = despCats.find(c=>c.slug==='pro_labores');
+  const empCat      = despCats.find(c=>c.slug==='empregados');
+  const recrutCat   = despCats.find(c=>c.slug==='recrutamento');
+  const admCat      = despCats.find(c=>c.slug==='despesas_administrativas');
+  const tecCat      = despCats.find(c=>c.slug==='tecnologia');
+  const mktCat      = despCats.find(c=>c.slug==='marketing_comercial');
+  const finCat      = despCats.find(c=>c.slug==='despesas_financeiras');
+  const invCat      = despCats.find(c=>c.slug==='investimentos');
+  const doacCat     = despCats.find(c=>c.slug==='doacoes');
+
+  const g=(cat,tipo)=>cat?groupRows(cat,tipo):'';
+
+  c.innerHTML=`
+  <style>
+    .dr td{transition:background .1s}
+    .dr.group-hdr td:first-child{cursor:pointer}
+    .dr.group-hdr:hover td{background:rgba(255,255,255,.03)}
+  </style>
+  <div class="tbl-wrap">
+    <div class="tbl-hdr" style="display:flex;align-items:center;justify-content:space-between">
+      <div class="sec-ttl">DRE — Regime de Competência <span class="yr-pill">${YEAR}</span></div>
+      <button class="btn btn-ghost" style="font-size:12px" onclick="toggleAllDRE()">⊞ Expandir/Recolher tudo</button>
+    </div>
+    <div class="tbl-scroll"><table class="fin-tbl">
+      <thead><tr><th>Descrição</th>${mHdr}<th class="tc">Total</th></tr></thead>
+      <tbody>
+        ${row('RECEITAS OPERACIONAIS','','sep')}
+        ${recOpCats.map(cat=>groupRows(cat,'R')).join('')}
+        ${row('(–) Deduções / Impostos s/ Receita','ded','sub')}
+        ${row('(=) RECEITA OPERACIONAL BRUTA','recOpBruta','result')}
+
+        ${row('IMPOSTOS','','sep')}
+        ${g(impostoCat,'D')}
+        ${row('CUSTOS OPERACIONAIS','','sep')}
+        ${g(custosOpCat,'D')}
+        ${row('(=) RECEITA OPERACIONAL LÍQUIDA','recOpLiq','result')}
+
+        ${row('CUSTO COM PESSOAL','','sep')}
+        ${g(proLabCat,'D')}
+        ${g(empCat,'D')}
+        ${g(recrutCat,'D')}
+        ${row('(=) CUSTO COM PESSOAL','cusPessoal','total')}
+        ${row('(=) LUCRO OPERACIONAL BRUTO','lucOpBruto','result')}
+
+        ${row('DESPESAS OPERACIONAIS','','sep')}
+        ${g(admCat,'D')}
+        ${g(tecCat,'D')}
+        ${g(mktCat,'D')}
+        ${g(finCat,'D')}
+        ${row('(=) DESPESAS OPERACIONAIS','despOp','total')}
+        ${row('(=) RESULTADO OPERACIONAL','resOp','result')}
+
+        ${row('INVESTIMENTOS','','sep')}
+        ${g(invCat,'D')}
+
+        ${recFinCat?`${row('RECEITAS FINANCEIRAS','','sep')}${groupRows(recFinCat,'R')}`:''}
+        ${outrasCat?`${row('OUTRAS RECEITAS','','sep')}${groupRows(outrasCat,'R')}`:''}
+        ${doacCat?`${row('DOAÇÕES','','sep')}${g(doacCat,'D')}`:''}
+
+        ${row('RESULTADO FINAL','ll','lucro')}
+      </tbody>
+    </table></div>
+  </div>`;
+}
+
+function toggleDRE(groupId){
+  if(!window._dreExpanded) window._dreExpanded={};
+  window._dreExpanded[groupId] = window._dreExpanded[groupId]===false ? true : false;
+  // Toggle visibility of sub rows
+  document.querySelectorAll(`[id^="dre-row-"]`).forEach(tr=>{
+    // Check if this row's parent is the toggled group
+    const cells=tr.querySelectorAll('td');
+    if(!cells.length) return;
+  });
+  // Re-render to apply
+  renderDRE(document.getElementById('content'));
+}
+
+function toggleAllDRE(){
+  if(!window._dreExpanded) window._dreExpanded={};
+  const allExpanded=Object.values(window._dreExpanded).every(v=>v!==false);
+  // Toggle all known groups
+  const recCats=getRecCats(), despCats=getDespCats();
+  [...recCats,...despCats].forEach(c=>{
+    const k=(c.tipo==='R'?'r_':'d_')+(c.slug||slugify(c.nome));
+    window._dreExpanded[k]=allExpanded?false:true;
+  });
+  renderDRE(document.getElementById('content'));
+}
+
+function renderFluxo(c){
+  const f=calcFluxo(YEAR);
+  const recCats=getRecCats();
+  const despCats=getDespCats();
+  const tot=k=>f.reduce((s,m)=>s+(m[k]||0),0);
+  const mHdr=MONTHS.map(m=>`<th>${m}</th>`).join('');
+
+  function row(lbl,k,bold,indent,cls=''){
+    const cells=f.map(m=>`<td class="${(m[k]||0)<0?'neg':'pos'}">${fmt(m[k]||0)}</td>`).join('');
+    const tv=tot(k);
+    return`<tr class="dr${bold?' bold':''} ${cls}"><td style="padding-left:${indent?28:12}px">${lbl}</td>${cells}<td class="${tv<0?'neg':'pos'} tc">${fmt(tv)}</td></tr>`;
+  }
+  const sep=lbl=>`<tr class="sep"><td colspan="14">${lbl}</td></tr>`;
+
+  const entradasRows=recCats.map(cat=>{
+    const k='r_'+(cat.slug||slugify(cat.nome));
+    return row(cat.nome,k,false,true);
+  }).join('');
+
+  const saidasRows=despCats.map(cat=>{
+    const k='d_'+(cat.slug||slugify(cat.nome));
+    return row(cat.nome,k,false,true);
+  }).join('');
+
+  c.innerHTML=`<div class="tbl-wrap"><div class="tbl-hdr"><div class="sec-ttl">Fluxo de Caixa — Regime de Caixa <span class="yr-pill">${YEAR}</span></div></div>
+    <div class="tbl-scroll"><table class="fin-tbl"><thead><tr><th>Descrição</th>${mHdr}<th class="tc">Total</th></tr></thead><tbody>
+    ${sep('ENTRADAS')}
+    ${entradasRows}
+    ${row('TOTAL ENTRADAS','entradas',true,false,'hl')}
+    ${sep('SAÍDAS')}
+    ${saidasRows}
+    ${row('TOTAL SAÍDAS','totSaidas',true,false)}
+    ${sep('SALDOS')}
+    ${row('SALDO OPERACIONAL','saldoOp',true,false,'hl')}
+    ${row('Saldo Inicial','saldoIni',false,true)}
+    ${row('SALDO FINAL DE CAIXA','saldoFin',true,false,'tot')}
+    </tbody></table></div></div>`;
+}
+
+let filterTipo='',filterStatus='',filterBusca='';
+let sortLan={col:'dataComp',dir:'desc'};
+let sortPend={col:'dataPgto',dir:'asc'};
+
+function sortData(arr, col, dir){
+  return [...arr].sort((a,b)=>{
+    let va=a[col]??'', vb=b[col]??'';
+    if(col==='valorLiq'||col==='valorBruto'){va=parseFloat(va)||0;vb=parseFloat(vb)||0;}
+    const r = va>vb?1:va<vb?-1:0;
+    return dir==='asc'?r:-r;
+  });
+}
+
+function thSort(lbl, col, sortObj, renderFn){
+  const cls = sortObj.col===col ? sortObj.dir : '';
+  return `<th class="th-sort ${cls}" onclick="${renderFn}('${col}')">${lbl}<span class="sort-ico"></span></th>`;
+}
+
+function sortLancamentos(col){
+  if(sortLan.col===col)sortLan.dir=sortLan.dir==='asc'?'desc':'asc';
+  else{sortLan.col=col;sortLan.dir='desc';}
+  renderLancamentos(document.getElementById('content'));
+}
+
+function renderLancamentos(c){
+  c.innerHTML=`<div class="tbl-wrap"><div style="padding:14px 18px 0"><div class="toolbar"><div class="filters">
+    <div class="fg">🔍<select onchange="filterTipo=this.value;renderLancamentos(document.getElementById('content'))">
+      <option value="">Todos os tipos</option>
+      <option value="R"${filterTipo==='R'?' selected':''}>Receitas</option>
+      <option value="D"${filterTipo==='D'?' selected':''}>Despesas</option>
+    </select></div>
+    <div class="fg"><select onchange="filterStatus=this.value;renderLancamentos(document.getElementById('content'))">
+      <option value="">Todos os status</option>
+      ${STATUS.map(s=>`<option value="${s}"${filterStatus===s?' selected':''}>${s}</option>`).join('')}
+    </select></div>
+    <input class="sinp" placeholder="Buscar..." value="${esc(filterBusca)}" oninput="filterBusca=this.value;renderLancamentos(document.getElementById('content'))"/>
+  </div><span class="cbadge" id="count-badge"></span></div></div>
+  <div class="tbl-scroll"><table class="lan-tbl"><thead><tr>
+    ${thSort('Competência','dataComp',sortLan,'sortLancamentos')}
+    ${thSort('Pagamento','dataPgto',sortLan,'sortLancamentos')}
+    <th>Tipo</th>
+    ${thSort('Categoria','cat',sortLan,'sortLancamentos')}
+    ${thSort('Descrição','desc',sortLan,'sortLancamentos')}
+    <th>Forma Pgto</th>
+    ${thSort('Valor Bruto','valorBruto',sortLan,'sortLancamentos')}
+    ${thSort('Valor Líquido','valorLiq',sortLan,'sortLancamentos')}
+    ${thSort('Status','status',sortLan,'sortLancamentos')}
+    <th></th>
+  </tr></thead><tbody id="lan-tbody"></tbody></table></div></div>`;
+
+  let filtered=DATA.filter(l=>{
+    if(filterTipo&&l.tipo!==filterTipo)return false;
+    if(filterStatus&&l.status!==filterStatus)return false;
+    if(filterBusca&&!`${l.desc} ${l.cat} ${l.sub}`.toLowerCase().includes(filterBusca.toLowerCase()))return false;
+    return true;
+  });
+  filtered=sortData(filtered,sortLan.col,sortLan.dir);
+  document.getElementById('count-badge').textContent=`${filtered.length} lançamentos`;
+  const tb=document.getElementById('lan-tbody');
+  if(!filtered.length){tb.innerHTML=`<tr><td colspan="10" class="empty-row">Nenhum lançamento encontrado</td></tr>`;return;}
+  tb.innerHTML=filtered.map(l=>`<tr class="lr">
+    <td>${l.dataComp||'—'}</td><td>${l.dataPgto||'—'}</td>
+    <td><span class="tp ${l.tipo==='R'?'r':'d'}">${l.tipo==='R'?'▲ Rec':'▼ Desp'}</span></td>
+    <td><span class="ct">${esc(l.cat)}</span><br><span class="cs">${esc(l.sub)}</span></td>
+    <td class="dc">${esc(l.desc||'—')}</td>
+    <td>${esc(l.forma)}</td>
+    <td class="vc ${l.tipo==='R'?'r':'d'}">${fmt(l.valorBruto)}</td>
+    <td class="vc ${l.tipo==='R'?'r':'d'}">${fmt(l.valorLiq)}</td>
+    <td>${badge(l.status)}</td>
+    <td style="white-space:nowrap">
+      <button class="btn btn-ghost" style="padding:4px 8px;font-size:12px" onclick="openEdit('${l.id}')">✏️</button>
+      <button class="btn" style="padding:4px 8px;font-size:12px;background:rgba(248,81,73,.1);color:var(--red);border:1px solid rgba(248,81,73,.2)" onclick="deleteItem('${l.id}')">🗑️</button>
+    </td></tr>`).join('');
+}
+
+function sortPendentes(col){
+  if(sortPend.col===col)sortPend.dir=sortPend.dir==='asc'?'desc':'asc';
+  else{sortPend.col=col;sortPend.dir='asc';}
+  renderPendentes(document.getElementById('content'));
+}
+
+function renderPendentes(c){
+  let pend=DATA.filter(l=>l.status==='Pendente');
+  pend=sortData(pend,sortPend.col,sortPend.dir);
+  if(!pend.length){
+    c.innerHTML=`<div style="text-align:center;padding:60px;color:var(--tx3)"><div style="font-size:48px">🎉</div><div style="margin-top:12px;font-size:15px">Nenhuma conta pendente!</div></div>`;
+    return;
+  }
+
+  const hoje=new Date().toISOString().split('T')[0];
+  const totRec=pend.filter(l=>l.tipo==='R').reduce((s,l)=>s+(parseFloat(l.valorLiq)||0),0);
+  const totDesp=pend.filter(l=>l.tipo==='D').reduce((s,l)=>s+(parseFloat(l.valorLiq)||0),0);
+
+  c.innerHTML=`
+    <div style="display:grid;grid-template-columns:1fr 1fr;gap:14px;margin-bottom:16px">
+      <div class="kpi k-teal"><div class="kpi-lbl">A Receber</div><div class="kpi-val">${fmt(totRec)}</div><div class="kpi-sub">${pend.filter(l=>l.tipo==='R').length} lançamento(s)</div></div>
+      <div class="kpi k-red"><div class="kpi-lbl">A Pagar</div><div class="kpi-val">${fmt(totDesp)}</div><div class="kpi-sub">${pend.filter(l=>l.tipo==='D').length} lançamento(s)</div></div>
+    </div>
+
+    <div class="card" style="margin-bottom:14px" id="lote-bar">
+      <div style="display:flex;align-items:center;gap:12px;flex-wrap:wrap">
+        <div style="display:flex;align-items:center;gap:8px">
+          <input type="checkbox" id="sel-all" onchange="toggleSelectAll(this.checked)" style="width:16px;height:16px;cursor:pointer"/>
+          <span style="font-size:13px;color:var(--tx2)">Selecionar todos</span>
+        </div>
+        <div style="display:flex;gap:6px">
+          <button class="btn btn-ghost" style="font-size:12px" onclick="selecionarTipo('R')">▲ Só receitas</button>
+          <button class="btn btn-ghost" style="font-size:12px" onclick="selecionarTipo('D')">▼ Só despesas</button>
+        </div>
+        <div style="margin-left:auto;display:flex;align-items:center;gap:10px;flex-wrap:wrap">
+          <div>
+            <span style="font-size:12px;color:var(--tx2);margin-right:6px">Data pagamento/recebimento:</span>
+            <input type="date" id="lote-data" value="${hoje}" style="background:var(--s2);border:1px solid var(--bd2);border-radius:8px;color:var(--tx);padding:6px 10px;font-size:13px;outline:none"/>
+          </div>
+          <button class="btn btn-pri" id="lote-btn" onclick="baixarEmLote()" style="display:none">✓ Baixar selecionados</button>
+          <span id="lote-count" style="font-size:12px;color:var(--tx2)"></span>
+        </div>
+      </div>
+    </div>
+
+    <div class="tbl-wrap"><div class="tbl-scroll"><table class="lan-tbl">
+      <thead><tr>
+        <th style="width:36px"></th>
+        ${thSort('Vencimento','dataPgto',sortPend,'sortPendentes')}
+        <th>Tipo</th>
+        ${thSort('Categoria','cat',sortPend,'sortPendentes')}
+        ${thSort('Descrição','desc',sortPend,'sortPendentes')}
+        ${thSort('Valor','valorLiq',sortPend,'sortPendentes')}
+        <th>Status</th><th></th>
+      </tr></thead>
+      <tbody>
+        ${pend.map(l=>`
+          <tr class="lr" id="prow-${l.id}">
+            <td><input type="checkbox" class="pend-chk" value="${l.id}" onchange="onPendCheck()" style="width:15px;height:15px;cursor:pointer"/></td>
+            <td>${l.dataPgto||'—'}</td>
+            <td><span class="tp ${l.tipo==='R'?'r':'d'}">${l.tipo==='R'?'▲ Rec':'▼ Desp'}</span></td>
+            <td>${esc(l.cat)}</td>
+            <td class="dc">${esc(l.desc||'—')}</td>
+            <td class="vc ${l.tipo==='R'?'r':'d'}">${fmt(l.valorLiq)}</td>
+            <td>${badge(l.status)}</td>
+            <td><button class="btn btn-ghost" style="padding:4px 8px;font-size:12px" onclick="openEdit('${l.id}')">✏️</button></td>
+          </tr>`).join('')}
+      </tbody>
+    </table></div></div>`;
+}
+
+function onPendCheck(){
+  const chks=[...document.querySelectorAll('.pend-chk:checked')];
+  const btn=document.getElementById('lote-btn');
+  const cnt=document.getElementById('lote-count');
+  const selAll=document.getElementById('sel-all');
+  const total=document.querySelectorAll('.pend-chk').length;
+  if(btn){btn.style.display=chks.length>0?'inline-flex':'none';}
+  if(cnt){
+    if(chks.length>0){
+      const ids=chks.map(c=>c.value);
+      const items=DATA.filter(l=>ids.includes(l.id));
+      const tot=items.reduce((s,l)=>s+(parseFloat(l.valorLiq)||0),0);
+      cnt.textContent=`${chks.length} selecionado(s) — ${fmt(tot)}`;
+    } else {cnt.textContent='';}
+  }
+  if(selAll)selAll.checked=chks.length===total&&total>0;
+}
+
+function toggleSelectAll(checked){
+  document.querySelectorAll('.pend-chk').forEach(c=>{c.checked=checked;});
+  onPendCheck();
+}
+
+function selecionarTipo(tipo){
+  const pend=DATA.filter(l=>l.status==='Pendente');
+  document.querySelectorAll('.pend-chk').forEach(c=>{
+    const item=pend.find(l=>l.id===c.value);
+    c.checked=item&&item.tipo===tipo;
+  });
+  onPendCheck();
+}
+
+async function baixarEmLote(){
+  const chks=[...document.querySelectorAll('.pend-chk:checked')];
+  if(!chks.length){toast('Selecione pelo menos um lançamento','err');return;}
+  const data=document.getElementById('lote-data').value;
+  if(!data){toast('Informe a data de pagamento/recebimento','err');return;}
+  const ids=chks.map(c=>c.value);
+  const items=DATA.filter(l=>ids.includes(l.id));
+  const tot=items.reduce((s,l)=>s+(parseFloat(l.valorLiq)||0),0);
+  if(!confirm(`Baixar ${items.length} lançamento(s) totalizando ${fmt(tot)}?\nData: ${data}`))return;
+
+  setSyncStatus('loading',`Baixando ${items.length}...`);
+  let ok=0,err=0;
+  for(const item of items){
+    const novoStatus=item.tipo==='R'?'Recebido':'Pago';
+    try{
+      await sbFetch('PATCH',`lancamentos?id=eq.${item.id}`,{status:novoStatus,data_pgto:data});
+      const idx=DATA.findIndex(l=>l.id===item.id);
+      if(idx>=0){DATA[idx].status=novoStatus;DATA[idx].dataPgto=data;}
+      ok++;
+    }catch(e){err++;console.error(e);}
+  }
+  setSyncStatus('ok',`${DATA.length} registros`);
+  buildNav();render();
+  toast(`✓ ${ok} baixado(s)${err?` — ${err} erro(s)`:''}!`,'ok');
+}
+
+let formData={};
+function openForm(id=null){editingId=id;const l=id?DATA.find(x=>x.id===id):null;formData=l?{...l}:{id:newId(),tipo:'R',dataComp:'',dataPgto:'',cat:'',sub:'',desc:'',cc:'',forma:'PIX',conta:'Conta Corrente',doc:'',valorBruto:'',ded:'',valorLiq:'',status:'Pendente',obs:''};document.getElementById('modal-ttl').textContent=id?'Editar Lançamento':'Novo Lançamento';buildForm();document.getElementById('overlay').style.display='flex';}
+function openEdit(id){openForm(id);}
+function closeForm(){document.getElementById('overlay').style.display='none';}
+
+function buildForm(){
+  const g=document.getElementById('fgrid'),cats=Object.keys(CATS[formData.tipo]||{}),subs=(CATS[formData.tipo]?.[formData.cat])||[];
+  g.innerHTML=`<div style="grid-column:span 2"><div class="fl">Tipo</div><div class="tt"><button type="button" class="tb ${formData.tipo==='R'?'ar':''}" onclick="setFormTipo('R')">▲ Receita / Entrada</button><button type="button" class="tb ${formData.tipo==='D'?'ad':''}" onclick="setFormTipo('D')">▼ Despesa / Saída</button></div></div>
+    <div><div class="fl">Data Competência *</div><input type="date" value="${formData.dataComp}" onchange="formData.dataComp=this.value" required/></div>
+    <div><div class="fl">Data Pagamento</div><input type="date" value="${formData.dataPgto}" onchange="formData.dataPgto=this.value"/></div>
+    <div><div class="fl">Categoria *</div><select onchange="formData.cat=this.value;formData.sub='';buildForm()"><option value="">Selecione...</option>${cats.map(c=>`<option value="${c}"${formData.cat===c?' selected':''}>${c}</option>`).join('')}</select></div>
+    <div><div class="fl">Subcategoria</div><select onchange="formData.sub=this.value"><option value="">Selecione...</option>${subs.map(s=>`<option value="${s}"${formData.sub===s?' selected':''}>${s}</option>`).join('')}</select></div>
+    <div style="grid-column:span 2"><div class="fl">Descrição / Cliente / Fornecedor</div><input type="text" value="${esc(formData.desc)}" oninput="formData.desc=this.value" placeholder="Ex: Honorários — Empresa XYZ"/></div>
+    <div><div class="fl">Valor Bruto (R$) *</div><input type="number" step="0.01" min="0" value="${formData.valorBruto}" oninput="formData.valorBruto=this.value;calcVL()" placeholder="0,00" required/></div>
+    <div><div class="fl">Impostos / Deduções (R$)</div><input type="number" step="0.01" min="0" value="${formData.ded}" oninput="formData.ded=this.value;calcVL()" placeholder="0,00"/></div>
+    <div><div class="fl">Valor Líquido (R$)</div><input type="number" step="0.01" value="${formData.valorLiq}" class="ro" readonly id="vl-inp" placeholder="Calculado automaticamente"/></div>
+    <div><div class="fl">Status</div><select onchange="formData.status=this.value">${STATUS.map(s=>`<option value="${s}"${formData.status===s?' selected':''}>${s}</option>`).join('')}</select></div>
+    <div><div class="fl">Forma de Pagamento</div><select onchange="formData.forma=this.value">${FORMAS.map(f=>`<option value="${f}"${formData.forma===f?' selected':''}>${f}</option>`).join('')}</select></div>
+    <div><div class="fl">Conta Bancária</div><select onchange="formData.conta=this.value">${CONTAS.map(c=>`<option value="${c}"${formData.conta===c?' selected':''}>${c}</option>`).join('')}</select></div>
+    <div><div class="fl">Nº Doc / NF</div><input type="text" value="${esc(formData.doc)}" oninput="formData.doc=this.value"/></div>
+    <div><div class="fl">Centro de Custo</div><input type="text" value="${esc(formData.cc)}" oninput="formData.cc=this.value"/></div>
+    <div style="grid-column:span 2"><div class="fl">Observações</div><textarea rows="2" oninput="formData.obs=this.value">${esc(formData.obs)}</textarea></div>
+    <div style="grid-column:span 2" class="fa"><button class="btn btn-ghost" onclick="closeForm()">Cancelar</button><button class="btn btn-pri" id="save-btn" onclick="saveForm()">💾 Salvar Lançamento</button></div>`;
+}
+
+function setFormTipo(t){formData.tipo=t;formData.cat='';formData.sub='';buildForm();}
+function calcVL(){const b=parseFloat(formData.valorBruto)||0,d=parseFloat(formData.ded)||0;formData.valorLiq=(b-d).toFixed(2);const inp=document.getElementById('vl-inp');if(inp)inp.value=formData.valorLiq;}
+
+async function saveForm(){
+  if(!formData.dataComp||!formData.cat||!formData.valorBruto){toast('Preencha os campos obrigatórios (*)','err');return;}
+  if(!formData.valorLiq)formData.valorLiq=formData.valorBruto;
+  const btn=document.getElementById('save-btn');if(btn){btn.disabled=true;btn.textContent='Salvando...';}
+  setSyncStatus('loading','Salvando...');
+  try{
+    const exists=DATA.findIndex(x=>x.id===formData.id);
+    if(exists>=0){await dbUpdate(formData);DATA[exists]={...formData};}
+    else{await dbInsert(formData);DATA.unshift({...formData});}
+    setSyncStatus('ok',`${DATA.length} registros`);closeForm();buildNav();render();toast('Lançamento salvo! ✓','ok');
+  }catch(e){setSyncStatus('err','Erro ao salvar');toast('Erro ao salvar: '+e.message,'err');if(btn){btn.disabled=false;btn.textContent='💾 Salvar Lançamento';}}
+}
+
+async function deleteItem(id){
+  if(!confirm('Excluir este lançamento?'))return;
+  setSyncStatus('loading','Excluindo...');
+  try{await dbDelete(id);DATA=DATA.filter(x=>x.id!==id);setSyncStatus('ok',`${DATA.length} registros`);buildNav();render();toast('Lançamento excluído.','err');}
+  catch(e){setSyncStatus('err','Erro ao excluir');toast('Erro ao excluir: '+e.message,'err');}
+}
+
+// ── Recorrentes Data ──────────────────────────────────────────────
+const RECORRENTES_RECEITAS=[
+  {id:'rec_001',desc:'FREITAS E BRUNART PARTICIPACOES LTDA',cat:'Receita de Serviços',sub:'Honorários Contábeis',valor:301.67},
+  {id:'rec_002',desc:'GULINI COFFEE & BAR LTDA',cat:'Receita de Serviços',sub:'Honorários Contábeis',valor:810.50},
+  {id:'rec_003',desc:'MARIA HELENA TABACZINSKI',cat:'Receita de Serviços',sub:'Honorários Contábeis',valor:170.00},
+  {id:'rec_004',desc:'ALEATORIAMENTE ENTRETERIMENTO LTDA',cat:'Receita de Serviços',sub:'Honorários Contábeis',valor:710.50},
+  {id:'rec_005',desc:'ELEMENTS TIMBER TRADING SERVICES LTDA',cat:'Receita de Serviços',sub:'Honorários Contábeis',valor:810.50},
+  {id:'rec_006',desc:'RSC LOCAÇÃO DE MAQUINAS E EQUIPAMENTOS',cat:'Receita de Serviços',sub:'Assessoria Fiscal',valor:117.00},
+  {id:'rec_007',desc:'VIVA LUMINA ESTETICA',cat:'Receita de Serviços',sub:'Honorários Contábeis',valor:200.00},
+  {id:'rec_008',desc:'SOUSA & SOUSA ALIMENTOS LTDA',cat:'Receita de Serviços',sub:'Honorários Contábeis',valor:180.00},
+  {id:'rec_009',desc:'NESHER TECNOLOGIA - Honorários',cat:'Receita de Serviços',sub:'Honorários Contábeis',valor:509.00},
+  {id:'rec_010',desc:'NESHER TECNOLOGIA - End Fiscal',cat:'Receita de Serviços',sub:'Assessoria Fiscal',valor:80.00},
+  {id:'rec_011',desc:'FUNEW AGENCY PARTNER D.G LTDA - Honorários',cat:'Receita de Serviços',sub:'Honorários Contábeis',valor:436.00},
+  {id:'rec_012',desc:'FUNEW AGENCY PARTNER D.G LTDA - End Fiscal',cat:'Receita de Serviços',sub:'Assessoria Fiscal',valor:85.00},
+  {id:'rec_013',desc:'CARLA NUTRIPOINT',cat:'Receita de Serviços',sub:'Honorários Contábeis',valor:810.50},
+  {id:'rec_014',desc:'LUCIANA AROUCA ANGIOLOGIA E CIRURGIA VAS',cat:'Receita de Serviços',sub:'Honorários Contábeis',valor:810.50},
+  {id:'rec_015',desc:'IZAIAS ADMINISTRADORA DE SERVIÇOS LTDA',cat:'Receita de Serviços',sub:'Honorários Contábeis',valor:575.00},
+  {id:'rec_016',desc:'MADÊ LTDA',cat:'Receita de Serviços',sub:'Honorários Contábeis',valor:790.00},
+  {id:'rec_017',desc:'WESSLER NEGOCIOS IMOBILIARIOS LTDA',cat:'Receita de Serviços',sub:'Honorários Contábeis',valor:374.00},
+  {id:'rec_018',desc:'HIGIENIZA LIMPEZA LTDA - Honorários',cat:'Receita de Serviços',sub:'Honorários Contábeis',valor:1216.00},
+  {id:'rec_019',desc:'HIGIENIZA LIMPEZA LTDA - End Fiscal',cat:'Receita de Serviços',sub:'Assessoria Fiscal',valor:85.00},
+  {id:'rec_020',desc:'MAICON KUSTER PUBLICIDADE LTDA - Honorários',cat:'Receita de Serviços',sub:'Honorários Contábeis',valor:609.00},
+  {id:'rec_021',desc:'MAICON KUSTER PUBLICIDADE LTDA - End Fiscal',cat:'Receita de Serviços',sub:'Assessoria Fiscal',valor:85.00},
+  {id:'rec_022',desc:'RAVEN ROCK LTDA',cat:'Receita de Serviços',sub:'Honorários Contábeis',valor:516.00},
+  {id:'rec_023',desc:'FR MOTOS OFICINA MECANICA LTDA',cat:'Receita de Serviços',sub:'Honorários Contábeis',valor:630.00},
+  {id:'rec_024',desc:'SUETAM TRANSPORTES',cat:'Receita de Serviços',sub:'Honorários Contábeis',valor:810.50},
+  {id:'rec_025',desc:'B. C. DE PAIVA CORREA LTDA',cat:'Receita de Serviços',sub:'Honorários Contábeis',valor:810.50},
+  {id:'rec_026',desc:'BARASKY NEGOCIOS IMOBILIARIOS LTDA',cat:'Receita de Serviços',sub:'Honorários Contábeis',valor:597.00},
+  {id:'rec_027',desc:'BRUNA CARVALHO DA SILVA',cat:'Receita de Serviços',sub:'Honorários Contábeis',valor:180.00},
+  {id:'rec_028',desc:'NEGOCIOS & SAUDE SERVICOS MEDICOS LTDA',cat:'Receita de Serviços',sub:'Honorários Contábeis',valor:374.00},
+  {id:'rec_029',desc:'ODONTOLOGIA NOVO HAMBURGO LTDA',cat:'Receita de Serviços',sub:'Honorários Contábeis',valor:774.00},
+  {id:'rec_030',desc:'PANIFICADORA CONFEITARIA NOSSO CANTINHO',cat:'Receita de Serviços',sub:'Honorários Contábeis',valor:810.50},
+  {id:'rec_031',desc:'PDR MERCADO LTDA',cat:'Receita de Serviços',sub:'Honorários Contábeis',valor:620.00},
+  {id:'rec_032',desc:'ANA S MAKE COSMETICOS E ACESSORIOS LTDA',cat:'Receita de Serviços',sub:'Honorários Contábeis',valor:810.50},
+  {id:'rec_033',desc:'GALERIA TORINO LTDA',cat:'Receita de Serviços',sub:'Honorários Contábeis',valor:401.50},
+  {id:'rec_034',desc:'JU MAKE ACESSORIOS LTDA',cat:'Receita de Serviços',sub:'Honorários Contábeis',valor:618.00},
+  {id:'rec_035',desc:'NEOLATIN LTDA',cat:'Receita de Serviços',sub:'Honorários Contábeis',valor:180.00},
+  {id:'rec_036',desc:'ACL ALPHA IMOBILIARIA LTDA',cat:'Receita de Serviços',sub:'Honorários Contábeis',valor:280.00},
+  {id:'rec_037',desc:'CAPILLUS IMPORTACAO E COMERCIO DE APLIQUES',cat:'Receita de Serviços',sub:'Honorários Contábeis',valor:630.00},
+  {id:'rec_038',desc:'CHOPERIA E SORVETERIA DECKHOUSE',cat:'Receita de Serviços',sub:'Honorários Contábeis',valor:678.00},
+  {id:'rec_039',desc:'CONCEPT ACABAMENTOS LTDA',cat:'Receita de Serviços',sub:'Honorários Contábeis',valor:180.00},
+  {id:'rec_040',desc:'DOZE FILMS LTDA',cat:'Receita de Serviços',sub:'Honorários Contábeis',valor:551.00},
+  {id:'rec_041',desc:'EDIFICIO RESIDENCIAL BRAVA BLUE',cat:'Receita de Serviços',sub:'Honorários Contábeis',valor:692.00},
+  {id:'rec_042',desc:'EURO 9 COMUNICACAO LTDA',cat:'Receita de Serviços',sub:'Honorários Contábeis',valor:513.00},
+  {id:'rec_043',desc:'JOVANNIA BEATRIS BERTAGNOLLI',cat:'Receita de Serviços',sub:'Honorários Contábeis',valor:180.00},
+  {id:'rec_044',desc:'JR VARIEDADES LTDA',cat:'Receita de Serviços',sub:'Honorários Contábeis',valor:657.00},
+  {id:'rec_045',desc:'JR VARIEDADES LTDA FILIAL',cat:'Receita de Serviços',sub:'Honorários Contábeis',valor:491.00},
+  {id:'rec_046',desc:'JUCELI TEREZINHA DO AMARANTE',cat:'Receita de Serviços',sub:'Honorários Contábeis',valor:678.00},
+  {id:'rec_047',desc:'KTI - TECHNOLOGY AND INNOVATION LTDA',cat:'Receita de Serviços',sub:'Honorários Contábeis',valor:810.50},
+  {id:'rec_048',desc:'MARIA DAS GRACAS DOS SANTOS SILVA',cat:'Receita de Serviços',sub:'Honorários Contábeis',valor:180.00},
+  {id:'rec_049',desc:'MATTJIE MATTJIE MOVEIS E DECORACOES LTDA',cat:'Receita de Serviços',sub:'Honorários Contábeis',valor:810.50},
+  {id:'rec_050',desc:'MKT TREINAMENTO',cat:'Receita de Serviços',sub:'Honorários Contábeis',valor:436.00},
+  {id:'rec_051',desc:'NEGOCIOS & SOLITD LTDA',cat:'Receita de Serviços',sub:'Honorários Contábeis',valor:195.00},
+  {id:'rec_052',desc:'ODONTO EPIC BRUSQUE LTDA',cat:'Receita de Serviços',sub:'Honorários Contábeis',valor:774.00},
+  {id:'rec_053',desc:'ODONTOLOGIA CANELINHA LTDA',cat:'Receita de Serviços',sub:'Honorários Contábeis',valor:774.00},
+  {id:'rec_054',desc:'ODONTOLOGIA ITAJAI CORDEIROS LTDA',cat:'Receita de Serviços',sub:'Honorários Contábeis',valor:1056.00},
+  {id:'rec_055',desc:'ODONTOLOGIA NOVA TRENTO LTDA',cat:'Receita de Serviços',sub:'Honorários Contábeis',valor:774.00},
+  {id:'rec_056',desc:'ODONTOLOGIA SAO JOAO BATISTA LTDA',cat:'Receita de Serviços',sub:'Honorários Contábeis',valor:821.00},
+  {id:'rec_057',desc:'ODONTOLOGIA TAQUARA LTDA',cat:'Receita de Serviços',sub:'Honorários Contábeis',valor:774.00},
+  {id:'rec_058',desc:'PASSOS SABOR COM AMOR LTDA',cat:'Receita de Serviços',sub:'Honorários Contábeis',valor:630.00},
+  {id:'rec_059',desc:'RM PLANEJAMENTO E ASSESSORIA CONTABIL',cat:'Receita de Serviços',sub:'Honorários Contábeis',valor:657.00},
+  {id:'rec_060',desc:'ROBERTA CUNHA WATZKO FILIAL',cat:'Receita de Serviços',sub:'Honorários Contábeis',valor:565.00},
+  {id:'rec_061',desc:'ROBERTA CUNHA WATZKO LTDA',cat:'Receita de Serviços',sub:'Honorários Contábeis',valor:710.00},
+  {id:'rec_062',desc:'SAMUEL SOARES DA CUNHA',cat:'Receita de Serviços',sub:'Assessoria Fiscal',valor:102.00},
+  {id:'rec_063',desc:'SET POINT - CENTRO DE TREINAMENTO ESPORTIVO',cat:'Receita de Serviços',sub:'Honorários Contábeis',valor:180.00},
+  {id:'rec_064',desc:'SUZANA MATIELLO NUTRICAO',cat:'Receita de Serviços',sub:'Honorários Contábeis',valor:719.00},
+  {id:'rec_065',desc:'VERAS TECNOLOGIA LTDA',cat:'Receita de Serviços',sub:'Honorários Contábeis',valor:180.00},
+  {id:'rec_066',desc:'VIRTUAL VIDA',cat:'Receita de Serviços',sub:'Honorários Contábeis',valor:540.00},
+  {id:'rec_067',desc:'28.026.806 ARTHUR PAULO FARIAS',cat:'Receita de Serviços',sub:'Honorários Contábeis',valor:195.00},
+  {id:'rec_068',desc:'893 PRODUCOES LTDA',cat:'Receita de Serviços',sub:'Honorários Contábeis',valor:810.50},
+  {id:'rec_069',desc:'A. CAMARGO HAMBURGUERIA LTDA',cat:'Receita de Serviços',sub:'Honorários Contábeis',valor:1002.50},
+  {id:'rec_070',desc:'ALTAS HORAS ESPETINHO LTDA',cat:'Receita de Serviços',sub:'Honorários Contábeis',valor:678.00},
+  {id:'rec_071',desc:'ANSATA COMERCIO VAREJISTA DE CONFECCOES',cat:'Receita de Serviços',sub:'Honorários Contábeis',valor:810.50},
+  {id:'rec_072',desc:'ANSATA COMERCIO VAREJISTA DE CONFECCOES FILIAL',cat:'Receita de Serviços',sub:'Honorários Contábeis',valor:704.00},
+  {id:'rec_073',desc:'BC MAR & SHAKE LTDA',cat:'Receita de Serviços',sub:'Honorários Contábeis',valor:710.50},
+  {id:'rec_074',desc:'CIRCULAR PACK EMBALAGENS LTDA',cat:'Receita de Serviços',sub:'Assessoria Fiscal',valor:105.00},
+  {id:'rec_075',desc:'CLEBER LANDER DE ANDRADE',cat:'Receita de Serviços',sub:'Assessoria Fiscal',valor:105.00},
+  {id:'rec_076',desc:'CONDOMINIO EDIFICIO LEAL TOWER',cat:'Receita de Serviços',sub:'Honorários Contábeis',valor:911.00},
+  {id:'rec_077',desc:'CONDOMINIO EDIFICIO PARQUE DAS NACOES II',cat:'Receita de Serviços',sub:'Honorários Contábeis',valor:3272.00},
+  {id:'rec_078',desc:'CONDOMINIO EDIFICIO SPAZIO DEL MARE',cat:'Receita de Serviços',sub:'Honorários Contábeis',valor:1076.50},
+  {id:'rec_079',desc:'COSTA BRAVA STORE ARTIGOS DO VESTUARIO',cat:'Receita de Serviços',sub:'Honorários Contábeis',valor:810.50},
+  {id:'rec_080',desc:'COSTA BRAVA STORE ARTIGOS DO VESTUARIO FILIAL',cat:'Receita de Serviços',sub:'Honorários Contábeis',valor:678.00},
+  {id:'rec_081',desc:'DPM DONADUZZI LTDA',cat:'Receita de Serviços',sub:'Honorários Contábeis',valor:810.50},
+  {id:'rec_082',desc:'FORNELLO PRODUTOS ALIMENTICIOS LTDA',cat:'Receita de Serviços',sub:'Honorários Contábeis',valor:907.50},
+  {id:'rec_083',desc:'GROSS SERVICOS DE MUNCK LTDA',cat:'Receita de Serviços',sub:'Honorários Contábeis',valor:1059.00},
+  {id:'rec_084',desc:'H.T. LUCHESI & CIA LTDA',cat:'Receita de Serviços',sub:'Honorários Contábeis',valor:810.50},
+  {id:'rec_085',desc:'HN CONSTRUTORA E INCORPORADORA LTDA',cat:'Receita de Serviços',sub:'Assessoria Fiscal',valor:198.00},
+  {id:'rec_086',desc:'NEWDOC MARKETING DIGITAL EIRELI',cat:'Receita de Serviços',sub:'Honorários Contábeis',valor:1121.00},
+  {id:'rec_087',desc:'ORTHO ESTHETIC ODONTOLOGIA INTEGRADA LTDA',cat:'Receita de Serviços',sub:'Honorários Contábeis',valor:180.00},
+  {id:'rec_088',desc:'PIZZARIA SESTO SENSO FRESH ITALIAN FOOD',cat:'Receita de Serviços',sub:'Honorários Contábeis',valor:696.00},
+  {id:'rec_089',desc:'RESTAURANTE PRAIA DOS AMORES LTDA',cat:'Receita de Serviços',sub:'Honorários Contábeis',valor:1054.50},
+  {id:'rec_090',desc:'TEMPO BRASIL COMUNICACAO LTDA',cat:'Receita de Serviços',sub:'Honorários Contábeis',valor:1730.00},
+  {id:'rec_091',desc:'VIVA HOME AMBIENTES PLANEJADOS LTDA',cat:'Receita de Serviços',sub:'Honorários Contábeis',valor:970.00},
+  {id:'rec_092',desc:'RESIDENCIAL JOSE WATZKO',cat:'Receita de Serviços',sub:'Honorários Contábeis',valor:404.00},
+  {id:'rec_093',desc:'BOM APETITY RESTAURANTE LTDA',cat:'Receita de Serviços',sub:'Honorários Contábeis',valor:625.00},
+  {id:'rec_094',desc:'NHX STUDIO PRODUCOES LTDA',cat:'Receita de Serviços',sub:'Honorários Contábeis',valor:459.00},
+  {id:'rec_095',desc:'STUDIO DE BELEZA GLUCK LTDA',cat:'Receita de Serviços',sub:'Honorários Contábeis',valor:650.00},
+  {id:'rec_096',desc:'WERT ENGENHARIA DE AVALIACOES E PERICIAS',cat:'Receita de Serviços',sub:'Honorários Contábeis',valor:774.00},
+  {id:'rec_097',desc:'ECOTEC BIOANALISES E ECOTECNOLOGIA LTDA',cat:'Receita de Serviços',sub:'Honorários Contábeis',valor:810.50},
+  {id:'rec_098',desc:'KTI TECHNOLOGY AND INNOVATION SOFTWARE',cat:'Receita de Serviços',sub:'Honorários Contábeis',valor:180.00},
+  {id:'rec_099',desc:'L.A. PRODUCOES LTDA',cat:'Receita de Serviços',sub:'Honorários Contábeis',valor:374.00},
+  {id:'rec_100',desc:'PIZZA DECK RESTAURANTE LTDA',cat:'Receita de Serviços',sub:'Honorários Contábeis',valor:1455.50},
+  {id:'rec_101',desc:'BREEZE SOLUCOES EM LIMPEZA LTDA',cat:'Receita de Serviços',sub:'Honorários Contábeis',valor:597.00},
+  {id:'rec_102',desc:'EDIFICIO NOSSA SENHORA DE LOURDES',cat:'Receita de Serviços',sub:'Honorários Contábeis',valor:548.00},
+  {id:'rec_103',desc:'EDIFICIO SANTA CLARA',cat:'Receita de Serviços',sub:'Honorários Contábeis',valor:840.50},
+  {id:'rec_104',desc:'MARCELO ARRUDA REPRESENTACOES LTDA',cat:'Receita de Serviços',sub:'Honorários Contábeis',valor:810.50},
+  {id:'rec_105',desc:'RM TELECOMUNICACOES LTDA',cat:'Receita de Serviços',sub:'Honorários Contábeis',valor:1130.50},
+  {id:'rec_106',desc:'COMES & BEBES CAFETERIA LTDA',cat:'Receita de Serviços',sub:'Honorários Contábeis',valor:726.00},
+  {id:'rec_107',desc:'RS ENGENHARIA E CONSTRUCOES LTDA',cat:'Receita de Serviços',sub:'Honorários Contábeis',valor:1223.00},
+  {id:'rec_108',desc:'SARIMA CAFE LTDA - Honorários',cat:'Receita de Serviços',sub:'Honorários Contábeis',valor:974.00},
+  {id:'rec_109',desc:'SARIMA CAFE LTDA - End Fiscal',cat:'Receita de Serviços',sub:'Assessoria Fiscal',valor:80.00},
+  {id:'rec_110',desc:'SIMPLES STANDS E CENOGRAFIA LTDA - Honorários',cat:'Receita de Serviços',sub:'Honorários Contábeis',valor:490.00},
+  {id:'rec_111',desc:'SIMPLES STANDS E CENOGRAFIA LTDA - End Fiscal',cat:'Receita de Serviços',sub:'Assessoria Fiscal',valor:85.00},
+  {id:'rec_112',desc:'CORTES DO MAICON KUSTER LTDA',cat:'Receita de Serviços',sub:'Honorários Contábeis',valor:694.00},
+  {id:'rec_113',desc:'VALPHI NEGOCIOS IMOBILIARIOS LTDA',cat:'Receita de Serviços',sub:'Honorários Contábeis',valor:180.00},
+  {id:'rec_114',desc:'FACE EPIC',cat:'Receita de Serviços',sub:'Honorários Contábeis',valor:401.00},
+  {id:'rec_115',desc:'ELAINE ESTER CORREA DA CUNHA',cat:'Receita de Serviços',sub:'Honorários Contábeis',valor:180.00},
+  {id:'rec_116',desc:'ELEMENT SOLUCOES LTDA - Honorários',cat:'Receita de Serviços',sub:'Honorários Contábeis',valor:810.50},
+  {id:'rec_117',desc:'ELEMENT SOLUCOES LTDA - End Fiscal',cat:'Receita de Serviços',sub:'Assessoria Fiscal',valor:85.00},
+  {id:'rec_118',desc:'NEW PROMO LTDA',cat:'Receita de Serviços',sub:'Honorários Contábeis',valor:180.00},
+  {id:'rec_119',desc:'NOSSA TOCA LTDA',cat:'Receita de Serviços',sub:'Assessoria Fiscal',valor:93.00},
+  {id:'rec_120',desc:'REAVEN MODA LTDA',cat:'Receita de Serviços',sub:'Honorários Contábeis',valor:478.00},
+  {id:'rec_121',desc:'REZZOLUTI REFRIGERACAO LTDA',cat:'Receita de Serviços',sub:'Honorários Contábeis',valor:540.00},
+  {id:'rec_122',desc:'CR BLUM ALIMENTACOES LTDA',cat:'Receita de Serviços',sub:'Honorários Contábeis',valor:400.00},
+  {id:'rec_123',desc:'EC SKATE SHOP LTDA',cat:'Receita de Serviços',sub:'Honorários Contábeis',valor:165.00},
+  {id:'rec_124',desc:'ADAMS & ADAMS ILUMINACAO LTDA',cat:'Receita de Serviços',sub:'Honorários Contábeis',valor:810.50},
+  {id:'rec_125',desc:'ALTAS HORAS LANCHONETE E PETISCARIA LTDA',cat:'Receita de Serviços',sub:'Honorários Contábeis',valor:678.00},
+  {id:'rec_126',desc:'BC TINTAS E FERRAGEM LTDA',cat:'Receita de Serviços',sub:'Honorários Contábeis',valor:180.00},
+  {id:'rec_127',desc:'BLOWMIND LTDA',cat:'Receita de Serviços',sub:'Honorários Contábeis',valor:478.00},
+  {id:'rec_128',desc:'CASA SENSORIAL LTDA',cat:'Receita de Serviços',sub:'Honorários Contábeis',valor:180.00},
+  {id:'rec_129',desc:'FERMINO CONCEPT COMERCIO E SERVICOS',cat:'Receita de Serviços',sub:'Honorários Contábeis',valor:875.00},
+  {id:'rec_130',desc:'FERMINO IND. INDUSTRIA E COMERCIO',cat:'Receita de Serviços',sub:'Honorários Contábeis',valor:180.00},
+  {id:'rec_131',desc:'ISRAEL PAZ RODRIGUES PIZZARIA LTDA',cat:'Receita de Serviços',sub:'Assessoria Fiscal',valor:114.50},
+  {id:'rec_132',desc:'JULIANA JURCK GUIMARAES LTDA',cat:'Receita de Serviços',sub:'Honorários Contábeis',valor:459.00},
+  {id:'rec_133',desc:'LOJA DE BALI COMERCIO IMPORTACAO E EXPORTACAO',cat:'Receita de Serviços',sub:'Honorários Contábeis',valor:647.00},
+  {id:'rec_134',desc:'MAICON KUSTER COMEDIANTE LTDA',cat:'Receita de Serviços',sub:'Honorários Contábeis',valor:545.00},
+  {id:'rec_135',desc:'MC VISION LTDA',cat:'Receita de Serviços',sub:'Honorários Contábeis',valor:180.00},
+  {id:'rec_136',desc:'MOMA TECH SISTEMAS LTDA',cat:'Receita de Serviços',sub:'Honorários Contábeis',valor:180.00},
+  {id:'rec_137',desc:'PEPPA & CO LTDA',cat:'Receita de Serviços',sub:'Honorários Contábeis',valor:200.00},
+  {id:'rec_138',desc:'QUADROS PODIUM LTDA',cat:'Receita de Serviços',sub:'Honorários Contábeis',valor:768.00},
+  {id:'rec_139',desc:'ROSANA ELIZABETE VULCZAK',cat:'Receita de Serviços',sub:'Honorários Contábeis',valor:180.00},
+  {id:'rec_140',desc:'SERGIO DE SIQUEIRA LTDA',cat:'Receita de Serviços',sub:'Honorários Contábeis',valor:754.00},
+  {id:'rec_141',desc:'SOCIEDADE EDUCACIONAL E CULTURAL ANGLO-BRASILEIRA',cat:'Receita de Serviços',sub:'Honorários Contábeis',valor:810.50},
+  {id:'rec_142',desc:'TRANSPORTES ANDRADE LTDA',cat:'Receita de Serviços',sub:'Honorários Contábeis',valor:165.00},
+  {id:'rec_143',desc:'UNIVERSAL FILTROS DE AGUA LTDA',cat:'Receita de Serviços',sub:'Honorários Contábeis',valor:810.50},
+  {id:'rec_144',desc:'WATZKO CONSTRUTORA LTDA',cat:'Receita de Serviços',sub:'Honorários Contábeis',valor:160.00},
+  {id:'rec_145',desc:'WATZKO INCORPORADORA LTDA',cat:'Receita de Serviços',sub:'Honorários Contábeis',valor:165.50},
+];
+
+const RECORRENTES_DESPESAS=[
+  {id:'dep_001',desc:'Salários',cat:'Pessoal',sub:'Salários e Encargos',valor:10852.37},
+  {id:'dep_002',desc:'Pró-labores',cat:'Pessoal',sub:'Pró-Labore',valor:26560.00},
+  {id:'dep_003',desc:'Microsoft 365',cat:'Tecnologia',sub:'Microsoft 365',valor:610.33},
+  {id:'dep_004',desc:'Vale Alimentação Ariana PF',cat:'Pessoal',sub:'Vale Refeição',valor:185.50},
+  {id:'dep_005',desc:'Anuidade Cartão Sicoob',cat:'Administrativo',sub:'Despesas Bancárias',valor:3.20},
+  {id:'dep_006',desc:'RD Station',cat:'Marketing',sub:'Publicidade',valor:66.00},
+  {id:'dep_007',desc:'Zapsign',cat:'Tecnologia',sub:'Software Contábil',valor:39.90},
+  {id:'dep_008',desc:'Plataforma Cursos Contabilidade Facilitada',cat:'Administrativo',sub:'Cursos / Capacitação',valor:89.90},
+  {id:'dep_009',desc:'ChatGPT',cat:'Tecnologia',sub:'Manutenção TI',valor:107.93},
+  {id:'dep_010',desc:'Condomínio',cat:'Infraestrutura',sub:'Condomínio',valor:195.03},
+  {id:'dep_011',desc:'Sindicont',cat:'Administrativo',sub:'Outros',valor:160.00},
+  {id:'dep_012',desc:'Impressora',cat:'Tecnologia',sub:'Manutenção TI',valor:219.67},
+  {id:'dep_013',desc:'Domínio Escritório',cat:'Tecnologia',sub:'Software Contábil',valor:3096.50},
+  {id:'dep_014',desc:'SSParisi',cat:'Tecnologia',sub:'Software Contábil',valor:269.90},
+  {id:'dep_015',desc:'Celular Claro',cat:'Infraestrutura',sub:'Internet / Telefone',valor:57.70},
+  {id:'dep_016',desc:'Google Ads',cat:'Marketing',sub:'Publicidade',valor:1000.00},
+  {id:'dep_017',desc:'Systemar',cat:'Tecnologia',sub:'Software Contábil',valor:503.25},
+  {id:'dep_018',desc:'Plano de Saúde',cat:'Pessoal',sub:'Plano de Saúde',valor:3034.46},
+  {id:'dep_019',desc:'Manutenção Filtro',cat:'Infraestrutura',sub:'Limpeza',valor:49.90},
+  {id:'dep_020',desc:'Agência Funew - Google Ads',cat:'Marketing',sub:'Publicidade',valor:550.00},
+  {id:'dep_021',desc:'Aluguel',cat:'Infraestrutura',sub:'Aluguel',valor:4387.11},
+  {id:'dep_022',desc:'DARF DCTFWeb - Empregados',cat:'Impostos e Taxas',sub:'PIS/COFINS',valor:851.04},
+  {id:'dep_023',desc:'DARF DCTFWeb - Pro-labore',cat:'Impostos e Taxas',sub:'PIS/COFINS',valor:534.93},
+  {id:'dep_024',desc:'FGTS',cat:'Pessoal',sub:'FGTS',valor:862.98},
+  {id:'dep_025',desc:'SIEG',cat:'Tecnologia',sub:'Software Contábil',valor:822.67},
+  {id:'dep_026',desc:'Internet Claro',cat:'Infraestrutura',sub:'Internet / Telefone',valor:117.04},
+  {id:'dep_027',desc:'Algar',cat:'Infraestrutura',sub:'Internet / Telefone',valor:79.80},
+  {id:'dep_028',desc:'Simples Nacional',cat:'Impostos e Taxas',sub:'Simples Nacional',valor:8983.55},
+  {id:'dep_029',desc:'Energia Elétrica',cat:'Infraestrutura',sub:'Energia Elétrica',valor:831.89},
+  {id:'dep_030',desc:'SERPRO - Integra Contador',cat:'Tecnologia',sub:'Software Contábil',valor:92.28},
+  {id:'dep_031',desc:'TIM',cat:'Infraestrutura',sub:'Internet / Telefone',valor:105.10},
+  {id:'dep_032',desc:'Vale Alimentação',cat:'Pessoal',sub:'Vale Refeição',valor:1200.00},
+  {id:'dep_033',desc:'Faxinas Escritório',cat:'Infraestrutura',sub:'Limpeza',valor:600.00},
+  {id:'dep_034',desc:'ECONET',cat:'Tecnologia',sub:'Software Contábil',valor:384.27},
+];
+
+function renderRecorrentes(c){
+  const totRec=RECORRENTES_RECEITAS.reduce((s,r)=>s+r.valor,0);
+  const totDesp=RECORRENTES_DESPESAS.reduce((s,r)=>s+r.valor,0);
+  const hoje=new Date();
+  const mesAtual=`${hoje.getFullYear()}-${String(hoje.getMonth()+1).padStart(2,'0')}`;
+  c.innerHTML=`
+    <div style="display:grid;grid-template-columns:1fr 1fr;gap:14px;margin-bottom:16px">
+      <div class="kpi k-teal"><div class="kpi-lbl">Total Receitas Recorrentes</div><div class="kpi-val">${fmt(totRec)}</div><div class="kpi-sub">${RECORRENTES_RECEITAS.length} clientes</div></div>
+      <div class="kpi k-red"><div class="kpi-lbl">Total Despesas Recorrentes</div><div class="kpi-val">${fmt(totDesp)}</div><div class="kpi-sub">${RECORRENTES_DESPESAS.length} itens</div></div>
+    </div>
+    <div class="card" style="margin-bottom:14px">
+      <div class="card-ttl">🔁 Gerar Lançamentos do Mês</div>
+      <div style="display:flex;align-items:center;gap:12px;flex-wrap:wrap">
+        <div>
+          <div class="fl" style="margin-bottom:4px">Mês de competência</div>
+          <input type="month" id="rec-mes" value="${mesAtual}" style="background:var(--s2);border:1px solid var(--bd2);border-radius:8px;color:var(--tx);padding:7px 10px;font-size:13px;outline:none"/>
+        </div>
+        <div style="display:flex;gap:8px;margin-top:18px">
+          <button class="btn btn-pri" onclick="gerarRecorrentes('ambos')">⚡ Gerar Receitas + Despesas</button>
+          <button class="btn btn-ghost" onclick="gerarRecorrentes('R')">▲ Só Receitas</button>
+          <button class="btn btn-ghost" onclick="gerarRecorrentes('D')">▼ Só Despesas</button>
+        </div>
+      </div>
+    </div>
+    <div style="display:grid;grid-template-columns:1fr 1fr;gap:14px">
+      <div class="tbl-wrap">
+        <div class="tbl-hdr"><div class="sec-ttl">▲ Receitas Recorrentes <span class="yr-pill">${RECORRENTES_RECEITAS.length} clientes</span></div></div>
+        <div style="max-height:420px;overflow-y:auto"><table class="lan-tbl" style="min-width:unset">
+          <thead><tr><th>Cliente</th><th>Serviço</th><th style="text-align:right">Valor</th></tr></thead>
+          <tbody>${RECORRENTES_RECEITAS.map(r=>`<tr class="lr"><td style="font-size:12px;color:var(--tx)">${esc(r.desc)}</td><td><span class="cs">${esc(r.sub)}</span></td><td style="text-align:right" class="vc r">${fmt(r.valor)}</td></tr>`).join('')}</tbody>
+        </table></div>
+      </div>
+      <div class="tbl-wrap">
+        <div class="tbl-hdr"><div class="sec-ttl">▼ Despesas Recorrentes <span class="yr-pill">${RECORRENTES_DESPESAS.length} itens</span></div></div>
+        <div style="max-height:420px;overflow-y:auto"><table class="lan-tbl" style="min-width:unset">
+          <thead><tr><th>Descrição</th><th>Categoria</th><th style="text-align:right">Valor</th></tr></thead>
+          <tbody>${RECORRENTES_DESPESAS.map(r=>`<tr class="lr"><td style="font-size:12px;color:var(--tx)">${esc(r.desc)}</td><td><span class="cs">${esc(r.cat)}</span></td><td style="text-align:right" class="vc d">${fmt(r.valor)}</td></tr>`).join('')}</tbody>
+        </table></div>
+      </div>
+    </div>`;
+}
+
+async function gerarRecorrentes(tipo){
+  const mesVal=document.getElementById('rec-mes').value;
+  if(!mesVal){toast('Selecione o mês de competência','err');return;}
+  const [ano,mes]=mesVal.split('-');
+  const dataComp=`${ano}-${mes}-01`;
+  const jaExiste=DATA.filter(l=>l.dataComp&&l.dataComp.startsWith(`${ano}-${mes}`)&&l.obs&&l.obs.includes('[recorrente]'));
+  if(jaExiste.length>0){if(!confirm(`Já existem ${jaExiste.length} lançamentos recorrentes para ${mes}/${ano}. Gerar novamente mesmo assim?`))return;}
+  const lista=[];
+  if(tipo==='R'||tipo==='ambos'){RECORRENTES_RECEITAS.forEach(r=>{lista.push({id:newId(),tipo:'R',dataComp,dataPgto:'',cat:r.cat,sub:r.sub,desc:r.desc,cc:'',forma:'PIX',conta:'Conta Corrente',doc:'',valorBruto:r.valor,ded:0,valorLiq:r.valor,status:'Pendente',obs:'[recorrente]'});});}
+  if(tipo==='D'||tipo==='ambos'){RECORRENTES_DESPESAS.forEach(r=>{lista.push({id:newId(),tipo:'D',dataComp,dataPgto:'',cat:r.cat,sub:r.sub,desc:r.desc,cc:'',forma:'PIX',conta:'Conta Corrente',doc:'',valorBruto:r.valor,ded:0,valorLiq:r.valor,status:'Pendente',obs:'[recorrente]'});});}
+  setSyncStatus('loading',`Gerando ${lista.length} lançamentos...`);
+  try{
+    for(let i=0;i<lista.length;i+=50){await sbFetch('POST',TABLE,lista.slice(i,i+50).map(toRow));}
+    lista.forEach(l=>DATA.unshift(l));
+    setSyncStatus('ok',`${DATA.length} registros`);
+    buildNav();
+    toast(`✓ ${lista.length} lançamentos gerados para ${mes}/${ano}!`,'ok');
+    render();
+  }catch(e){setSyncStatus('err','Erro ao gerar');toast('Erro: '+e.message,'err');}
+}
+
+// ── Categorias (Supabase + Drag & Drop) ──────────────────────────
+let _catTipo = 'R';
+let _dragCat = null;
+let _dragSub = null;
+
+function renderCategorias(c){
+  const cats = CATS_DATA[_catTipo]||[];
+  c.innerHTML=`
+    <style>
+      .cat-card{background:var(--s1);border:1px solid var(--bd);border-radius:14px;margin-bottom:10px;overflow:hidden;transition:opacity .15s}
+      .cat-card.drag-over{border-color:var(--blue);background:rgba(88,166,255,.05)}
+      .cat-card.dragging{opacity:.4}
+      .cat-hdr{display:flex;align-items:center;justify-content:space-between;padding:12px 16px;border-bottom:1px solid var(--bd);cursor:grab}
+      .cat-hdr:active{cursor:grabbing}
+      .drag-handle{color:var(--tx3);font-size:16px;margin-right:8px;user-select:none}
+      .sub-pill{display:inline-flex;align-items:center;gap:4px;background:var(--s2);border:1px solid var(--bd);border-radius:8px;padding:4px 10px;cursor:grab}
+      .sub-pill:active{cursor:grabbing}
+      .sub-pill.drag-over{border-color:var(--blue);background:rgba(88,166,255,.1)}
+      .sub-pill.dragging{opacity:.4}
+    </style>
+    <div style="display:flex;gap:8px;margin-bottom:16px;align-items:center">
+      <button class="btn ${_catTipo==='R'?'btn-pri':'btn-ghost'}" onclick="_catTipo='R';render()">▲ Receitas</button>
+      <button class="btn ${_catTipo==='D'?'btn-pri':'btn-ghost'}" onclick="_catTipo='D';render()">▼ Despesas</button>
+      <span style="font-size:11px;color:var(--tx3);margin-left:8px">↕ Arraste para reordenar</span>
+    </div>
+    <div id="cats-list">
+      ${cats.sort((a,b)=>a.ordem-b.ordem).map((cat,ci)=>`
+        <div class="cat-card" id="cat-${cat.id}" draggable="true"
+          ondragstart="onCatDragStart(event,'${cat.id}')"
+          ondragover="onCatDragOver(event,'${cat.id}')"
+          ondragleave="onCatDragLeave(event,'${cat.id}')"
+          ondrop="onCatDrop(event,'${cat.id}')">
+          <div class="cat-hdr">
+            <div style="display:flex;align-items:center;gap:8px;flex:1">
+              <span class="drag-handle">⠿</span>
+              <span style="font-size:14px;font-weight:600;color:var(--tx)">${esc(cat.nome)}</span>
+              <button class="btn btn-ghost" style="padding:2px 7px;font-size:11px" onclick="editarCategoria('${cat.id}','${esc(cat.nome)}')">✏️</button>
+              <button class="btn" style="padding:2px 7px;font-size:11px;background:rgba(248,81,73,.1);color:var(--red);border:1px solid rgba(248,81,73,.2)" onclick="excluirCategoria('${cat.id}','${esc(cat.nome)}')">🗑️</button>
+            </div>
+            <button class="btn btn-ghost" style="padding:4px 10px;font-size:12px" onclick="adicionarSub('${cat.id}','${esc(cat.nome)}')">＋ Sub</button>
+          </div>
+          <div style="padding:10px 16px;display:flex;flex-wrap:wrap;gap:8px" id="subs-${cat.id}">
+            ${(cat.subs||[]).sort((a,b)=>a.ordem-b.ordem).map(sub=>`
+              <div class="sub-pill" id="sub-${sub.id}" draggable="true"
+                ondragstart="onSubDragStart(event,'${sub.id}','${cat.id}')"
+                ondragover="onSubDragOver(event,'${sub.id}')"
+                ondragleave="onSubDragLeave(event,'${sub.id}')"
+                ondrop="onSubDrop(event,'${sub.id}','${cat.id}')">
+                <span style="font-size:12px;color:var(--tx3);margin-right:2px">⠿</span>
+                <span style="font-size:12.5px;color:var(--tx)">${esc(sub.nome)}</span>
+                <button onclick="editarSub('${sub.id}','${esc(sub.nome)}')" style="background:none;border:none;color:var(--tx3);font-size:11px;padding:0 2px;cursor:pointer;line-height:1">✏️</button>
+                <button onclick="excluirSub('${sub.id}','${esc(sub.nome)}','${cat.id}')" style="background:none;border:none;color:var(--red);font-size:11px;padding:0 2px;cursor:pointer;line-height:1">✕</button>
+              </div>`).join('')}
+            ${!(cat.subs||[]).length?`<span style="color:var(--tx3);font-size:12px">Nenhuma subcategoria</span>`:''}
+          </div>
+        </div>`).join('')}
+    </div>
+    <button class="btn btn-pri" onclick="adicionarCategoria()" style="margin-top:8px">＋ Nova Categoria</button>`;
+}
+
+// ── Drag & Drop — Categorias ──────────────────────────────────────
+function onCatDragStart(e,id){_dragCat=id;e.currentTarget.classList.add('dragging');e.dataTransfer.effectAllowed='move';}
+function onCatDragOver(e,id){e.preventDefault();if(_dragCat&&_dragCat!==id)document.getElementById('cat-'+id)?.classList.add('drag-over');}
+function onCatDragLeave(e,id){document.getElementById('cat-'+id)?.classList.remove('drag-over');}
+async function onCatDrop(e,targetId){
+  e.preventDefault();
+  document.querySelectorAll('.cat-card').forEach(el=>{el.classList.remove('drag-over','dragging');});
+  if(!_dragCat||_dragCat===targetId){_dragCat=null;return;}
+  const cats=CATS_DATA[_catTipo];
+  const fromIdx=cats.findIndex(c=>c.id===_dragCat);
+  const toIdx=cats.findIndex(c=>c.id===targetId);
+  if(fromIdx<0||toIdx<0){_dragCat=null;return;}
+  const [moved]=cats.splice(fromIdx,1);
+  cats.splice(toIdx,0,moved);
+  cats.forEach((c,i)=>c.ordem=i);
+  _dragCat=null;
+  rebuildCatsObj();
+  renderCategorias(document.getElementById('content'));
+  // Save orders
+  try{
+    await Promise.all(cats.map(c=>sbFetch('PATCH',`categorias?id=eq.${c.id}`,{ordem:c.ordem})));
+    toast('Ordem salva!','ok');
+  }catch(e){toast('Erro ao salvar ordem','err');}
+}
+
+// ── Drag & Drop — Subcategorias ───────────────────────────────────
+function onSubDragStart(e,id,catId){_dragSub={id,catId};e.currentTarget.classList.add('dragging');e.dataTransfer.effectAllowed='move';e.stopPropagation();}
+function onSubDragOver(e,id){e.preventDefault();e.stopPropagation();if(_dragSub&&_dragSub.id!==id)document.getElementById('sub-'+id)?.classList.add('drag-over');}
+function onSubDragLeave(e,id){document.getElementById('sub-'+id)?.classList.remove('drag-over');}
+async function onSubDrop(e,targetId,catId){
+  e.preventDefault();e.stopPropagation();
+  document.querySelectorAll('.sub-pill').forEach(el=>{el.classList.remove('drag-over','dragging');});
+  if(!_dragSub||_dragSub.id===targetId){_dragSub=null;return;}
+  const cat=CATS_DATA[_catTipo].find(c=>c.id===catId);
+  if(!cat){_dragSub=null;return;}
+  const subs=cat.subs||[];
+  const fromIdx=subs.findIndex(s=>s.id===_dragSub.id);
+  const toIdx=subs.findIndex(s=>s.id===targetId);
+  if(fromIdx<0||toIdx<0){_dragSub=null;return;}
+  const [moved]=subs.splice(fromIdx,1);
+  subs.splice(toIdx,0,moved);
+  subs.forEach((s,i)=>s.ordem=i);
+  _dragSub=null;
+  rebuildCatsObj();
+  renderCategorias(document.getElementById('content'));
+  try{
+    await Promise.all(subs.map(s=>sbFetch('PATCH',`subcategorias?id=eq.${s.id}`,{ordem:s.ordem})));
+    toast('Ordem salva!','ok');
+  }catch(e){toast('Erro ao salvar ordem','err');}
+}
+
+// ── CRUD Categorias ───────────────────────────────────────────────
+async function adicionarCategoria(){
+  const nome=prompt('Nome da nova categoria:');
+  if(!nome||!nome.trim())return;
+  const n=nome.trim();
+  if(CATS_DATA[_catTipo].find(c=>c.nome===n)){toast('Categoria já existe!','err');return;}
+  const id=newId(), slug=slugify(n), ordem=CATS_DATA[_catTipo].length;
+  setSyncStatus('loading','Salvando...');
+  try{
+    await sbFetch('POST','categorias',[{id,tipo:_catTipo,nome:n,slug,ordem}]);
+    CATS_DATA[_catTipo].push({id,tipo:_catTipo,nome:n,slug,ordem,subs:[]});
+    rebuildCatsObj();
+    setSyncStatus('ok',`${DATA.length} registros`);
+    render();toast(`Categoria "${n}" criada!`,'ok');
+  }catch(e){setSyncStatus('err','Erro');toast('Erro: '+e.message,'err');}
+}
+
+async function editarCategoria(id, nomeAtual){
+  const novo=prompt('Novo nome:',nomeAtual);
+  if(!novo||!novo.trim()||novo.trim()===nomeAtual)return;
+  const n=novo.trim();
+  setSyncStatus('loading','Salvando...');
+  try{
+    await sbFetch('PATCH',`categorias?id=eq.${id}`,{nome:n,slug:slugify(n)});
+    const cat=CATS_DATA[_catTipo].find(c=>c.id===id);
+    if(cat){cat.nome=n;cat.slug=slugify(n);}
+    rebuildCatsObj();
+    setSyncStatus('ok',`${DATA.length} registros`);
+    render();toast(`Renomeada para "${n}"!`,'ok');
+  }catch(e){setSyncStatus('err','Erro');toast('Erro: '+e.message,'err');}
+}
+
+async function excluirCategoria(id, nome){
+  if(!confirm(`Excluir "${nome}" e todas as subcategorias?`))return;
+  setSyncStatus('loading','Excluindo...');
+  try{
+    await sbFetch('DELETE',`categorias?id=eq.${id}`);
+    CATS_DATA[_catTipo]=CATS_DATA[_catTipo].filter(c=>c.id!==id);
+    rebuildCatsObj();
+    setSyncStatus('ok',`${DATA.length} registros`);
+    render();toast(`"${nome}" excluída.`,'err');
+  }catch(e){setSyncStatus('err','Erro');toast('Erro: '+e.message,'err');}
+}
+
+async function adicionarSub(catId, catNome){
+  const nome=prompt(`Nova subcategoria em "${catNome}":`);
+  if(!nome||!nome.trim())return;
+  const n=nome.trim();
+  const cat=CATS_DATA[_catTipo].find(c=>c.id===catId);
+  if(!cat)return;
+  if((cat.subs||[]).find(s=>s.nome===n)){toast('Subcategoria já existe!','err');return;}
+  const id=newId(), ordem=(cat.subs||[]).length;
+  setSyncStatus('loading','Salvando...');
+  try{
+    await sbFetch('POST','subcategorias',[{id,categoria_id:catId,nome:n,slug:slugify(n),ordem}]);
+    if(!cat.subs)cat.subs=[];
+    cat.subs.push({id,categoria_id:catId,nome:n,slug:slugify(n),ordem});
+    rebuildCatsObj();
+    setSyncStatus('ok',`${DATA.length} registros`);
+    render();toast(`"${n}" adicionada!`,'ok');
+  }catch(e){setSyncStatus('err','Erro');toast('Erro: '+e.message,'err');}
+}
+
+async function editarSub(id, nomeAtual){
+  const novo=prompt('Novo nome:',nomeAtual);
+  if(!novo||!novo.trim()||novo.trim()===nomeAtual)return;
+  const n=novo.trim();
+  setSyncStatus('loading','Salvando...');
+  try{
+    await sbFetch('PATCH',`subcategorias?id=eq.${id}`,{nome:n,slug:slugify(n)});
+    for(const cat of CATS_DATA[_catTipo]){
+      const sub=(cat.subs||[]).find(s=>s.id===id);
+      if(sub){sub.nome=n;sub.slug=slugify(n);break;}
+    }
+    rebuildCatsObj();
+    setSyncStatus('ok',`${DATA.length} registros`);
+    render();toast('Subcategoria atualizada!','ok');
+  }catch(e){setSyncStatus('err','Erro');toast('Erro: '+e.message,'err');}
+}
+
+async function excluirSub(id, nome, catId){
+  if(!confirm(`Excluir "${nome}"?`))return;
+  setSyncStatus('loading','Excluindo...');
+  try{
+    await sbFetch('DELETE',`subcategorias?id=eq.${id}`);
+    const cat=CATS_DATA[_catTipo].find(c=>c.id===catId);
+    if(cat)cat.subs=(cat.subs||[]).filter(s=>s.id!==id);
+    rebuildCatsObj();
+    setSyncStatus('ok',`${DATA.length} registros`);
+    render();toast(`"${nome}" excluída.`,'err');
+  }catch(e){setSyncStatus('err','Erro');toast('Erro: '+e.message,'err');}
+}
+
+function exportExcel(){
+  const dre=calcDRE(YEAR),fluxo=calcFluxo(YEAR),sheets=[];
+  sheets.push({name:'Lançamentos',rows:[['Data Comp.','Data Pgto','Tipo','Categoria','Subcategoria','Descrição','Forma Pgto','Conta','Nº Doc','Valor Bruto','Deduções','Valor Líquido','Status','Centro Custo','Obs'],...DATA.map(l=>[l.dataComp,l.dataPgto,l.tipo==='R'?'Receita':'Despesa',l.cat,l.sub,l.desc,l.forma,l.conta,l.doc,parseFloat(l.valorBruto)||0,parseFloat(l.ded)||0,parseFloat(l.valorLiq)||0,l.status,l.cc,l.obs])]});
+  const dreKeys=[['Receita Bruta','recBruta'],['Deduções','ded'],['Receita Líquida','recLiq'],['Pessoal','pessoal'],['Impostos e Taxas','impostos'],['Infraestrutura','infra'],['Tecnologia','tec'],['Marketing','mkt'],['Administrativo','admin'],['Total Despesas','totDesp'],['EBITDA','ebitda'],['Rec. Financeira','recFin'],['Desp. Financeira','despFin'],['LAIR','lair'],['Lucro Líquido','ll']];
+  sheets.push({name:'DRE',rows:[['Descrição',...MONTHS,'Total'],...dreKeys.map(([l,k])=>[l,...dre.map(m=>m[k]),dre.reduce((s,m)=>s+m[k],0)])]});
+  const fcKeys=[['Honorários','hon'],['Rec. Financeiras','recFin'],['Outras Entradas','outras'],['Total Entradas','entradas'],['Pessoal','pessoal'],['Impostos','impostos'],['Infraestrutura','infra'],['Tecnologia','tec'],['Marketing','mkt'],['Administrativo','admin'],['Financeiro','fin'],['Total Saídas','saidas'],['Saldo Operacional','saldoOp'],['Saldo Inicial','saldoIni'],['Saldo Final','saldoFin']];
+  sheets.push({name:'Fluxo de Caixa',rows:[['Descrição',...MONTHS,'Total'],...fcKeys.map(([l,k])=>[l,...fluxo.map(m=>m[k]),fluxo.reduce((s,m)=>s+m[k],0)])]});
+  let xml=`<?xml version="1.0" encoding="UTF-8"?><?mso-application progid="Excel.Sheet"?><Workbook xmlns="urn:schemas-microsoft-com:office:spreadsheet" xmlns:ss="urn:schemas-microsoft-com:office:spreadsheet">`;
+  sheets.forEach(s=>{xml+=`<Worksheet ss:Name="${s.name}"><Table>`;s.rows.forEach(row=>{xml+='<Row>';row.forEach(cell=>{const isNum=typeof cell==='number';xml+=`<Cell><Data ss:Type="${isNum?'Number':'String'}">${isNum?cell:String(cell||'').replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;')}</Data></Cell>`;});xml+='</Row>';});xml+='</Table></Worksheet>';});
+  xml+='</Workbook>';
+  const blob=new Blob([xml],{type:'application/vnd.ms-excel'}),a=document.createElement('a');
+  a.href=URL.createObjectURL(blob);a.download=`Financeiro_${YEAR}.xls`;a.click();
+  toast('Excel exportado! 📥','ok');
+}
+
+function esc(s){return String(s||'').replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;');}
+function badge(status){const m={Pago:'bg',Recebido:'bg',Pendente:'by',Cancelado:'br'};return`<span class="badge ${m[status]||'bx'}">${status}</span>`;}
+let toastTimeout;
+function toast(msg,type='ok'){clearTimeout(toastTimeout);const existing=document.getElementById('toast-el');if(existing)existing.remove();const el=document.createElement('div');el.id='toast-el';el.className=`toast ${type}`;el.textContent=msg;document.body.appendChild(el);toastTimeout=setTimeout(()=>el.remove(),2800);}
+
+async function startApp(){
+  init();
+}
+
+document.getElementById('login-inp').focus();
+</script>
+</body>
+</html>
