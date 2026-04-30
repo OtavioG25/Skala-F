@@ -180,7 +180,7 @@ input::placeholder{color:var(--tx3)}
   <div class="login-box">
     <div class="login-ico">₢</div>
     <div class="login-title">Financeiro Escritório</div>
-    <div class="login-sub">Digite a senha para continuar<br><span style="font-size:11px;color:var(--tx3)">${APP_VERSION} · ${APP_DATE}</span></div>
+    <div class="login-sub">Digite a senha para continuar<br><span id="login-ver" style="font-size:11px;color:var(--tx3)"></span></div>
     <div class="login-field">
       <input type="password" id="login-inp" placeholder="Senha" onkeydown="if(event.key==='Enter')doLogin()"/>
     </div>
@@ -221,6 +221,12 @@ input::placeholder{color:var(--tx3)}
 <script>
 const APP_VERSION = 'v1.8.0';
 const APP_DATE = '2026-04-30';
+
+// Preenche versão na tela de login
+document.addEventListener('DOMContentLoaded',()=>{
+  const lv=document.getElementById('login-ver');
+  if(lv) lv.textContent=`${APP_VERSION} · ${APP_DATE}`;
+});
 
 function doLogin(){
   const val=document.getElementById('login-inp').value;
