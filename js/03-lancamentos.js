@@ -58,10 +58,11 @@ function saveLanColWidths(){
 }
 
 function applyLanColWidthsToDOM(){
-  LAN_COLS.forEach(c=>{
+  const visCols=currentTipoFilter?LAN_COLS.filter(c=>c.id!=='tipo'):LAN_COLS;
+  visCols.forEach(c=>{
     document.querySelectorAll(`.lan-tbl.resizable col[data-col="${c.id}"],.lan-tbl.resizable th[data-col="${c.id}"]`).forEach(el=>el.style.width=lanColWidths[c.id]+'px');
   });
-  const totalW=LAN_COLS.reduce((s,c)=>s+(lanColWidths[c.id]||c.w),0);
+  const totalW=visCols.reduce((s,c)=>s+(lanColWidths[c.id]||c.w),0);
   const containerW=document.querySelector('.lan-scroll')?.clientWidth||0;
   document.querySelectorAll('.lan-tbl.resizable').forEach(tbl=>{
     tbl.style.width=Math.max(totalW,containerW)+'px';
@@ -96,8 +97,9 @@ function renderLanHeadCell(col){
 
 function startLanColResize(e,colId){
   e.preventDefault();e.stopPropagation();
-  const ci=LAN_COLS.findIndex(c=>c.id===colId);if(ci<0)return;
-  const col=LAN_COLS[ci],nextCol=LAN_COLS[ci+1]||null;
+  const visCols=currentTipoFilter?LAN_COLS.filter(c=>c.id!=='tipo'):LAN_COLS;
+  const ci=visCols.findIndex(c=>c.id===colId);if(ci<0)return;
+  const col=visCols[ci],nextCol=visCols[ci+1]||null;
   const startX=e.clientX,startW=lanColWidths[colId]||col.w,startNextW=nextCol?(lanColWidths[nextCol.id]||nextCol.w):null;
   document.body.classList.add('resizing-col');
   const onMove=ev=>{

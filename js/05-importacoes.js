@@ -1,6 +1,7 @@
 function _getFilteredLancamentos(){
   let filtered=DATA.filter(l=>{
-    if(filterTipos.size){const isT=(l.doc||'').startsWith('TRANSF#');if(!filterTipos.has(isT?'T':l.tipo))return false;}
+    if(currentTipoFilter){if(l.tipo!==currentTipoFilter||(l.doc||'').startsWith('TRANSF#'))return false;}
+    else if(filterTipos.size){const isT=(l.doc||'').startsWith('TRANSF#');if(!filterTipos.has(isT?'T':l.tipo))return false;}
     if(filterStatuses.size){
       const match=[...filterStatuses].some(fs=>fs==='Realizado'?(l.tipo==='R'?l.status==='Recebido':l.tipo==='D'?l.status==='Pago':(l.status==='Recebido'||l.status==='Pago')):l.status===fs);
       if(!match)return false;
