@@ -1,7 +1,13 @@
-let formData={};
+﻿let formData={};
+let _saveAndNew=false;
+async function saveFormAndNew(){_saveAndNew=true;await saveForm();}
 function openForm(id=null){
   editingId=id;
   const l=id?DATA.find(x=>x.id===id):null;
+  if(l&&isTransfer(l)){
+    toast('Transferencias devem ser ajustadas pelo lancamento pareado. Exclua e recrie a transferencia se precisar corrigir.','err');
+    return;
+  }
   if(l){
     formData={...l};
     formData.conta=normalizeConta(formData.conta);
@@ -11,19 +17,76 @@ function openForm(id=null){
     const liq=parseMoney(formData.valorLiq);
     if(!bruto&&liq)formData.valorBruto=liq;
     if(!liq&&bruto)formData.valorLiq=Math.max(0,bruto-ded);
-    formData.valorJuros='';
+    const adjChld=DATA.filter(x=>x.parentId===id);
+    const adjJ=adjChld.find(x=>x.adjType==='juros'),adjM=adjChld.find(x=>x.adjType==='multa'),adjD=adjChld.find(x=>x.adjType==='desconto');
+    const _jm=(adjJ?.valorLiq||0)+(adjM?.valorLiq||0);
+    formData.valorJuros=_jm>0?fmtMoneyInput(_jm):'';
+    formData.valorMulta='';
+    formData.valorDesconto=adjD?.valorLiq>0?fmtMoneyInput(adjD.valorLiq):'';
   } else {
-    formData={id:newId(),tipo:'R',dataComp:'',dataCompView:'',dataPgto:'',cat:'',sub:'',desc:'',cc:'',forma:'PIX',conta:'Dominio Conta Digital',doc:'',valorBruto:'',ded:'',valorLiq:'',valorJuros:'',status:'Pendente',obs:''};
+    const _now=new Date();
+    const _compDefault=String(_now.getMonth()+1).padStart(2,'0')+'/'+_now.getFullYear();
+    const _lastConta=localStorage.getItem('skala_last_conta')||'Dominio Conta Digital';
+    formData={id:newId(),tipo:'R',dataComp:'',dataCompView:_compDefault,dataVenc:'',dataPgto:'',cat:'',sub:'',desc:'',cc:'',forma:'PIX',conta:_lastConta,doc:'',valorBruto:'',ded:'',valorLiq:'',valorJuros:'',valorMulta:'',valorDesconto:'',status:'Pendente',obs:''};
   }
-  document.getElementById('modal-ttl').textContent=id?'Editar Lançamento':'Novo Lançamento';
+  document.getElementById('modal-ttl').textContent=id?(formData.tipo==='R'?'Editar Recebimento':'Editar Despesa'):'Novo Lançamento';
   const seqEl=document.getElementById('modal-seq');if(seqEl){const s=l?.seq;seqEl.textContent=s?`#${s}`:'';seqEl.style.display=s?'inline-block':'none';}
+  const _mEl=document.querySelector('.modal-lancamento');if(_mEl){_mEl.classList.remove('modal-tipo-r','modal-tipo-d');_mEl.classList.add(formData.tipo==='R'?'modal-tipo-r':'modal-tipo-d');}
+  const _hdrEl=document.querySelector('.modal-lancamento .modal-hdr');if(_hdrEl)_hdrEl.style.background=formData.tipo==='R'?'rgba(19,124,60,.06)':'rgba(217,74,56,.06)';
+  buildTipoSwitch();
+  buildDraftBanner();
   buildForm();
   document.getElementById('overlay').style.display='flex';
+  setTimeout(()=>document.getElementById('f-comp')?.focus(),60);
 }
 function openEdit(id){openForm(id);}
-function closeForm(){document.getElementById('overlay').style.display='none';}
+
+function _isDraftWorthy(){
+  if(editingId)return false;
+  return !!(formData.dataVenc||formData.dataPgto||formData.cat||formData.desc||
+    parseMoney(formData.valorBruto)||parseMoney(formData.ded)||parseMoney(formData.valorLiq)||
+    formData.doc||formData.obs||parseMoney(formData.valorJuros)||parseMoney(formData.valorMulta)||parseMoney(formData.valorDesconto));
+}
+
+function closeForm(clearDraft=false){
+  if(clearDraft){
+    localStorage.removeItem('skala_draft_lancamento');
+  } else if(_isDraftWorthy()){
+    localStorage.setItem('skala_draft_lancamento',JSON.stringify(formData));
+  }
+  document.getElementById('overlay').style.display='none';
+}
+
+function buildDraftBanner(){
+  const el=document.getElementById('draft-banner');
+  if(!el)return;
+  const hasDraft=!editingId&&!!localStorage.getItem('skala_draft_lancamento');
+  if(hasDraft){
+    el.style.display='flex';
+    el.innerHTML=`<span style="flex:1;font-size:12.5px;color:var(--tx2)">Você tem um lançamento não salvo.</span><button class="btn btn-ghost" style="font-size:12px;padding:4px 10px" onclick="restoreDraft()">Continuar de onde parei</button><button class="btn btn-ghost" style="font-size:12px;padding:4px 10px;color:var(--red);border-color:rgba(217,74,56,.25)" onclick="discardDraft()">Descartar</button>`;
+  } else {
+    el.style.display='none';
+  }
+}
+
+function restoreDraft(){
+  try{
+    const draft=JSON.parse(localStorage.getItem('skala_draft_lancamento'));
+    if(draft){formData={...draft,id:newId()};buildTipoSwitch();buildForm();}
+  }catch(e){}
+  const el=document.getElementById('draft-banner');
+  if(el)el.style.display='none';
+}
+
+function discardDraft(){
+  localStorage.removeItem('skala_draft_lancamento');
+  const el=document.getElementById('draft-banner');
+  if(el)el.style.display='none';
+}
 
 function renderContas(c){
+  const closed=getClosedPeriods();
+  const months=MONTHS.map((m,i)=>`${YEAR}-${String(i+1).padStart(2,'0')}`);
   c.innerHTML=`
     <div class="card" style="padding:18px 20px">
       <div class="card-ttl">Contas Bancárias</div>
@@ -36,7 +99,7 @@ function renderContas(c){
             ondrop="onContaDrop(event,${conta.id})"
             ondragend="onContaDragEnd()"
             style="display:flex;align-items:center;gap:10px;padding:12px 14px;border:1px solid var(--bd);border-radius:12px;background:var(--s2);cursor:grab;transition:opacity .15s">
-            <span style="color:var(--tx3);font-size:14px;margin-right:2px;cursor:grab">⠿</span>
+            <span style="color:var(--tx3);font-size:14px;margin-right:2px;cursor:grab">?</span>
             <span style="min-width:160px;font-weight:500">${esc(conta.nome)}</span>
             <span style="font-size:12px;color:var(--tx2);white-space:nowrap">Saldo inicial (R$)</span>
             <input type="text" id="si-${idx}" value="${conta.saldo_inicial?String(conta.saldo_inicial).replace('.',','):''}" placeholder="0,00" style="width:110px;background:var(--s1);border:1px solid var(--bd2);border-radius:8px;color:var(--tx);padding:5px 8px;font-size:13px;outline:none" onkeydown="if(event.key==='Enter')salvarSaldoIni(${conta.id},this.value)"/>
@@ -49,6 +112,13 @@ function renderContas(c){
           </div>`).join('')}
       </div>
       <button class="btn btn-pri" style="margin-top:16px" onclick="adicionarConta()">${appIcon('plus')}Nova Conta</button>
+    </div>
+    <div class="card" style="padding:18px 20px">
+      <div class="card-ttl">${appIcon('lock')}Fechamento mensal <span class="yr-pill">${YEAR}</span></div>
+      <div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(82px,1fr));gap:8px">
+        ${months.map((p,i)=>`<button class="btn ${closed.has(p)?'btn-pri':'btn-ghost'}" style="justify-content:center;font-size:12px" onclick="toggleClosedPeriod('${p}')" title="${closed.has(p)?'Mes fechado - clique para reabrir':'Mes aberto - clique para fechar'}">${MONTHS[i]}</button>`).join('')}
+      </div>
+      <div style="margin-top:10px;font-size:12px;color:var(--tx2)">Meses fechados bloqueiam criacao, edicao, baixa e exclusao de lancamentos naquela competencia ou data de pagamento.</div>
     </div>
   `;
 }
@@ -92,12 +162,39 @@ async function removerConta(id){
   const conta=CONTAS_DATA.find(c=>c.id===id);
   if(!conta)return;
   if(conta.nome==='Caixa'){toast('A conta Caixa é padrão e não pode ser removida.','err');return;}
+  if(DATA.some(l=>l.conta===conta.nome)){toast(`A conta "${conta.nome}" possui lancamentos vinculados. Reclassifique antes de remover.`,'err');return;}
+  if(DATA.some(l=>(l.obs||'').includes(`TRANSF_DEST:${conta.nome}`)||(l.obs||'').includes(`TRANSF_ORIG:${conta.nome}`))){toast(`A conta "${conta.nome}" possui transferencias vinculadas.`,'err');return;}
+  if(parseMoney(conta.saldo_inicial)!==0&&!confirm(`A conta "${conta.nome}" tem saldo inicial diferente de zero. Remover mesmo assim?`))return;
   if(!confirm(`Remover conta "${conta.nome}"?`))return;
   try{
     await sbFetch('DELETE',`contas?id=eq.${id}`);
     await loadContasFromDB();
     render();toast(`Conta "${conta.nome}" removida.`);
   }catch(e){toast('Erro ao remover conta: '+e.message,'err');}
+}
+
+function renderBaixasSection(lancamentoId){
+  if(!lancamentoId)return'';
+  const l=DATA.find(x=>x.id===lancamentoId);
+  if(!l)return'';
+  const baixas=getBaixas(lancamentoId);
+  if(!baixas.length)return'';
+  const label=l.tipo==='R'?'Recebimentos':'Pagamentos';
+  const total=baixas.reduce((s,b)=>s+parseMoney(b.valor),0);
+  return`<div style="grid-column:span 2;border:1px solid var(--bd);border-radius:10px;background:var(--s2);padding:10px 12px">
+    <div style="display:flex;align-items:center;justify-content:space-between;gap:10px;margin-bottom:8px">
+      <div style="font-size:12px;font-weight:700;color:var(--tx)">${label} <span style="color:var(--tx3);font-weight:500">(${fmt(total)})</span></div>
+      ${openAmount(l)>0.005?`<button type="button" class="btn btn-ghost" style="font-size:11px;padding:3px 8px" onclick="openBaixaModal('${l.id}')">${appIcon('wallet')}${l.tipo==='R'?'Receber':'Pagar'}</button>`:''}
+    </div>
+    <div style="display:grid;gap:5px">
+      ${baixas.map(b=>`<div style="display:grid;grid-template-columns:86px 1fr 86px 94px;gap:8px;align-items:center;font-size:12px;color:var(--tx2)">
+        <span>${dateBR(b.dataPgto)||'-'}</span>
+        <span style="white-space:nowrap;overflow:hidden;text-overflow:ellipsis">${esc(b.conta||'-')}</span>
+        <span>${esc(b.forma||'-')}</span>
+        <strong style="text-align:right;color:${l.tipo==='R'?'var(--teal)':'var(--red)'}">${fmt(b.valor)}</strong>
+      </div>`).join('')}
+    </div>
+  </div>`;
 }
 
 function buildForm(){
@@ -107,32 +204,100 @@ function buildForm(){
   const catObj = catsData.find(c => c.nome === formData.cat);
   const subs = (catObj?.subs || []).map(s => s.nome);
   formData.conta=normalizeConta(formData.conta)||'Dominio Conta Digital';
+  const currentItem=editingId?(DATA.find(x=>x.id===editingId)||formData):formData;
+  const statusView=formData.status;
+  const canBaixar=editingId&&openAmount(currentItem)>0.005;
+  const baixaActionLabel=formData.tipo==='R'?'Receber':'Pagar';
   
-  if(!['Recebido','Pendente','Pago','Parcial'].includes(formData.status)){
+  if(!['Recebido','Pendente','Pago','Parcial','Cancelado'].includes(formData.status)){
     formData.status = formData.tipo==='R' ? 'Recebido' : 'Pago';
   }
-  g.innerHTML=`<div style="grid-column:span 2"><div class="fl">Tipo</div><div class="tt"><button type="button" class="tb ${formData.tipo==='R'?'ar':''}" onclick="setFormTipo('R')">${appIcon('arrowDown')}Receita / Entrada</button><button type="button" class="tb ${formData.tipo==='D'?'ad':''}" onclick="setFormTipo('D')">${appIcon('arrowUp')}Despesa / Saída</button></div></div>
-    <div><div class="fl">Competência *</div><input id="f-comp" type="text" inputmode="numeric" placeholder="mm/aaaa" maxlength="7" value="${esc(formData.dataCompView||'')}" oninput="this.value=formData.dataCompView=formatCompInput(this.value)" onblur="onCompBlur(this)" required/></div>
-    <div><div class="fl">Data Pagamento</div><input id="f-datapgto" type="date" value="${esc(formData.dataPgto)}" min="1900-01-01" max="2100-12-31" onchange="formData.dataPgto=this.value" onblur="onDataPgtoBlur(this)"/></div>
-    <div><div class="fl">Categoria *</div><select id="f-cat" onchange="formData.cat=this.value;formData.sub='';buildForm()"><option value="">Selecione...</option>${cats.map(c=>`<option value="${esc(c)}"${formData.cat===c?' selected':''}>${esc(c)}</option>`).join('')}</select></div>
-    <div><div class="fl">Subcategoria</div><select onchange="formData.sub=this.value"><option value="">Selecione...</option>${subs.map(s=>`<option value="${esc(s)}"${formData.sub===s?' selected':''}>${esc(s)}</option>`).join('')}</select></div>
-    <div style="grid-column:span 2"><div class="fl">Descrição / Cliente / Fornecedor</div><input type="text" value="${esc(formData.desc)}" oninput="formData.desc=this.value" placeholder="Ex: Honorários — Empresa XYZ"/></div>
-    <div><div class="fl">Valor bruto (R$) *</div><input id="f-vbruto" type="text" inputmode="decimal" value="${esc(moneyInputValue(formData.valorBruto))}" oninput="formData.valorBruto=this.value;syncFormValorLiq()" onblur="formatMoneyField(this,'valorBruto');syncFormValorLiq()" placeholder="0,00" required/></div>
-    <div><div class="fl">Descontos / Deduções (R$)</div><input id="form-ded" type="text" inputmode="decimal" value="${esc(moneyInputValue(formData.ded))}" oninput="formData.ded=this.value;syncFormValorLiq()" onblur="formatMoneyField(this,'ded');syncFormValorLiq()" placeholder="0,00"/></div>
-    <div><div class="fl">Valor líquido (R$)</div><input id="form-valor-liq" type="text" inputmode="decimal" value="${esc(moneyInputValue(formData.valorLiq))}" oninput="formData.valorLiq=this.value;syncFormDedFromLiq()" onblur="formatMoneyField(this,'valorLiq');syncFormDedFromLiq()" placeholder="0,00"/></div>
-    <div><div class="fl">${formData.tipo==='R'?'Juros/Multas Recebidos (R$)':'Juros/Multas por Atraso (R$)'}</div><input type="text" inputmode="decimal" value="${esc(moneyInputValue(formData.valorJuros))}" oninput="formData.valorJuros=this.value;updateFormTotal()" onblur="formatMoneyField(this,'valorJuros');updateFormTotal()" placeholder="0,00"/><div style="font-size:10.5px;margin-top:1px;color:var(--tx2);line-height:1.25">${formData.tipo==='R'?'Lançado em Receitas Financeiras → Juros/Multas':'Lançado em Despesas Financeiras → Juros/Multas por Atrasos'}</div></div>
-    <div style="grid-column:span 2"><div style="display:flex;align-items:center;justify-content:space-between;padding:7px 12px;background:var(--s2);border:1px solid var(--bd);border-radius:9px"><span style="font-size:11.5px;color:var(--tx2)">Total (Líquido + Juros/Multas)</span><span id="form-total" style="font-size:15px;font-weight:700;color:${formData.tipo==='R'?'var(--ok)':'var(--red)'}">${fmt(parseMoney(formData.valorLiq||0)+parseMoney(formData.valorJuros||0))}</span></div></div>
-    <div><div class="fl">Status</div><select onchange="formData.status=this.value">${(formData.tipo==='R'?['Recebido','Pendente','Parcial']:['Pago','Pendente','Parcial']).map(s=>`<option value="${s}"${formData.status===s?' selected':''}>${s}</option>`).join('')}</select>${formData.status==='Parcial'?`<div style="font-size:10.5px;margin-top:4px;color:#ff8c00">◐ Pago: ${fmt(parseMoney(formData.valorLiq))} | Pendente: ${fmt(Math.max(0,parseMoney(formData.valorBruto)-parseMoney(formData.valorLiq)))}</div>`:''}</div>
-    <div></div>
-    <div><div class="fl">Conta Bancária</div><select id="f-conta" onchange="formData.conta=this.value">${CONTAS.map(c=>`<option value="${esc(c)}"${formData.conta===c?' selected':''}>${esc(c)}</option>`).join('')}</select></div>
-    <div><div class="fl">Nº Doc / NF</div><input type="text" value="${esc(formData.doc)}" oninput="formData.doc=this.value"/></div>
-    <div style="grid-column:span 2"><div class="fl">Observações</div><textarea rows="1" oninput="formData.obs=this.value">${esc(formData.obs)}</textarea></div>
+  g.innerHTML=`
+    ${formData.status==='Cancelado'?`<div style="grid-column:span 2;background:rgba(217,74,56,.06);border:1px solid rgba(217,74,56,.18);border-radius:8px;padding:9px 12px;display:flex;align-items:center;gap:10px;font-size:12px"><span style="flex:1;color:var(--tx2)">Este lançamento está cancelado.</span><button type="button" onclick="formData.status='Pendente';buildForm()" style="font-size:12px;color:var(--brand-dark);background:none;border:none;cursor:pointer;font-weight:600;padding:0;white-space:nowrap">Reativar como Pendente</button></div>`:''}
+    <div><div class="fl">Competência *</div><input id="f-comp" type="text" tabindex="1" inputmode="numeric" placeholder="mm/aaaa" maxlength="7" value="${esc(formData.dataCompView||'')}" oninput="this.value=formData.dataCompView=formatCompInput(this.value)" onblur="onCompBlur(this)" required/></div>
+    <div><div class="fl">Vencimento *</div><input id="f-datavenc" type="date" tabindex="2" value="${esc(effectiveVenc(formData))}" min="1900-01-01" max="2100-12-31" onchange="formData.dataVenc=this.value" onblur="onDataVencBlur(this)" required/></div>
+    <div><div class="fl">Categoria *</div><select id="f-cat" tabindex="3" onchange="formData.cat=this.value;formData.sub='';buildForm()"><option value="">Selecione...</option>${cats.map(c=>`<option value="${esc(c)}"${formData.cat===c?' selected':''}>${esc(c)}</option>`).join('')}</select></div>
+    <div><div class="fl">Subcategoria</div><select tabindex="4" onchange="formData.sub=this.value"><option value="">Selecione...</option>${subs.map(s=>`<option value="${esc(s)}"${formData.sub===s?' selected':''}>${esc(s)}</option>`).join('')}</select></div>
+    <div style="grid-column:span 2"><div class="fl">${formData.tipo==='R'?'Cliente / Descrição':'Fornecedor / Descrição'}</div><div style="position:relative"><input id="f-desc" tabindex="5" type="text" autocomplete="off" value="${esc(formData.desc)}" oninput="formData.desc=this.value;showDescSugg(this)" onkeydown="onDescKeydown(event)" onblur="onDescBlur()" placeholder="Ex: Honorários - Empresa XYZ"/><div id="desc-sugg" class="desc-sugg" style="display:none"></div></div></div>
+    <div style="grid-column:span 2;border-top:1px solid var(--bd);margin:2px 0 1px"></div>
+    <div><div class="fl">Valor bruto (R$) *</div><input id="f-vbruto" type="text" tabindex="6" inputmode="decimal" value="${esc(moneyInputValue(formData.valorBruto))}" oninput="formData.valorBruto=this.value;syncFormValorLiq()" onblur="formatMoneyField(this,'valorBruto');syncFormValorLiq()" placeholder="0,00" required/></div>
+    <div><div class="fl">Desconto (R$)</div><input type="text" tabindex="7" inputmode="decimal" value="${esc(moneyInputValue(formData.valorDesconto))}" oninput="formData.valorDesconto=this.value;updateFormTotal()" onblur="formatMoneyField(this,'valorDesconto');updateFormTotal()" placeholder="0,00"/></div>
+    <div><div class="fl">Juros / Multa (R$)</div><input type="text" tabindex="8" inputmode="decimal" value="${esc(moneyInputValue(formData.valorJuros))}" oninput="formData.valorJuros=this.value;updateFormTotal()" onblur="formatMoneyField(this,'valorJuros');updateFormTotal()" placeholder="0,00"/></div>
+    <div><div class="fl">Total</div><input id="form-total" type="text" readonly tabindex="-1" value="${fmt(parseMoney(formData.valorLiq||0)+parseMoney(formData.valorJuros||0)-parseMoney(formData.valorDesconto||0))}" style="background:${formData.tipo==='R'?'rgba(19,124,60,.1)':'rgba(217,74,56,.08)'};border-color:${formData.tipo==='R'?'rgba(19,124,60,.25)':'rgba(217,74,56,.25)'};color:${formData.tipo==='R'?'var(--ok)':'var(--red)'};font-weight:700;text-align:right;cursor:default"/></div>
+    <div style="grid-column:span 2;border-top:1px solid var(--bd);margin:2px 0 1px"></div>
+    <div><div class="fl">Status</div><div class="status-sw">${(formData.tipo==='R'?[['Pendente','ss-pend'],['Recebido','ss-ok']]:[['Pendente','ss-pend'],['Pago','ss-ok']]).map(([s,cls])=>`<button type="button" data-status="${s}" class="${statusView===s?cls:''}" onclick="setFormStatus('${s}')">${s}</button>`).join('')}</div>${statusView==='Parcial'?`<div style="font-size:11px;margin-top:5px;color:#ff8c00">Baixado: ${fmt(paidAmount(currentItem))} | Em aberto: ${fmt(openAmount(currentItem))}</div>`:''}${editingId&&formData.status!=='Cancelado'?`<button type="button" onclick="if(confirm('Cancelar este lan?amento?')){formData.status='Cancelado';buildForm();}" style="font-size:11px;color:var(--tx3);background:none;border:none;cursor:pointer;padding:3px 0 0;display:block">Cancelar lan?amento</button>`:''}</div>
+    <div><div class="fl">Data Pagamento</div><input id="f-datapgto" type="date" tabindex="10" value="${esc(formData.dataPgto)}" min="1900-01-01" max="2100-12-31" onchange="formData.dataPgto=this.value" onblur="onDataPgtoBlur(this)"/></div>
+    <div><div class="fl">Conta Bancária</div><select id="f-conta" tabindex="11" onchange="formData.conta=this.value">${CONTAS.map(c=>`<option value="${esc(c)}"${formData.conta===c?' selected':''}>${esc(c)}</option>`).join('')}</select></div>
+    <div><div class="fl">Nº Doc / NF</div><input tabindex="12" type="text" value="${esc(formData.doc)}" oninput="formData.doc=this.value"/></div>
+    <div style="grid-column:span 2;border-top:1px solid var(--bd);margin:2px 0 1px"></div>
+    <div style="grid-column:span 2"><div class="fl">Observações</div><textarea tabindex="13" rows="1" oninput="formData.obs=this.value">${esc(formData.obs)}</textarea></div>
+    ${renderBaixasSection(editingId)}
     `;
   const footer=document.getElementById('modal-footer');
-  if(footer)footer.innerHTML=`${editingId&&(formData.status==='Pendente'||formData.status==='Parcial')?`<button class="btn btn-ghost" style="color:#ff8c00;border-color:rgba(255,140,0,.35)" onclick="baixarParcial()">${appIcon('wallet')} ${formData.status==='Parcial'?'Registrar complemento':'Baixa parcial'}</button>`:''}<span style="margin-right:auto"></span>${editingId?`<button class="btn btn-ghost" title="Duplicar lançamento" onclick="duplicarEEditar('${editingId}')">${appIcon('copy')}Duplicar</button>`:''}<button class="btn btn-ghost" onclick="closeForm()">Cancelar</button><button class="btn btn-pri" id="save-btn" onclick="saveForm()">${appIcon('file')}Salvar Lançamento</button>`;
+  if(footer)footer.innerHTML=`${canBaixar?`<button class="btn btn-ghost" onclick="openBaixaModal('${editingId}')">${appIcon('wallet')} ${baixaActionLabel}</button>`:''}<span style="margin-right:auto"></span>${editingId&&formData.tipo==='D'?`<button class="btn btn-ghost" style="font-size:12px" onclick="cadastrarComoRecorrente()">${appIcon('repeat')}Cadastrar como Recorrente</button>`:''} ${editingId?`<button class="btn btn-ghost" title="Duplicar lan?amento" onclick="duplicarEEditar('${editingId}')">${appIcon('copy')}Duplicar</button>`:''}<button class="btn btn-ghost" onclick="closeForm()">Cancelar</button>${!editingId?`<button class="btn btn-ghost" style="color:var(--brand);border-color:var(--brand)" onclick="saveFormAndNew()">${appIcon('plus')}Salvar e Novo</button>`:''}<button class="btn btn-pri" id="save-btn" onclick="saveForm()">${appIcon('file')}Salvar</button>`;
 }
 
-function setFormTipo(t){formData.tipo=t;formData.cat='';formData.sub='';buildForm();}
+function buildTipoSwitch(){
+  const w=document.getElementById('tipo-switch-wrap');
+  if(!w)return;
+  if(editingId){w.innerHTML='';return;}
+  w.innerHTML=`<div class="fl" style="margin-bottom:4px">Tipo</div><div class="tipo-switch"><div id="tipo-pill" class="tipo-pill ${formData.tipo==='R'?'r':'d'}"></div><button type="button" id="ts-btn-r" class="${formData.tipo==='R'?'tsR':''}" onclick="setFormTipo('R')">${appIcon('arrowDown')}Receita</button><button type="button" id="ts-btn-d" class="${formData.tipo==='D'?'tsD':''}" onclick="setFormTipo('D')">${appIcon('arrowUp')}Despesa</button></div>`;
+}
+
+function setFormTipo(t){
+  if(formData.tipo===t)return;
+  formData.tipo=t;formData.cat='';formData.sub='';
+  const _mEl=document.querySelector('.modal-lancamento');if(_mEl){_mEl.classList.remove('modal-tipo-r','modal-tipo-d');_mEl.classList.add(t==='R'?'modal-tipo-r':'modal-tipo-d');}
+  const _hdrEl=document.querySelector('.modal-lancamento .modal-hdr');if(_hdrEl)_hdrEl.style.background=t==='R'?'rgba(19,124,60,.06)':'rgba(217,74,56,.06)';
+  const pill=document.getElementById('tipo-pill');
+  const btnR=document.getElementById('ts-btn-r');
+  const btnD=document.getElementById('ts-btn-d');
+  if(pill)pill.className='tipo-pill '+(t==='R'?'r':'d');
+  if(btnR)btnR.className=t==='R'?'tsR':'';
+  if(btnD)btnD.className=t==='D'?'tsD':'';
+  const g=document.getElementById('fgrid');
+  if(g){g.style.transition='opacity .1s';g.style.opacity='0';}
+  setTimeout(()=>{buildForm();if(g){g.offsetHeight;g.style.transition='opacity .2s';g.style.opacity='1';}},130);
+}
+function showDescSugg(inp){
+  const q=inp.value.trim();
+  const el=document.getElementById('desc-sugg');
+  if(!el)return;
+  if(q.length<2){el.style.display='none';return;}
+  const qn=_norm(q);
+  const seen=new Set();
+  const sugg=[];
+  for(const l of DATA){
+    if(!l.desc||isTransfer(l)||seen.has(l.desc))continue;
+    if(!_norm(l.desc).includes(qn))continue;
+    seen.add(l.desc);sugg.push(l.desc);
+    if(sugg.length>=5)break;
+  }
+  if(!sugg.length){el.style.display='none';return;}
+  const escapedQ=q.replace(/[.*+?^${}()|[\]\\]/g,'\\$&');
+  const re=new RegExp('('+escapedQ+')','gi');
+  el.style.display='block';
+  el.innerHTML=sugg.map(s=>`<div class="desc-sugg-item" data-val="${esc(s)}" onmousedown="event.preventDefault()" onclick="pickDescSugg(this.dataset.val)">${esc(s).replace(re,'<strong>$1</strong>')}</div>`).join('');
+}
+function pickDescSugg(val){
+  formData.desc=val;
+  const inp=document.getElementById('f-desc');
+  if(inp)inp.value=val;
+  const el=document.getElementById('desc-sugg');
+  if(el)el.style.display='none';
+}
+function onDescKeydown(e){
+  const el=document.getElementById('desc-sugg');
+  if(!el||el.style.display==='none')return;
+  const items=[...el.querySelectorAll('.desc-sugg-item')];
+  const cur=el.querySelector('.desc-sugg-item.ac');
+  if(e.key==='Escape'){el.style.display='none';e.stopPropagation();}
+  else if(e.key==='ArrowDown'){e.preventDefault();const next=cur?items[items.indexOf(cur)+1]:items[0];if(cur)cur.classList.remove('ac');if(next)next.classList.add('ac');}
+  else if(e.key==='ArrowUp'){e.preventDefault();const prev=cur?items[items.indexOf(cur)-1]:items[items.length-1];if(cur)cur.classList.remove('ac');if(prev)prev.classList.add('ac');}
+  else if(e.key==='Enter'&&cur){e.preventDefault();pickDescSugg(cur.dataset.val);}
+}
+function onDescBlur(){setTimeout(()=>{const el=document.getElementById('desc-sugg');if(el)el.style.display='none';},150);}
+
 function syncFormValorLiq(){
   const bruto=parseMoney(formData.valorBruto);
   const ded=parseMoney(formData.ded);
@@ -151,7 +316,19 @@ function syncFormDedFromLiq(){
   }
   updateFormTotal();
 }
-function updateFormTotal(){const el=document.getElementById('form-total');if(el)el.textContent=fmt(parseMoney(formData.valorLiq||0)+parseMoney(formData.valorJuros||0));}
+function updateFormTotal(){const el=document.getElementById('form-total');if(el)el.value=fmt(parseMoney(formData.valorLiq||0)+parseMoney(formData.valorJuros||0)-parseMoney(formData.valorDesconto||0));}
+function setFormStatus(s){
+  formData.status=s;
+  if(s==='Pendente'){
+    formData.dataPgto='';
+    const pg=document.getElementById('f-datapgto');
+    if(pg)pg.value='';
+  }
+  document.querySelectorAll('.status-sw button').forEach(btn=>{
+    const v=btn.dataset.status;
+    btn.className=v===s?(s==='Pendente'?'ss-pend':s==='Cancelado'?'ss-err':'ss-ok'):'';
+  });
+}
 
 function validateCatSub(tipo, cat, sub){
   const cats = CATS_DATA[tipo]||[];
@@ -165,18 +342,18 @@ function validateCatSub(tipo, cat, sub){
   return null;
 }
 
-// ── MODAL PAGAMENTO PARCIAL ────────────────────────────────────────────────
+// ?? MODAL PAGAMENTO PARCIAL ????????????????????????????????????????????????
 let _parcialCtx=null; // {original, totalOriginal, jaPago, pendente, canonicalComp, acaoTxt}
 let _parcialRows=[]; // [{valor, conta, data}]
 
 function closeParcialModal(){document.getElementById('parcial-overlay').style.display='none';}
 
 function baixarParcial(){
-  if(!editingId){toast('Salve o lançamento antes.','err');return;}
+  if(!editingId){toast('Salve o lan?amento antes.','err');return;}
   const original=DATA.find(l=>l.id===editingId);
   if(!original){toast('Lançamento não encontrado.','err');return;}
   const canonicalComp=compFromView(formData.dataCompView)||formData.dataComp;
-  if(!canonicalComp){toast('Informe a competência antes.','err');return;}
+  if(!canonicalComp){toast('Informe a compet?ncia antes.','err');return;}
   const catErr=validateCatSub(formData.tipo,formData.cat,formData.sub);
   if(catErr){toast(catErr,'err');return;}
   const totalOriginal=parseMoney(formData.status==='Parcial'?formData.valorBruto:formData.valorLiq);
@@ -219,7 +396,7 @@ function renderParcialModal(){
           onchange="_parcialRows[${i}].data=this.value"/>
       </td>
       <td style="padding:6px 4px;text-align:center">
-        ${_parcialRows.length>1?`<button onclick="_parcialRemRow(${i})" style="background:rgba(248,81,73,.1);color:var(--red);border:1px solid rgba(248,81,73,.2);border-radius:6px;padding:4px 8px;cursor:pointer;font-size:13px">✕</button>`:'<span style="display:inline-block;width:32px"></span>'}
+        ${_parcialRows.length>1?`<button onclick="_parcialRemRow(${i})" style="background:rgba(248,81,73,.1);color:var(--red);border:1px solid rgba(248,81,73,.2);border-radius:6px;padding:4px 8px;cursor:pointer;font-size:13px">?</button>`:'<span style="display:inline-block;width:32px"></span>'}
       </td>
     </tr>`).join('');
 
@@ -247,15 +424,15 @@ function renderParcialModal(){
     <div id="parcial-totals" style="margin-top:16px;padding:12px 16px;background:var(--s2);border:1px solid ${ok?'var(--bd)':'rgba(248,81,73,.3)'};border-radius:10px;display:flex;justify-content:space-between;align-items:center;flex-wrap:wrap;gap:8px">
       <div style="font-size:13px">
         <span style="color:var(--tx2)">Recebendo agora: </span><strong style="color:${ok?'var(--ok)':'var(--red)'};font-size:15px">${fmt(totalNovo)}</strong>
-        <span style="margin-left:16px;color:var(--tx2)">Saldo após: </span><strong style="color:${saldoApos<=0.005?'var(--ok)':'#ff8c00'}">${saldoApos<=0.005?'Quitado ✓':fmt(saldoApos)}</strong>
+        <span style="margin-left:16px;color:var(--tx2)">Saldo ap?s: </span><strong style="color:${saldoApos<=0.005?'var(--ok)':'#ff8c00'}">${saldoApos<=0.005?'Quitado ?':fmt(saldoApos)}</strong>
       </div>
     </div>
     <div style="display:flex;justify-content:flex-end;gap:10px;margin-top:18px">
       <button class="btn btn-ghost" onclick="closeParcialModal()">Cancelar</button>
       <button class="btn btn-pri" id="parcial-confirm-btn" ${ok?'':'disabled'} onclick="confirmarParcialModal()" style="min-width:140px">
-        ${appIcon('wallet')}${saldoApos<=0.005?'Quitar lançamento':'Confirmar pagamento'}
+        ${appIcon('wallet')}${saldoApos<=0.005?'Quitar lan?amento':'Confirmar pagamento'}
       </button>
-    </div>`;
+  `;
 }
 
 function _parcialUpdateTotals(){
@@ -269,10 +446,10 @@ function _parcialUpdateTotals(){
     totDiv.style.borderColor=ok?'var(--bd)':'rgba(248,81,73,.3)';
     totDiv.innerHTML=`<div style="font-size:13px">
       <span style="color:var(--tx2)">Recebendo agora: </span><strong style="color:${ok?'var(--ok)':'var(--red)'};font-size:15px">${fmt(totalNovo)}</strong>
-      <span style="margin-left:16px;color:var(--tx2)">Saldo após: </span><strong style="color:${saldoApos<=0.005?'var(--ok)':'#ff8c00'}">${saldoApos<=0.005?'Quitado ✓':fmt(saldoApos)}</strong>
+      <span style="margin-left:16px;color:var(--tx2)">Saldo ap?s: </span><strong style="color:${saldoApos<=0.005?'var(--ok)':'#ff8c00'}">${saldoApos<=0.005?'Quitado ?':fmt(saldoApos)}</strong>
     </div>`;
   }
-  if(btn){btn.disabled=!ok;btn.innerHTML=appIcon('wallet')+(saldoApos<=0.005?'Quitar lançamento':'Confirmar pagamento');}
+  if(btn){btn.disabled=!ok;btn.innerHTML=appIcon('wallet')+(saldoApos<=0.005?'Quitar lan?amento':'Confirmar pagamento');}
 }
 
 function _parcialAddRow(){
@@ -288,15 +465,25 @@ function _parcialRemRow(i){
 
 async function confirmarParcialModal(){
   const{original,totalOriginal,jaPago,canonicalComp,acaoTxt}=_parcialCtx;
+  if(original.status!=='Pendente'&&original.status!=='Parcial'){toast('Este lancamento ja esta quitado ou cancelado.','err');return;}
+  const compClosed=assertOpenPeriod(canonicalComp,'Competencia');
+  if(compClosed){toast(compClosed,'err');return;}
   const rows=_parcialRows.filter(r=>parseMoney(r.valor)>0);
   if(!rows.length){toast('Informe ao menos um valor.','err');return;}
   for(const r of rows){
     if(!r.data||!/^\d{4}-\d{2}-\d{2}$/.test(r.data)){toast('Verifique as datas.','err');return;}
-    if(!r.conta||!CONTAS.includes(r.conta)){toast(`Conta inválida: ${r.conta}`,'err');return;}
+    if(!r.conta||!CONTAS.includes(r.conta)){toast(`Conta inv?lida: ${r.conta}`,'err');return;}
   }
+  for(const r of rows){
+    const pgClosed=assertOpenPeriod(r.data,'Data de pagamento');
+    if(pgClosed){toast(pgClosed,'err');return;}
+  }
+  const histTotal=extractParcHist(original.obs||'').reduce((s,p)=>s+parseMoney(p.v),0);
+  if(original.status==='Parcial'&&Math.abs(histTotal-jaPago)>0.01&&!confirm(`Historico parcial (${fmt(histTotal)}) difere do valor pago (${fmt(jaPago)}). Continuar mesmo assim?`))return;
   const totalNovo=rows.reduce((s,r)=>s+parseMoney(r.valor),0);
   const novoTotalPago=+(jaPago+totalNovo).toFixed(2);
   const saldoApos=+(totalOriginal-novoTotalPago).toFixed(2);
+  if(totalNovo<=0||saldoApos<-0.005){toast('Valor da baixa parcial excede o saldo pendente.','err');return;}
   const quitado=saldoApos<=0.005;
   const novoStatus=quitado?(original.tipo==='R'?'Recebido':'Pago'):'Parcial';
 
@@ -305,7 +492,7 @@ async function confirmarParcialModal(){
   setSyncStatus('loading','Salvando...');
   try{
     // Cria uma entrada "Recebido" para cada linha de pagamento
-    const dataPrincipal=rows[rows.length-1].data; // data mais recente para o lançamento original
+    const dataPrincipal=rows[rows.length-1].data; // data mais recente para o lan?amento original
     const obsExtra=rows.map(r=>`${dateBR(r.data)} ${esc(r.conta)}: ${fmt(parseMoney(r.valor))}`).join(' + ');
     const prevHist=extractParcHist(original.obs||'');
     const newHist=[...prevHist,...rows.map(r=>({d:r.data,v:parseMoney(r.valor)}))];
@@ -313,6 +500,7 @@ async function confirmarParcialModal(){
     const updated={
       ...original,
       dataComp:canonicalComp,
+      dataVenc:effectiveVenc(original)||dataPrincipal,
       dataPgto:dataPrincipal,
       valorBruto:totalOriginal,
       ded:0,
@@ -324,13 +512,14 @@ async function confirmarParcialModal(){
     const idx=DATA.findIndex(l=>l.id===original.id);
     if(idx>=0)DATA[idx]={...DATA[idx],...updated};
 
-    // Se múltiplas contas: registra sub-entradas para rastrear cada conta no extrato
+    // Se m?ltiplas contas: registra sub-entradas para rastrear cada conta no extrato
     if(rows.length>1){
       for(const r of rows){
         const sub={
           id:newId(),
           tipo:original.tipo,
           dataComp:canonicalComp,
+          dataVenc:effectiveVenc(original)||r.data,
           dataPgto:r.data,
           cat:original.cat,sub:original.sub,
           desc:`${original.desc||''} (parcial)`,
@@ -338,7 +527,7 @@ async function confirmarParcialModal(){
           conta:r.conta,
           valorBruto:parseMoney(r.valor),ded:0,valorLiq:parseMoney(r.valor),
           status:original.tipo==='R'?'Recebido':'Pago',
-          obs:`Receb. parcial vinculado a: ${original.desc||''} — ${dateBR(r.data)}`
+          obs:`Receb. parcial vinculado a: ${original.desc||''} - ${dateBR(r.data)}`
         };
         const subRow=toRow(sub);
         const res=await sbFetch('POST',TABLE,subRow);
@@ -346,7 +535,7 @@ async function confirmarParcialModal(){
         if(saved)DATA.unshift(fromRow(saved));
       }
     } else {
-      // Conta única: apenas atualiza a conta no lançamento original
+      // Conta ?nica: apenas atualiza a conta no lan?amento original
       updated.conta=rows[0].conta;
       await dbUpdate({...DATA.find(l=>l.id===original.id),...updated,conta:rows[0].conta});
       const i2=DATA.findIndex(l=>l.id===original.id);
@@ -355,11 +544,110 @@ async function confirmarParcialModal(){
 
     setSyncStatus('ok',`${DATA.length} registros`);
     closeParcialModal();closeForm();buildNav();renderKeepScroll();
-    toast(quitado?`Lançamento quitado ✓ (${fmt(novoTotalPago)} ${acaoTxt})`:`${fmt(totalNovo)} ${acaoTxt}. Pendente: ${fmt(saldoApos)}.`,'ok');
+    toast(quitado?`Lançamento quitado (${fmt(novoTotalPago)} ${acaoTxt})`:`${fmt(totalNovo)} ${acaoTxt}. Pendente: ${fmt(saldoApos)}.`,'ok');
   }catch(e){
     setSyncStatus('err','Erro');
     toast('Erro: '+e.message,'err');
     if(btn){btn.disabled=false;btn.innerHTML=appIcon('wallet')+'Confirmar pagamento';}
+  }
+}
+
+// Modal unico de baixa: o valor informado decide se sera parcial ou quitacao.
+let _baixaCtx=null;
+let _baixaForm=null;
+
+function closeParcialModal(){document.getElementById('parcial-overlay').style.display='none';}
+function baixarParcial(){if(editingId)openBaixaModal(editingId);}
+
+function openBaixaModal(id){
+  const l=DATA.find(x=>x.id===id);
+  if(!l){toast('Lancamento nao encontrado.','err');return;}
+  if(l.status==='Cancelado'){toast('Lancamento cancelado nao aceita baixa.','err');return;}
+  const saldo=openAmount(l);
+  if(saldo<=0.005){toast('Este lancamento ja esta quitado.','ok');return;}
+  const hoje=new Date().toISOString().slice(0,10);
+  _baixaCtx={lancamentoId:id,acao:l.tipo==='R'?'Receber':'Pagar',acaoFeita:l.tipo==='R'?'recebido':'pago'};
+  _baixaForm={valor:fmtMoneyInput(saldo),dataPgto:hoje,conta:normalizeConta(l.conta)||CONTAS[0]||'',forma:l.forma||'PIX',obs:''};
+  renderBaixaModal();
+  document.getElementById('parcial-overlay').style.display='flex';
+  setTimeout(()=>document.getElementById('baixa-valor')?.focus(),50);
+}
+
+function renderBaixaModal(){
+  const l=DATA.find(x=>x.id===_baixaCtx.lancamentoId);
+  if(!l)return;
+  const total=titleAmount(l),ja=paidAmount(l),saldo=openAmount(l);
+  const acao=_baixaCtx.acao,acaoLow=acao.toLowerCase();
+  const title=document.getElementById('baixa-modal-title');
+  if(title)title.innerHTML=`${appIcon('wallet')}${acao}`;
+  const valor=parseMoney(_baixaForm.valor);
+  const saldoApos=+(saldo-valor).toFixed(2);
+  const ok=valor>0&&valor<=saldo+0.005;
+  document.getElementById('parcial-body').innerHTML=`
+    <div style="background:var(--s2);border:1px solid var(--bd);border-radius:10px;padding:12px 16px;margin-bottom:14px;font-size:13px">
+      <div style="font-weight:700;margin-bottom:8px;color:var(--tx)">${esc(l.desc||l.cat||'Lancamento')}</div>
+      <div style="display:grid;grid-template-columns:repeat(3,1fr);gap:10px">
+        <div><div style="font-size:11px;color:var(--tx3)">Valor original</div><strong>${fmt(total)}</strong></div>
+        <div><div style="font-size:11px;color:var(--tx3)">${l.tipo==='R'?'Ja recebido':'Ja pago'}</div><strong style="color:var(--teal)">${fmt(ja)}</strong></div>
+        <div><div style="font-size:11px;color:var(--tx3)">Saldo em aberto</div><strong style="color:#ff8c00">${fmt(saldo)}</strong></div>
+      </div>
+    </div>
+    <div style="display:grid;grid-template-columns:1fr 1fr;gap:12px">
+      <div><div class="fl">Valor ${acaoLow} agora *</div><input id="baixa-valor" type="text" inputmode="decimal" value="${esc(_baixaForm.valor)}" oninput="_baixaForm.valor=this.value;_baixaUpdateTotals()" onblur="this.value=fmtMoneyInput(parseMoney(this.value));_baixaForm.valor=this.value;_baixaUpdateTotals()"/></div>
+      <div><div class="fl">Data *</div><input id="baixa-data" type="date" value="${esc(_baixaForm.dataPgto)}" onchange="_baixaForm.dataPgto=this.value"/></div>
+      <div><div class="fl">Conta *</div><select id="baixa-conta" onchange="_baixaForm.conta=this.value">${CONTAS.map(c=>`<option value="${esc(c)}"${_baixaForm.conta===c?' selected':''}>${esc(c)}</option>`).join('')}</select></div>
+      <div><div class="fl">Forma</div><select id="baixa-forma" onchange="_baixaForm.forma=this.value">${FORMAS.map(f=>`<option value="${esc(f)}"${_baixaForm.forma===f?' selected':''}>${esc(f)}</option>`).join('')}</select></div>
+      <div style="grid-column:span 2"><div class="fl">Observacao</div><textarea rows="2" oninput="_baixaForm.obs=this.value" placeholder="Opcional">${esc(_baixaForm.obs)}</textarea></div>
+    </div>
+    <div id="baixa-totals" style="margin-top:14px;padding:11px 14px;background:var(--s2);border:1px solid ${ok?'var(--bd)':'rgba(248,81,73,.3)'};border-radius:10px;font-size:13px">
+      <span style="color:var(--tx2)">Saldo apos esta baixa: </span><strong style="color:${saldoApos<=0.005?'var(--teal)':'#ff8c00'}">${saldoApos<=0.005?'Quitado':fmt(Math.max(0,saldoApos))}</strong>
+      ${valor>saldo+0.005?`<div style="color:var(--red);font-size:12px;margin-top:4px">Valor acima do saldo. Juros ou acrescimos serao tratados em uma etapa futura.</div>`:''}
+    </div>
+    <div style="display:flex;justify-content:flex-end;gap:10px;margin-top:18px">
+      <button class="btn btn-ghost" onclick="closeParcialModal()">Cancelar</button>
+      <button class="btn btn-pri" id="parcial-confirm-btn" ${ok?'':'disabled'} onclick="confirmarParcialModal()" style="min-width:140px">${appIcon('wallet')}${saldoApos<=0.005?'Quitar':acao}</button>
+    </div>`;
+}
+
+function _baixaUpdateTotals(){
+  const l=DATA.find(x=>x.id===_baixaCtx?.lancamentoId);
+  if(!l)return;
+  const saldo=openAmount(l),valor=parseMoney(_baixaForm.valor),saldoApos=+(saldo-valor).toFixed(2);
+  const ok=valor>0&&valor<=saldo+0.005;
+  const totals=document.getElementById('baixa-totals');
+  if(totals){
+    totals.style.borderColor=ok?'var(--bd)':'rgba(248,81,73,.3)';
+    totals.innerHTML=`<span style="color:var(--tx2)">Saldo apos esta baixa: </span><strong style="color:${saldoApos<=0.005?'var(--teal)':'#ff8c00'}">${saldoApos<=0.005?'Quitado':fmt(Math.max(0,saldoApos))}</strong>${valor>saldo+0.005?`<div style="color:var(--red);font-size:12px;margin-top:4px">Valor acima do saldo. Juros ou acrescimos serao tratados em uma etapa futura.</div>`:''}`;
+  }
+  const btn=document.getElementById('parcial-confirm-btn');
+  if(btn){btn.disabled=!ok;btn.innerHTML=appIcon('wallet')+(saldoApos<=0.005?'Quitar':_baixaCtx.acao);}
+}
+
+async function confirmarParcialModal(){
+  const l=DATA.find(x=>x.id===_baixaCtx?.lancamentoId);
+  if(!l)return;
+  const valor=parseMoney(_baixaForm.valor);
+  const saldo=openAmount(l);
+  if(valor<=0){toast('Informe um valor maior que zero.','err');return;}
+  if(valor>saldo+0.005){toast('Valor acima do saldo em aberto.','err');return;}
+  const btn=document.getElementById('parcial-confirm-btn');
+  if(btn){btn.disabled=true;btn.textContent='Salvando...';}
+  setSyncStatus('loading','Salvando baixa...');
+  try{
+    const result=await registerBaixa(l,{valor,dataPgto:_baixaForm.dataPgto,conta:_baixaForm.conta,forma:_baixaForm.forma,origem:'manual',obs:_baixaForm.obs});
+    const updated=result.lancamento;
+    if(editingId===updated.id){
+      formData={...formData,...updated,dataCompView:compToView(updated.dataComp||'')};
+      buildForm();
+    }
+    setSyncStatus('ok',`${DATA.length} registros`);
+    closeParcialModal();buildNav();renderKeepScroll();
+    const quitado=openAmount(updated)<=0.005;
+    toast(quitado?`Lancamento quitado (${fmt(paidAmount(updated))})`:`${fmt(valor)} ${_baixaCtx.acaoFeita}. Saldo: ${fmt(openAmount(updated))}.`,'ok');
+  }catch(e){
+    setSyncStatus('err','Erro');
+    toast('Erro ao registrar baixa: '+e.message,'err');
+    if(btn){btn.disabled=false;btn.innerHTML=appIcon('wallet')+_baixaCtx.acao;}
   }
 }
 
@@ -369,62 +657,107 @@ async function saveForm(){
   const ded = parseMoney(formData.ded);
   const valorLiq = parseMoney(formData.valorLiq)||Math.max(0,valorBruto-ded);
   const valorJuros = parseMoney(formData.valorJuros||0);
+  const valorMulta = parseMoney(formData.valorMulta||0);
+  const valorDesconto = parseMoney(formData.valorDesconto||0);
+  const existingBefore=DATA.find(x=>x.id===formData.id);
+  const reverseBaixasOnSave=!!(existingBefore&&formData.status==='Pendente'&&getBaixas(existingBefore.id).length);
+  const baixasToReverse=reverseBaixasOnSave?getBaixas(existingBefore.id):[];
+  const baixaOnSave=formData.status===expectedRealizedStatus(formData.tipo)&&(!existingBefore||openAmount(existingBefore)>0.005);
+  const baixaOnSavePayload=baixaOnSave?{
+    valor:existingBefore?openAmount(existingBefore):valorLiq,
+    dataPgto:formData.dataPgto,
+    conta:formData.conta,
+    forma:formData.forma||'PIX',
+    origem:'manual',
+    obs:''
+  }:null;
   clearFormMarks();
-  const _errs=[];
-  if(!canonicalComp){_errs.push('Competência é obrigatória.');markInvalid('f-comp');}
-  else{const e=validarAno(canonicalComp,'Competência');if(e){_errs.push(e);markInvalid('f-comp');}}
-  if(formData.dataPgto){const e=validarAno(formData.dataPgto,'Data Pagamento');if(e){_errs.push(e);markInvalid('f-datapgto');}}
-  if(!formData.cat){_errs.push('Categoria é obrigatória.');markInvalid('f-cat');}
-  else{const ce=validateCatSub(formData.tipo,formData.cat,formData.sub);if(ce){_errs.push(ce);markInvalid('f-cat');}}
-  if(valorBruto<=0){_errs.push('Valor bruto inválido.');markInvalid('f-vbruto');}
-  if(valorLiq<=0){_errs.push('Valor líquido inválido.');markInvalid('form-valor-liq');}
   formData.conta=normalizeConta(formData.conta);
-  if(!formData.conta||!CONTAS.includes(formData.conta)){_errs.push('Selecione uma conta bancária.');markInvalid('f-conta');}
-  if(_errs.length){toast(_errs[0],'err');return;}
+  if(formData.status==='Pendente')formData.dataPgto='';
+  const candidato={...formData,dataComp:canonicalComp,dataVenc:formData.dataVenc||effectiveVenc(formData)||formData.dataPgto,valorBruto,ded,valorLiq};
+  const validation=validateLancamentoCore(candidato);
+  if(validation.errors.length){
+    const msg=firstValidationError(validation);
+    if(msg.includes('Competencia'))markInvalid('f-comp');
+    if(msg.includes('vencimento'))markInvalid('f-datavenc');
+    else if(msg.includes('Data'))markInvalid('f-datapgto');
+    if(msg.includes('Categoria'))markInvalid('f-cat');
+    if(msg.includes('bruto'))markInvalid('f-vbruto');
+    if(msg.includes('liquido'))markInvalid('form-valor-liq');
+    if(msg.includes('conta'))markInvalid('f-conta');
+    toast(msg,'err');
+    return;
+  }
+  if(!confirmValidationWarnings(validation))return;
+  if(!confirmProbableDuplicate(candidato))return;
+  if(reverseBaixasOnSave){
+    for(const b of baixasToReverse){
+      const baixaClosed=assertOpenPeriod(b.dataPgto,'Data da baixa');
+      if(baixaClosed){toast(baixaClosed,'err');return;}
+    }
+    const totalBaixas=baixasToReverse.reduce((s,b)=>s+parseMoney(b.valor),0);
+    if(!confirm(`Reverter para Pendente vai remover ${baixasToReverse.length} baixa(s) registrada(s), total ${fmt(totalBaixas)}. Continuar?`))return;
+  }
 
-  // Resolve categoria/subcategoria de juros ANTES de salvar qualquer coisa
-  let jurosCat=null, jurosSub=null;
-  if(valorJuros>0){
+  // Resolve categoria/subcategoria financeira para ajustes (juros/multa/desconto)
+  let adjCat=null, adjSub=null;
+  const hasAdj=valorJuros>0||valorMulta>0||valorDesconto>0;
+  if(hasAdj){
     if(formData.tipo==='R'){
       const c=CATS_DATA['R'].find(x=>x.nome==='Receitas Financeiras');
       const s=(c?.subs||[]).find(x=>x.nome==='Juros/Multas');
       if(!c||!s){toast('Subcategoria "Juros/Multas" em "Receitas Financeiras" não encontrada.','err');return;}
-      jurosCat=c.nome; jurosSub=s.nome;
+      adjCat=c.nome; adjSub=s.nome;
     }else{
       const c=CATS_DATA['D'].find(x=>x.nome==='Despesas Financeiras');
       const s=(c?.subs||[]).find(x=>x.nome==='Juros/Multas por Atrasos');
       if(!c||!s){toast('Subcategoria "Juros/Multas por Atrasos" em "Despesas Financeiras" não encontrada.','err');return;}
-      jurosCat=c.nome; jurosSub=s.nome;
+      adjCat=c.nome; adjSub=s.nome;
     }
   }
 
-  formData.dataComp = canonicalComp;
-  formData.valorBruto = valorBruto;
-  formData.ded = ded;
-  formData.valorLiq = valorLiq;
+  formData={...formData,...validation.item,dataComp:canonicalComp,dataVenc:validation.item.dataVenc||effectiveVenc(validation.item),valorBruto,ded,valorLiq};
+  if(baixaOnSave){formData.status='Pendente';formData.dataPgto='';}
   const btn=document.getElementById('save-btn');if(btn){btn.disabled=true;btn.textContent='Salvando...';}
   setSyncStatus('loading','Salvando...');
   try{
     const exists=DATA.findIndex(x=>x.id===formData.id);
-    if(exists>=0){await dbUpdate(formData);DATA[exists]={...formData};}
-    else{const saved=await dbInsert(formData);DATA.unshift(saved?fromRow(saved):{...formData});}
+    let mainSaved;
+    if(exists>=0){
+      await dbUpdate(formData);
+      if(reverseBaixasOnSave)await clearBaixasForLancamento(formData.id);
+      DATA[exists]=refreshLancamentoComputed({...formData});
+      mainSaved=DATA[exists];
+    }
+    else{const saved=await dbInsert(formData);mainSaved=refreshLancamentoComputed(saved?fromRow(saved):{...formData});DATA.unshift(mainSaved);}
 
-    if(jurosCat&&jurosSub){
-      const je={
-        id:newId(), tipo:formData.tipo,
-        dataComp:formData.dataPgto?(formData.dataPgto.slice(0,7)+'-01'):formData.dataComp, dataPgto:formData.dataPgto||'',
-        cat:jurosCat, sub:jurosSub,
-        desc:(formData.desc?formData.desc+' — Juros/Multas':'Juros/Multas'),
-        cc:formData.cc||'', forma:formData.forma||'PIX', conta:formData.conta,
-        doc:formData.doc||'', valorBruto:valorJuros, ded:0, valorLiq:valorJuros,
-        status:formData.status, obs:formData.obs||''
-      };
-      const savedJe=await dbInsert(je);
-      DATA.unshift(savedJe?fromRow(savedJe):{...je});
+    // Remove ajustes existentes vinculados e recria
+    const existingAdjs=DATA.filter(x=>x.parentId===formData.id);
+    for(const a of existingAdjs)await dbDelete(a.id);
+    DATA=DATA.filter(x=>x.parentId!==formData.id);
+    BAIXAS_DATA=BAIXAS_DATA.filter(b=>!existingAdjs.some(a=>a.id===b.lancamentoId));
+    let adjCount=0;
+    if(adjCat&&adjSub){
+      const adjDataComp=formData.dataPgto?(formData.dataPgto.slice(0,7)+'-01'):formData.dataComp;
+      for(const adj of [{v:valorJuros,t:'juros',lbl:'Juros/Multa'},{v:valorDesconto,t:'desconto',lbl:'Desconto'}]){
+        if(adj.v<=0)continue;
+        const ae={id:newId(),tipo:formData.tipo,parentId:formData.id,adjType:adj.t,dataComp:adjDataComp,dataVenc:formData.dataVenc||effectiveVenc(formData),dataPgto:formData.dataPgto||'',cat:adjCat,sub:adjSub,desc:(formData.desc?formData.desc+' - '+adj.lbl:adj.lbl),cc:formData.cc||'',forma:formData.forma||'PIX',conta:formData.conta,doc:formData.doc||'',valorBruto:adj.v,ded:0,valorLiq:adj.v,status:formData.status,obs:''};
+        const savedAe=await dbInsert(ae);
+        DATA.unshift(savedAe?fromRow(savedAe):{...ae});
+        adjCount++;
+      }
     }
 
-    setSyncStatus('ok',`${DATA.length} registros`);closeForm();buildNav();renderKeepScroll();
-    toast(jurosCat?'2 lançamentos salvos! ✓':'Lançamento salvo! ✓','ok');
+    if(baixaOnSavePayload){
+      const target=DATA.find(x=>x.id===formData.id)||mainSaved;
+      await registerBaixa(target,baixaOnSavePayload);
+    }
+
+    const _tipo=formData.tipo;
+    localStorage.setItem('skala_last_conta',formData.conta);
+    setSyncStatus('ok',`${DATA.length} registros`);closeForm(true);buildNav();renderKeepScroll();
+    toast('Lançamento salvo!','ok');
+    if(_saveAndNew){_saveAndNew=false;openForm();setFormTipo(_tipo);}
   }catch(e){setSyncStatus('err','Erro ao salvar');toast('Erro ao salvar: '+e.message,'err');if(btn){btn.disabled=false;btn.innerHTML=appIcon('file')+'Salvar Lançamento';}}
 }
 
@@ -432,6 +765,9 @@ async function duplicarLancamento(id){
   const orig=DATA.find(l=>l.id===id);
   if(!orig)return;
   const copia={...orig,id:newId(),status:'Pendente',dataPgto:''};
+  const validation=validateLancamentoCore(copia);
+  if(validation.errors.length){toast(firstValidationError(validation),'err');return;}
+  if(!confirmProbableDuplicate(copia))return;
   try{
     const res=await dbInsert(copia);
     DATA.unshift(res?fromRow(res):copia);
@@ -444,6 +780,9 @@ async function duplicarEEditar(id){
   const orig=DATA.find(l=>l.id===id);
   if(!orig)return;
   const copia={...orig,id:newId(),status:'Pendente',dataPgto:''};
+  const validation=validateLancamentoCore(copia);
+  if(validation.errors.length){toast(firstValidationError(validation),'err');return;}
+  if(!confirmProbableDuplicate(copia))return;
   try{
     const res=await dbInsert(copia);
     const novo=res?fromRow(res):copia;
@@ -453,23 +792,51 @@ async function duplicarEEditar(id){
   }catch(e){toast('Erro ao duplicar: '+e.message,'err');}
 }
 
+function cadastrarComoRecorrente(){
+  const {desc,cat,sub,conta}=formData;
+  const valor=parseMoney(formData.valorBruto);
+  closeForm();
+  pushTab('recorrentes');
+  recData={id:newId(),tipo:'D',desc,cat,sub,valor,diaVenc:null,compOffset:0,conta};
+  document.getElementById('modal-ttl').textContent='Nova Despesa Recorrente';
+  const seqEl=document.getElementById('modal-seq');if(seqEl){seqEl.textContent='';seqEl.style.display='none';}
+  const footer=document.getElementById('modal-footer');if(footer)footer.innerHTML='';
+  buildFormRecorrente();
+  document.getElementById('overlay').style.display='flex';
+}
+
 async function deleteItem(id){
   const item=DATA.find(x=>x.id===id);
-  const isTransf=(item?.doc||'').startsWith('TRANSF#');
-  if(!confirm(isTransf?'Excluir esta transferência (ambos os lançamentos)?':'Excluir este lançamento?'))return;
+  if(!item)return;
+  const isTransf=isTransfer(item);
+  if(isTransf){
+    const pairErr=validateTransferPair(item.doc);
+    if(pairErr&&!confirm(`${pairErr}\n\nExcluir todos os registros encontrados desta transferencia mesmo assim?`))return;
+  }
+  const idsToDelete=getRelatedDeleteIds(item);
+  const itemsToDelete=DATA.filter(x=>idsToDelete.includes(x.id));
+  const delErr=canDeleteLancamentos(itemsToDelete);
+  if(delErr){toast(delErr,'err');return;}
+  const adjChildren=DATA.filter(x=>x.parentId===id);
+  const hasAdj=adjChildren.length>0;
+  const msg=isTransf?'Excluir esta transfer?ncia (ambos os lan?amentos)?':hasAdj?`Excluir este lan?amento e ${adjChildren.length} ajuste(s) vinculado(s)?`:'Excluir este lan?amento?';
+  if(!confirm(msg))return;
   setSyncStatus('loading','Excluindo...');
   try{
     const pairIds=isTransf?DATA.filter(x=>x.doc===item.doc&&x.id!==id).map(x=>x.id):[];
+    const adjIds=adjChildren.map(x=>x.id);
     await dbDelete(id);
     for(const pid of pairIds)await dbDelete(pid);
-    DATA=DATA.filter(x=>x.id!==id&&!pairIds.includes(x.id));
+    for(const aid of adjIds)await dbDelete(aid);
+    DATA=DATA.filter(x=>x.id!==id&&!pairIds.includes(x.id)&&!adjIds.includes(x.id));
+    BAIXAS_DATA=BAIXAS_DATA.filter(b=>![id,...pairIds,...adjIds].includes(b.lancamentoId));
     setSyncStatus('ok',`${DATA.length} registros`);
     buildNav();renderKeepScroll();
     toast(isTransf?'Transferência excluída.':'Lançamento excluído.','err');
   }catch(e){setSyncStatus('err','Erro ao excluir');toast('Erro ao excluir: '+e.message,'err');}
 }
 
-// ——— Transferência entre Contas ———
+// Transferência entre Contas
 const TRANSF_CAT='Transferência entre Contas';
 const TRANSF_SLUG='transferencia';
 
@@ -523,14 +890,17 @@ async function saveTransferencia(){
   if(!origem){toast('Informe a conta de origem.','err');return;}
   if(!destino){toast('Informe a conta de destino.','err');return;}
   if(origem===destino){toast('Origem e destino devem ser contas diferentes.','err');return;}
-  if(!valor||valor<=0){toast('Informe um valor válido.','err');return;}
-  setSyncStatus('loading','Salvando transferência...');
+  if(!valor||valor<=0){toast('Informe um valor v?lido.','err');return;}
+  const pgClosed=assertOpenPeriod(data,'Data da transferencia');
+  if(pgClosed){toast(pgClosed,'err');return;}
+  if(!CONTAS.includes(origem)||!CONTAS.includes(destino)){toast('Origem e destino precisam ser contas cadastradas.','err');return;}
+  setSyncStatus('loading','Salvando transfer?ncia...');
   try{
     await ensureTransfCat();
     const ref='TRANSF#'+newId();
-    const descFinal=desc||`Transferência: ${origem} → ${destino}`;
-    const recD={id:newId(),tipo:'D',dataComp:data,dataPgto:data,cat:TRANSF_CAT,sub:TRANSF_CAT,desc:descFinal,conta:origem,doc:ref,valorBruto:valor,ded:0,valorLiq:valor,status,obs:`TRANSF_DEST:${destino}`};
-    const recR={id:newId(),tipo:'R',dataComp:data,dataPgto:data,cat:TRANSF_CAT,sub:TRANSF_CAT,desc:descFinal,conta:destino,doc:ref,valorBruto:valor,ded:0,valorLiq:valor,status,obs:`TRANSF_ORIG:${origem}`};
+    const descFinal=desc||`Transferência: ${origem} -> ${destino}`;
+    const recD={id:newId(),tipo:'D',dataComp:data,dataVenc:data,dataPgto:data,cat:TRANSF_CAT,sub:TRANSF_CAT,desc:descFinal,conta:origem,doc:ref,valorBruto:valor,ded:0,valorLiq:valor,status,obs:`TRANSF_DEST:${destino}`};
+    const recR={id:newId(),tipo:'R',dataComp:data,dataVenc:data,dataPgto:data,cat:TRANSF_CAT,sub:TRANSF_CAT,desc:descFinal,conta:destino,doc:ref,valorBruto:valor,ded:0,valorLiq:valor,status,obs:`TRANSF_ORIG:${origem}`};
     const [savedD,savedR]=await Promise.all([dbInsert(recD),dbInsert(recR)]);
     DATA.unshift(fromRow(savedR||recR));
     DATA.unshift(fromRow(savedD||recD));
@@ -540,12 +910,13 @@ async function saveTransferencia(){
     toast('Transferência registrada!','ok');
   }catch(e){setSyncStatus('err','Erro');toast('Erro ao salvar: '+e.message,'err');}
 }
-// ——————————————————————————————————
+// ??????????????????????????????????
 
 let recData={};
-function openEditRecorrente(id){
-  const item=RECORRENTES_DESPESAS.find(r=>r.id===id)||{id:newId(),desc:'',cat:'',sub:'',valor:0,diaVenc:null,compOffset:0,conta:''};
-  recData={...item,tipo:'D'};
+function openEditRecorrente(id,tipo='D'){
+  const lista=tipo==='R'?RECORRENTES_RECEITAS:RECORRENTES_DESPESAS;
+  const item=lista.find(r=>r.id===id)||{id:newId(),desc:'',cat:'',sub:'',valor:0,diaVenc:null,compOffset:0,conta:''};
+  recData={...item,tipo};
   document.getElementById('modal-ttl').textContent=id?'Editar Despesa Recorrente':'Nova Despesa Recorrente';
   const seqEl=document.getElementById('modal-seq');if(seqEl){seqEl.textContent='';seqEl.style.display='none';}
   const footer=document.getElementById('modal-footer');if(footer)footer.innerHTML='';
@@ -554,12 +925,12 @@ function openEditRecorrente(id){
 }
 
 function buildFormRecorrente(){
-  const cats=Object.keys(CATS['D']||{});
-  const subs=(CATS['D']?.[recData.cat])||[];
+  const cats=Object.keys(CATS[recData.tipo]||{});
+  const subs=(CATS[recData.tipo]?.[recData.cat])||[];
   const offsetOpts=[
-    {v:-1,lbl:'-1 — Mês anterior ao vencimento (ex: salário)'},
-    {v:0, lbl:'0 — Mesmo mês do vencimento'},
-    {v:1, lbl:'+1 — Mês seguinte ao vencimento'},
+    {v:-1,lbl:'-1 - Mês anterior ao vencimento (ex: salário)'},
+    {v:0, lbl:'0 - Mesmo mês do vencimento'},
+    {v:1, lbl:'+1 - Mês seguinte ao vencimento'},
   ];
   document.getElementById('fgrid').innerHTML=`
     <div style="grid-column:span 2"><div class="fl">Descrição *</div><input type="text" value="${esc(recData.desc)}" oninput="recData.desc=this.value"/></div>
@@ -574,29 +945,34 @@ function buildFormRecorrente(){
 
 async function saveRecorrente(){
   const valor=parseMoney(recData.valor);
+  if(!Number.isInteger(recData.diaVenc)||recData.diaVenc<1||recData.diaVenc>31){toast('Dia de vencimento deve estar entre 1 e 31.','err');return;}
+  if(recData.conta&&(!normalizeConta(recData.conta)||!CONTAS.includes(normalizeConta(recData.conta)))){toast('Conta do recorrente nao esta cadastrada.','err');return;}
   if(!recData.desc||!recData.cat||valor<=0){toast('Preencha os campos obrigatórios (*)','err');return;}
-  const catErr=validateCatSub('D',recData.cat,recData.sub);
+  const catErr=validateCatSub(recData.tipo,recData.cat,recData.sub);
   if(catErr){toast(catErr,'err');return;}
   recData.valor=valor;
-  const idx=RECORRENTES_DESPESAS.findIndex(r=>r.id===recData.id);
+  const lista=recData.tipo==='R'?RECORRENTES_RECEITAS:RECORRENTES_DESPESAS;
+  const idx=lista.findIndex(r=>r.id===recData.id);
   try{
     if(idx>=0){
       await sbFetch('PATCH',`recorrentes?id=eq.${recData.id}`,toRecorrenteRow(recData));
-      RECORRENTES_DESPESAS[idx]={...recData};
+      lista[idx]={...recData};
     } else {
       await sbFetch('POST','recorrentes',toRecorrenteRow(recData));
-      RECORRENTES_DESPESAS.push({...recData});
+      lista.push({...recData});
     }
   }catch(e){toast('Erro ao salvar: '+e.message,'err');return;}
-  closeForm();render();toast('Recorrente salvo! ✓','ok');
+  closeForm();render();toast('Recorrente salvo!','ok');
 }
 
 async function deleteRecorrente(id){
   if(!confirm('Excluir este recorrente permanentemente?'))return;
   try{
     await sbFetch('DELETE',`recorrentes?id=eq.${id}`);
-    const idx=RECORRENTES_DESPESAS.findIndex(r=>r.id===id);
-    if(idx>=0)RECORRENTES_DESPESAS.splice(idx,1);
+    for(const lista of [RECORRENTES_DESPESAS,RECORRENTES_RECEITAS]){
+      const idx=lista.findIndex(r=>r.id===id);
+      if(idx>=0){lista.splice(idx,1);break;}
+    }
     render();toast('Recorrente excluído','ok');
   }catch(e){toast('Erro ao excluir: '+e.message,'err');}
 }
@@ -613,7 +989,8 @@ function renderRecorrentes(c){
   if(filterRecBusca){const b=filterRecBusca.toLowerCase();lista=lista.filter(r=>`${r.desc} ${r.cat} ${r.sub}`.toLowerCase().includes(b));}
   if(sortRec.col==='diaVenc'||sortRec.col==='compOffset'){
     lista=[...lista].sort((a,b)=>{
-      const va=a[sortRec.col]??999, vb=b[sortRec.col]??999;
+      const va=a[sortRec.col] ?? 999;
+      const vb=b[sortRec.col] ?? 999;
       return sortRec.dir==='asc'?va-vb:vb-va;
     });
   } else {
@@ -627,17 +1004,17 @@ function renderRecorrentes(c){
         <div class="card-ttl">${appIcon('repeat')}Gerar Lançamentos do Mês</div>
         <div style="display:flex;align-items:center;gap:12px;flex-wrap:wrap;margin-top:8px">
           <input type="month" id="rec-mes" value="${mesAtual}" style="background:var(--s2);border:1px solid var(--bd2);border-radius:8px;color:var(--tx);padding:7px 10px;font-size:13px;outline:none"/>
-          <button class="btn btn-pri" onclick="gerarRecorrentes()">⚡ Gerar Despesas do Mês</button>
+          <button class="btn btn-pri" onclick="gerarRecorrentes()">Gerar Despesas do Mês</button>
         </div>
       </div>
     </div>
     <div class="tbl-wrap">
-      <div class="tbl-hdr"><div class="sec-ttl">${appIcon('arrowUp')}Despesas Recorrentes <span class="yr-pill">${RECORRENTES_DESPESAS.length} itens</span></div><button class="btn btn-ghost" style="font-size:12px" onclick="openEditRecorrente('')">${appIcon('plus')}Nova</button></div>
+      <div class="tbl-hdr"><div class="sec-ttl">${appIcon('arrowUp')}Despesas Recorrentes <span class="yr-pill">${RECORRENTES_DESPESAS.length} itens</span></div><button class="btn btn-ghost" style="font-size:12px" onclick="openEditRecorrente('','D')">${appIcon('plus')}Nova</button></div>
       <div style="padding:10px 18px 0;display:flex;gap:10px;align-items:center">
         <input type="text" placeholder="Buscar descrição, categoria..." value="${esc(filterRecBusca)}"
           oninput="filterRecBusca=this.value;renderRecorrentes(document.getElementById('content'))"
           style="background:var(--s2);border:1px solid var(--bd2);color:var(--tx);border-radius:8px;padding:6px 12px;font-size:13px;width:280px"/>
-        ${filterRecBusca?`<button class="btn btn-ghost" style="font-size:12px" onclick="filterRecBusca='';renderRecorrentes(document.getElementById('content'))">✕ Limpar</button>`:''}
+        ${filterRecBusca?`<button class="btn btn-ghost" style="font-size:12px" onclick="filterRecBusca='';renderRecorrentes(document.getElementById('content'))">Limpar</button>`:''}
         <span style="font-size:12px;color:var(--tx3);margin-left:auto">${lista.length} de ${RECORRENTES_DESPESAS.length} item(s)</span>
       </div>
       <div class="tbl-scroll"><table class="lan-tbl rec-tbl resizable">${renderRecColgroup()}
@@ -649,14 +1026,15 @@ function renderRecorrentes(c){
             <td><span class="cs">${esc(r.cat)}</span></td>
             <td><span class="cs">${esc(r.sub)}</span></td>
             <td class="vc d">${fmt(r.valor)}</td>
-            <td style="text-align:center">${r.diaVenc?'Dia '+r.diaVenc:'—'}</td>
+            <td style="text-align:center">${r.diaVenc?'Dia '+r.diaVenc:'-'}</td>
             <td style="font-size:12px;color:var(--tx2)">${r.compOffset===-1?'-1 (mês ant.)':r.compOffset===1?'+1 (mês seg.)':'0 (mesmo mês)'}</td>
-            <td>${esc(r.conta||'—')}</td>
-            <td style="white-space:nowrap"><button class="btn btn-ghost" title="Editar" style="padding:4px 8px;font-size:12px" onclick="openEditRecorrente('${r.id}')">${appIcon('edit')}</button> <button class="btn btn-ghost" title="Excluir" style="padding:4px 8px;font-size:12px;color:var(--red)" onclick="deleteRecorrente('${r.id}')">${appIcon('trash')}</button></td>
+            <td>${esc(r.conta||'-')}</td>
+            <td style="white-space:nowrap"><button class="btn btn-ghost" title="Editar" style="padding:4px 8px;font-size:12px" onclick="openEditRecorrente('${r.id}','D')">${appIcon('edit')}</button> <button class="btn btn-ghost" title="Excluir" style="padding:4px 8px;font-size:12px;color:var(--red)" onclick="deleteRecorrente('${r.id}')">${appIcon('trash')}</button></td>
           </tr>`).join('')}
         </tbody>
       </table></div>
-    </div>`;
+    </div>
+  `;
 }
 
 async function gerarRecorrentes(){
@@ -670,9 +1048,20 @@ async function gerarRecorrentes(){
 
   const comDia=RECORRENTES_DESPESAS.filter(r=>r.diaVenc);
   if(!comDia.length){toast('Nenhuma despesa com dia de vencimento definido','err');return;}
+  const lastDay=new Date(ano,mes,0).getDate();
+  const invalidDia=comDia.find(r=>r.diaVenc<1||r.diaVenc>31||r.diaVenc>lastDay);
+  if(invalidDia){toast(`Recorrente "${invalidDia.desc}" tem vencimento dia ${invalidDia.diaVenc}, invalido para ${mesStr}/${anoStr}.`,'err');return;}
+  const pgClosed=assertOpenPeriod(`${anoStr}-${mesStr}-01`,'Mes de vencimento');
+  if(pgClosed){toast(pgClosed,'err');return;}
+  for(const r of comDia){
+    let compMes=mes+(r.compOffset||0), compAno=ano;
+    if(compMes<1){compMes+=12;compAno--;}else if(compMes>12){compMes-=12;compAno++;}
+    const compClosed=assertOpenPeriod(`${compAno}-${String(compMes).padStart(2,'0')}-01`,'Competencia');
+    if(compClosed){toast(compClosed,'err');return;}
+  }
 
   const anoMes=`${anoStr}-${mesStr}`;
-  const jaExiste=DATA.filter(l=>l.dataPgto&&l.dataPgto.startsWith(anoMes)&&l.obs&&l.obs.includes('[recorrente]'));
+  const jaExiste=DATA.filter(l=>effectiveVenc(l).startsWith(anoMes)&&l.obs&&l.obs.includes('[recorrente]'));
   if(jaExiste.length>0&&!confirm(`Já existem ${jaExiste.length} lançamentos recorrentes para ${mesStr}/${anoStr}. Gerar novamente mesmo assim?`))return;
 
   const lista=comDia.map(r=>{
@@ -680,21 +1069,22 @@ async function gerarRecorrentes(){
     let compMes=mes+(r.compOffset||0), compAno=ano;
     if(compMes<1){compMes+=12;compAno--;}else if(compMes>12){compMes-=12;compAno++;}
     const dataComp=`${compAno}-${String(compMes).padStart(2,'0')}-01`;
-    return{id:newId(),tipo:'D',dataComp,dataPgto,cat:r.cat,sub:r.sub,desc:r.desc,cc:'',forma:'PIX',conta:r.conta||'',doc:'',valorBruto:r.valor,ded:0,valorLiq:r.valor,status:'Pendente',obs:'[recorrente]'};
+    return{id:newId(),tipo:'D',dataComp,dataVenc:dataPgto,dataPgto:'',cat:r.cat,sub:r.sub,desc:r.desc,cc:'',forma:'PIX',conta:r.conta||'',doc:'',valorBruto:r.valor,ded:0,valorLiq:r.valor,status:'Pendente',obs:'[recorrente]'};
   });
 
   setSyncStatus('loading',`Gerando ${lista.length} lançamentos...`);
   try{
-    for(let i=0;i<lista.length;i+=50){await sbFetch('POST',TABLE,lista.slice(i,i+50).map(toRow));}
-    lista.forEach(l=>DATA.unshift(l));
+    const inserted=[];
+    for(let i=0;i<lista.length;i+=50){const res=await sbFetch('POST',TABLE,lista.slice(i,i+50).map(toRow));if(Array.isArray(res))inserted.push(...res.map(fromRow));}
+    inserted.forEach(l=>DATA.unshift(l));
     setSyncStatus('ok',`${DATA.length} registros`);
     buildNav();
-    toast(`✓ ${lista.length} lançamentos gerados (venc. ${mesStr}/${anoStr})!`,'ok');
+    toast(`${lista.length} lançamentos gerados (venc. ${mesStr}/${anoStr})!`,'ok');
     render();
   }catch(e){setSyncStatus('err','Erro ao gerar');toast('Erro: '+e.message,'err');}
 }
 
-// ── Categorias (Supabase + Drag & Drop) ──────────────────────────
+// ?? Categorias (Supabase + Drag & Drop) ??????????????????????????
 let _catTipo = 'R';
 let _dragCat = null;
 let _dragSub = null;
@@ -704,7 +1094,7 @@ function renderCategorias(c){
   const despCats = CATS_DATA.D||[];
   c.innerHTML=`
     <div style="display:flex;gap:8px;margin-bottom:16px;align-items:center">
-      <span style="font-size:11px;color:var(--tx3)">↕ Arraste para reordenar</span>
+      <span style="font-size:11px;color:var(--tx3)">? Arraste para reordenar</span>
     </div>
     <div style="display:grid;grid-template-columns:1fr 1fr;gap:16px">
       <div>
@@ -717,10 +1107,10 @@ function renderCategorias(c){
             const slugLocked=EXCL_DRE_SLUGS.has(cat.slug||slugify(cat.nome));
             const excluido=slugLocked||!!cat.excluir_dre;
             const dreBtn=slugLocked
-              ? `<span title="Excluído do DRE (sistema)" style="padding:2px 8px;font-size:10px;border-radius:99px;border:1px solid rgba(248,81,73,.3);background:rgba(248,81,73,.1);color:var(--red);opacity:.6;cursor:default">✕ DRE</span>`
-              : `<button onclick="toggleExcluirDRE('${cat.id}',${excluido})" title="${excluido?'Excluído do DRE — clique para incluir':'Incluído no DRE — clique para excluir'}" style="padding:2px 8px;font-size:10px;border-radius:99px;cursor:pointer;border:1px solid ${excluido?'rgba(248,81,73,.3);background:rgba(248,81,73,.1);color:var(--red)':'rgba(57,211,83,.3);background:rgba(57,211,83,.1);color:var(--teal)'}">${excluido?'✕ DRE':'✓ DRE'}</button>`;
+              ? `<span title="Exclu?do do DRE (sistema)" style="padding:2px 8px;font-size:10px;border-radius:99px;border:1px solid rgba(248,81,73,.3);background:rgba(248,81,73,.1);color:var(--red);opacity:.6;cursor:default">? DRE</span>`
+              : `<button onclick="toggleExcluirDRE('${cat.id}',${excluido})" title="${excluido?'Exclu?do do DRE ? clique para incluir':'Inclu?do no DRE ? clique para excluir'}" style="padding:2px 8px;font-size:10px;border-radius:99px;cursor:pointer;border:1px solid ${excluido?'rgba(248,81,73,.3);background:rgba(248,81,73,.1);color:var(--red)':'rgba(57,211,83,.3);background:rgba(57,211,83,.1);color:var(--teal)'}">${excluido?'? DRE':'? DRE'}</button>`;
             const naoOp=(cat.fluxo||'operacional')==='nao_operacional';
-            const fluxoBtn=`<button onclick="toggleFluxoCat('${cat.id}','${cat.fluxo||'operacional'}')" title="${naoOp?'Não-Operacional — clique para marcar como Operacional':'Operacional — clique para marcar como Não-Operacional'}" style="padding:2px 8px;font-size:10px;border-radius:99px;cursor:pointer;border:1px solid ${naoOp?'rgba(240,136,62,.3);background:rgba(240,136,62,.1);color:var(--orange)':'rgba(88,166,255,.3);background:rgba(88,166,255,.1);color:var(--blue)'}"> ${naoOp?'Não-Op.':'Op.'}</button>`;
+            const fluxoBtn=`<button onclick="toggleFluxoCat('${cat.id}','${cat.fluxo||'operacional'}')" title="${naoOp?'N?o-Operacional ? clique para marcar como Operacional':'Operacional ? clique para marcar como N?o-Operacional'}" style="padding:2px 8px;font-size:10px;border-radius:99px;cursor:pointer;border:1px solid ${naoOp?'rgba(240,136,62,.3);background:rgba(240,136,62,.1);color:var(--orange)':'rgba(88,166,255,.3);background:rgba(88,166,255,.1);color:var(--blue)'}"> ${naoOp?'N?o-Op.':'Op.'}</button>`;
             return `
             <div class="cat-card" id="cat-${cat.id}" draggable="true"
               ondragstart="onCatDragStart(event,'${cat.id}')"
@@ -729,7 +1119,7 @@ function renderCategorias(c){
               ondrop="onCatDrop(event,'${cat.id}')">
               <div class="cat-hdr">
                 <div style="display:flex;align-items:center;gap:8px;flex:1">
-                  <span class="drag-handle">⠿</span>
+                  <span class="drag-handle">?</span>
                   <span style="font-size:14px;font-weight:600;color:var(--tx)">${esc(cat.nome)}</span>
                   ${dreBtn}
                   ${fluxoBtn}
@@ -746,12 +1136,12 @@ function renderCategorias(c){
                     ondragleave="onSubDragLeave(event,'${sub.id}')"
                     ondrop="onSubDrop(event,'${sub.id}','${cat.id}')">
                     <div style="display:flex;align-items:center;gap:6px">
-                      <span style="color:var(--tx3);font-size:12px">⠿</span>
+                      <span style="color:var(--tx3);font-size:12px">?</span>
                       <span style="font-size:12.5px;color:var(--tx)">${esc(sub.nome)}</span>
                     </div>
                     <div>
                       <button onclick="editarSub('${sub.id}','${esc(sub.nome)}')" title="Editar" style="background:none;border:none;color:var(--tx3);font-size:11px;padding:0 2px;cursor:pointer;line-height:1">${appIcon('edit')}</button>
-                      <button onclick="excluirSub('${sub.id}','${esc(sub.nome)}','${cat.id}')" style="background:none;border:none;color:var(--red);font-size:11px;padding:0 2px;cursor:pointer;line-height:1">✕</button>
+                      <button onclick="excluirSub('${sub.id}','${esc(sub.nome)}','${cat.id}')" style="background:none;border:none;color:var(--red);font-size:11px;padding:0 2px;cursor:pointer;line-height:1">?</button>
                     </div>
                   </div>`).join('')}
                 ${!(cat.subs||[]).length?`<div style="padding:12px 16px;color:var(--tx3);font-size:12px">Nenhuma subcategoria</div>`:''}
@@ -770,10 +1160,10 @@ function renderCategorias(c){
             const slugLocked=EXCL_DRE_SLUGS.has(cat.slug||slugify(cat.nome));
             const excluido=slugLocked||!!cat.excluir_dre;
             const dreBtn=slugLocked
-              ? `<span title="Excluído do DRE (sistema)" style="padding:2px 8px;font-size:10px;border-radius:99px;border:1px solid rgba(248,81,73,.3);background:rgba(248,81,73,.1);color:var(--red);opacity:.6;cursor:default">✕ DRE</span>`
-              : `<button onclick="toggleExcluirDRE('${cat.id}',${excluido})" title="${excluido?'Excluído do DRE — clique para incluir':'Incluído no DRE — clique para excluir'}" style="padding:2px 8px;font-size:10px;border-radius:99px;cursor:pointer;border:1px solid ${excluido?'rgba(248,81,73,.3);background:rgba(248,81,73,.1);color:var(--red)':'rgba(57,211,83,.3);background:rgba(57,211,83,.1);color:var(--teal)'}">${excluido?'✕ DRE':'✓ DRE'}</button>`;
+              ? `<span title="Exclu?do do DRE (sistema)" style="padding:2px 8px;font-size:10px;border-radius:99px;border:1px solid rgba(248,81,73,.3);background:rgba(248,81,73,.1);color:var(--red);opacity:.6;cursor:default">? DRE</span>`
+              : `<button onclick="toggleExcluirDRE('${cat.id}',${excluido})" title="${excluido?'Exclu?do do DRE ? clique para incluir':'Inclu?do no DRE ? clique para excluir'}" style="padding:2px 8px;font-size:10px;border-radius:99px;cursor:pointer;border:1px solid ${excluido?'rgba(248,81,73,.3);background:rgba(248,81,73,.1);color:var(--red)':'rgba(57,211,83,.3);background:rgba(57,211,83,.1);color:var(--teal)'}">${excluido?'? DRE':'? DRE'}</button>`;
             const naoOp=(cat.fluxo||'operacional')==='nao_operacional';
-            const fluxoBtn=`<button onclick="toggleFluxoCat('${cat.id}','${cat.fluxo||'operacional'}')" title="${naoOp?'Não-Operacional — clique para marcar como Operacional':'Operacional — clique para marcar como Não-Operacional'}" style="padding:2px 8px;font-size:10px;border-radius:99px;cursor:pointer;border:1px solid ${naoOp?'rgba(240,136,62,.3);background:rgba(240,136,62,.1);color:var(--orange)':'rgba(88,166,255,.3);background:rgba(88,166,255,.1);color:var(--blue)'}"> ${naoOp?'Não-Op.':'Op.'}</button>`;
+            const fluxoBtn=`<button onclick="toggleFluxoCat('${cat.id}','${cat.fluxo||'operacional'}')" title="${naoOp?'N?o-Operacional ? clique para marcar como Operacional':'Operacional ? clique para marcar como N?o-Operacional'}" style="padding:2px 8px;font-size:10px;border-radius:99px;cursor:pointer;border:1px solid ${naoOp?'rgba(240,136,62,.3);background:rgba(240,136,62,.1);color:var(--orange)':'rgba(88,166,255,.3);background:rgba(88,166,255,.1);color:var(--blue)'}"> ${naoOp?'N?o-Op.':'Op.'}</button>`;
             return `
             <div class="cat-card" id="cat-${cat.id}" draggable="true"
               ondragstart="onCatDragStart(event,'${cat.id}')"
@@ -782,7 +1172,7 @@ function renderCategorias(c){
               ondrop="onCatDrop(event,'${cat.id}')">
               <div class="cat-hdr">
                 <div style="display:flex;align-items:center;gap:8px;flex:1">
-                  <span class="drag-handle">⠿</span>
+                  <span class="drag-handle">?</span>
                   <span style="font-size:14px;font-weight:600;color:var(--tx)">${esc(cat.nome)}</span>
                   ${dreBtn}
                   ${fluxoBtn}
@@ -799,12 +1189,12 @@ function renderCategorias(c){
                     ondragleave="onSubDragLeave(event,'${sub.id}')"
                     ondrop="onSubDrop(event,'${sub.id}','${cat.id}')">
                     <div style="display:flex;align-items:center;gap:6px">
-                      <span style="color:var(--tx3);font-size:12px">⠿</span>
+                      <span style="color:var(--tx3);font-size:12px">?</span>
                       <span style="font-size:12.5px;color:var(--tx)">${esc(sub.nome)}</span>
                     </div>
                     <div>
                       <button onclick="editarSub('${sub.id}','${esc(sub.nome)}')" title="Editar" style="background:none;border:none;color:var(--tx3);font-size:11px;padding:0 2px;cursor:pointer;line-height:1">${appIcon('edit')}</button>
-                      <button onclick="excluirSub('${sub.id}','${esc(sub.nome)}','${cat.id}')" style="background:none;border:none;color:var(--red);font-size:11px;padding:0 2px;cursor:pointer;line-height:1">✕</button>
+                      <button onclick="excluirSub('${sub.id}','${esc(sub.nome)}','${cat.id}')" style="background:none;border:none;color:var(--red);font-size:11px;padding:0 2px;cursor:pointer;line-height:1">?</button>
                     </div>
                   </div>`).join('')}
                 ${!(cat.subs||[]).length?`<div style="padding:12px 16px;color:var(--tx3);font-size:12px">Nenhuma subcategoria</div>`:''}
@@ -816,7 +1206,7 @@ function renderCategorias(c){
     </div>`;
 }
 
-// ── Drag & Drop — Categorias ──────────────────────────────────────
+// ?? Drag & Drop ? Categorias ??????????????????????????????????????
 function onCatDragStart(e,id){_dragCat=id;e.currentTarget.classList.add('dragging');e.dataTransfer.effectAllowed='move';}
 function onCatDragOver(e,id){e.preventDefault();if(_dragCat&&_dragCat!==id)document.getElementById('cat-'+id)?.classList.add('drag-over');}
 function onCatDragLeave(e,id){document.getElementById('cat-'+id)?.classList.remove('drag-over');}
@@ -845,7 +1235,7 @@ async function onCatDrop(e,targetId){
   }catch(e){toast('Erro ao salvar ordem','err');}
 }
 
-// ── Drag & Drop — Subcategorias ───────────────────────────────────
+// ?? Drag & Drop ? Subcategorias ???????????????????????????????????
 function onSubDragStart(e,id,catId){_dragSub={id,catId};e.currentTarget.classList.add('dragging');e.dataTransfer.effectAllowed='move';e.stopPropagation();}
 function onSubDragOver(e,id){e.preventDefault();e.stopPropagation();if(_dragSub&&_dragSub.id!==id)document.getElementById('sub-'+id)?.classList.add('drag-over');}
 function onSubDragLeave(e,id){document.getElementById('sub-'+id)?.classList.remove('drag-over');}
@@ -875,12 +1265,12 @@ async function onSubDrop(e,targetId,catId){
   }catch(e){toast('Erro ao salvar ordem','err');}
 }
 
-// ── CRUD Categorias ───────────────────────────────────────────────
+// ?? CRUD Categorias ???????????????????????????????????????????????
 async function adicionarCategoria(){
   const nome=prompt('Nome da nova categoria:');
   if(!nome||!nome.trim())return;
   const n=nome.trim();
-  if(CATS_DATA[_catTipo].find(c=>c.nome===n)){toast('Categoria já existe!','err');return;}
+  if(CATS_DATA[_catTipo].find(c=>c.nome===n)){toast('Categoria j? existe!','err');return;}
   const id=newId(), slug=slugify(n), ordem=CATS_DATA[_catTipo].length;
   setSyncStatus('loading','Salvando...');
   try{
@@ -915,7 +1305,7 @@ async function toggleFluxoCat(id, current){
     for(const tipo of ['R','D']){const cat=(CATS_DATA[tipo]||[]).find(c=>c.id===id);if(cat){cat.fluxo=novo;break;}}
     setSyncStatus('ok',`${DATA.length} registros`);
     renderCategorias(document.getElementById('content'));
-    toast(novo==='nao_operacional'?'Marcada como Não-Operacional':'Marcada como Operacional','ok');
+    toast(novo==='nao_operacional'?'Marcada como N?o-Operacional':'Marcada como Operacional','ok');
   }catch(e){setSyncStatus('err','Erro');toast('Erro ao salvar: '+e.message,'err');}
 }
 
@@ -937,6 +1327,8 @@ async function editarCategoria(id, nomeAtual){
 }
 
 async function excluirCategoria(id, nome){
+  if(DATA.some(l=>l.cat===nome)){toast(`A categoria "${nome}" possui lancamentos vinculados. Reclassifique antes de excluir.`,'err');return;}
+  if(RECORRENTES_DESPESAS.some(r=>r.cat===nome)||RECORRENTES_RECEITAS.some(r=>r.cat===nome)){toast(`A categoria "${nome}" possui recorrentes vinculados.`,'err');return;}
   if(!confirm(`Excluir "${nome}" e todas as subcategorias?`))return;
   setSyncStatus('loading','Excluindo...');
   try{
@@ -961,7 +1353,7 @@ async function adicionarSub(catId, catNome){
   if(!tipo)return;
   const cat=CATS_DATA[tipo].find(c=>c.id===catId);
   if(!cat)return;
-  if((cat.subs||[]).find(s=>s.nome===n)){toast('Subcategoria já existe!','err');return;}
+  if((cat.subs||[]).find(s=>s.nome===n)){toast('Subcategoria j? existe!','err');return;}
   const id=newId(), ordem=(cat.subs||[]).length;
   setSyncStatus('loading','Salvando...');
   try{
@@ -1001,6 +1393,9 @@ async function editarSub(id, nomeAtual){
 }
 
 async function excluirSub(id, nome, catId){
+  const cat=[...(CATS_DATA.R||[]),...(CATS_DATA.D||[])].find(c=>c.id===catId);
+  if(DATA.some(l=>l.sub===nome&&(!cat||l.cat===cat.nome))){toast(`A subcategoria "${nome}" possui lancamentos vinculados. Reclassifique antes de excluir.`,'err');return;}
+  if(RECORRENTES_DESPESAS.some(r=>r.sub===nome&&(!cat||r.cat===cat.nome))||RECORRENTES_RECEITAS.some(r=>r.sub===nome&&(!cat||r.cat===cat.nome))){toast(`A subcategoria "${nome}" possui recorrentes vinculados.`,'err');return;}
   if(!confirm(`Excluir "${nome}"?`))return;
   setSyncStatus('loading','Excluindo...');
   try{

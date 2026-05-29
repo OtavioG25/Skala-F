@@ -31,6 +31,8 @@ const APP_ICON_PATHS = {
   wallet:'<path d="M19 7V5a2 2 0 0 0-2-2H5a2 2 0 0 0 0 4h15a1 1 0 0 1 1 1v9a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V5"/><path d="M17 12h4"/><path d="M17 12a2 2 0 0 0 0 4h4"/>',
   repeat:'<path d="m17 2 4 4-4 4"/><path d="M3 11V9a3 3 0 0 1 3-3h15"/><path d="m7 22-4-4 4-4"/><path d="M21 13v2a3 3 0 0 1-3 3H3"/>',
   settings:'<circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.7 1.7 0 0 0 .34 1.87l.04.04a2 2 0 0 1-2.83 2.83l-.04-.04A1.7 1.7 0 0 0 15 19.4a1.7 1.7 0 0 0-1 1.55V21a2 2 0 0 1-4 0v-.05a1.7 1.7 0 0 0-1-1.55 1.7 1.7 0 0 0-1.87.34l-.04.04a2 2 0 0 1-2.83-2.83l.04-.04A1.7 1.7 0 0 0 4.6 15a1.7 1.7 0 0 0-1.55-1H3a2 2 0 0 1 0-4h.05a1.7 1.7 0 0 0 1.55-1 1.7 1.7 0 0 0-.34-1.87l-.04-.04a2 2 0 0 1 2.83-2.83l.04.04A1.7 1.7 0 0 0 9 4.6a1.7 1.7 0 0 0 1-1.55V3a2 2 0 0 1 4 0v.05a1.7 1.7 0 0 0 1 1.55 1.7 1.7 0 0 0 1.87-.34l.04-.04a2 2 0 0 1 2.83 2.83l-.04.04A1.7 1.7 0 0 0 19.4 9a1.7 1.7 0 0 0 1.55 1H21a2 2 0 0 1 0 4h-.05A1.7 1.7 0 0 0 19.4 15Z"/>',
+  tools:'<path d="M14.7 6.3a4.2 4.2 0 0 0-5 5L3.6 17.4a2 2 0 1 0 3 3l6.1-6.1a4.2 4.2 0 0 0 5-5l-2.6 2.6-3-3Z"/><path d="m15 5 4 4"/>',
+  chevronRight:'<path d="m9 18 6-6-6-6"/>',
   bank:'<path d="m3 10 9-7 9 7"/><path d="M5 10h14"/><path d="M6 10v8"/><path d="M10 10v8"/><path d="M14 10v8"/><path d="M18 10v8"/><path d="M4 18h16"/><path d="M3 21h18"/>',
   file:'<path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8Z"/><path d="M14 2v6h6"/><path d="M8 13h8"/><path d="M8 17h6"/>',
   download:'<path d="M12 3v12"/><path d="m7 10 5 5 5-5"/><path d="M5 21h14"/>',
@@ -45,7 +47,10 @@ const APP_ICON_PATHS = {
   trash:'<path d="M3 6h18"/><path d="M8 6V4h8v2"/><path d="M19 6l-1 14H6L5 6"/><path d="M10 11v6"/><path d="M14 11v6"/>',
   clipboard:'<rect width="16" height="18" x="4" y="4" rx="2"/><path d="M9 2h6v4H9z"/><path d="M8 12h8"/><path d="M8 16h6"/>',
   calendar:'<path d="M8 2v4"/><path d="M16 2v4"/><rect width="18" height="18" x="3" y="4" rx="2"/><path d="M3 10h18"/>',
-  close:'<path d="M18 6 6 18"/><path d="m6 6 12 12"/>'
+  close:'<path d="M18 6 6 18"/><path d="m6 6 12 12"/>',
+  trendingUp:'<polyline points="22 7 13.5 15.5 8.5 10.5 2 17"/><polyline points="16 7 22 7 22 13"/>',
+  trendingDown:'<polyline points="22 17 13.5 8.5 8.5 13.5 2 7"/><polyline points="16 17 22 17 22 11"/>',
+  activity:'<polyline points="22 12 18 12 15 21 9 3 6 12 2 12"/>'
 };
 function appIcon(name, className='app-icon'){
   const path=APP_ICON_PATHS[name]||APP_ICON_PATHS.file;
@@ -58,8 +63,8 @@ function hydrateAppIcons(root=document){
   });
 }
 
-const APP_VERSION = 'v2.5.97';
-const APP_DATE = '2026-05-12';
+const APP_VERSION = 'v2.5.151';
+const APP_DATE = '2026-05-29';
 
 // Preenche versão na tela
 document.addEventListener('DOMContentLoaded',()=>{
@@ -82,9 +87,7 @@ window.addEventListener('resize',()=>{
 
 
 
-const SUPABASE_URL='https://rvymfrpugzwwgrcybwpk.supabase.co';
-const SUPABASE_KEY='eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InJ2eW1mcnB1Z3p3d2dyY3lid3BrIiwicm9sZSI6ImFub24iLCJpYXQiOjE3Nzc0ODgzNTUsImV4cCI6MjA5MzA2NDM1NX0.kgWgFOlD53kclwB62GPOHbQh55Ypxp6rjGhYCmvs-Us';
-const TABLE='lancamentos';
+// SUPABASE_URL, SUPABASE_KEY e TABLE são definidos em js/00-config.js
 
 const sbFetch=async(method,path,body=null)=>{
   const token=localStorage.getItem('sb_token')||SUPABASE_KEY;
@@ -104,121 +107,309 @@ async function dbLoad(){
   }while(chunk.length===PAGE);
   return all;
 }
-async function dbInsert(item){const row=toRow(item);if(!row.id)row.id=crypto.randomUUID();const res=await sbFetch('POST',TABLE,row);return Array.isArray(res)?res[0]:res;}
-async function dbUpdate(item){await sbFetch('PATCH',`${TABLE}?id=eq.${item.id}`,toRow(item));}
-async function dbDelete(id){await sbFetch('DELETE',`${TABLE}?id=eq.${id}`);}
+async function dbInsert(item){const row=toRow(item);if(!row.id)row.id=crypto.randomUUID();const res=await sbFetch('POST',TABLE,row);touchFinanceData();return Array.isArray(res)?res[0]:res;}
+async function dbUpdate(item){await sbFetch('PATCH',`${TABLE}?id=eq.${item.id}`,toRow(item));touchFinanceData();}
+async function dbDelete(id){await sbFetch('DELETE',`${TABLE}?id=eq.${id}`);touchFinanceData();}
 
-async function migrateLegacyContas(rows){
-  const legacy=rows.filter(r=>(r.conta||'')==='Conta Corrente');
-  if(!legacy.length)return;
-  setSyncStatus('loading',`Ajustando ${legacy.length} conta(s)...`);
-  for(const r of legacy){
-    try{await sbFetch('PATCH',`${TABLE}?id=eq.${r.id}`,{conta:'Caixa'});}
-    catch(e){console.warn('Falha ao migrar conta',r.id,e);}
-  }
+const BAIXAS_TABLE='baixas_lancamentos';
+async function dbLoadBaixas(){
+  const PAGE=1000;let all=[],offset=0,chunk;
+  do{
+    chunk=await sbFetch('GET',`${BAIXAS_TABLE}?order=data_pgto.asc,created_at.asc&select=*&limit=${PAGE}&offset=${offset}`);
+    if(!chunk||!chunk.length)break;
+    all=all.concat(chunk);offset+=PAGE;
+  }while(chunk.length===PAGE);
+  return all;
+}
+async function dbInsertBaixa(item){
+  const row=toBaixaRow(item);
+  if(!row.id)row.id=crypto.randomUUID();
+  const res=await sbFetch('POST',BAIXAS_TABLE,row);
+  touchFinanceData();
+  return Array.isArray(res)?res[0]:res;
+}
+async function dbDeleteBaixa(id){await sbFetch('DELETE',`${BAIXAS_TABLE}?id=eq.${id}`);touchFinanceData();}
+async function clearBaixasForLancamento(lancamentoId){
+  const baixas=getBaixas(lancamentoId);
+  for(const b of baixas)await dbDeleteBaixa(b.id);
+  BAIXAS_DATA=BAIXAS_DATA.filter(b=>b.lancamentoId!==lancamentoId);
+  return baixas.length;
 }
 
-async function limparRecorrentesDespesas(){
-  try{
-    await sbFetch('DELETE','recorrentes?tipo=eq.D');
-    RECORRENTES_DESPESAS=[];
-    render();
-    alert('✓ Despesas recorrentes excluídas do Supabase.');
-  }catch(e){alert('Erro ao excluir: '+e.message);}
+function isPendingStatus(l){
+  return l.status==='Pendente'||l.status==='Parcial';
 }
-
-function diagnosticarRecorrentes(){
-  const erros=[];
-  RECORRENTES_DESPESAS.forEach(r=>{
-    const err=validateCatSub('D',r.cat,r.sub);
-    if(err) erros.push({desc:r.desc,cat:r.cat,sub:r.sub,erro:err});
-  });
-  if(!erros.length){console.log('✓ Todos os recorrentes estão válidos.');return;}
-  console.table(erros);
-  console.log(`\nCategorias disponíveis (D):\n`+CATS_DATA.D.map(c=>`  ${c.nome}: [${(c.subs||[]).map(s=>s.nome).join(', ')}]`).join('\n'));
+function effectiveVenc(l){
+  return l.dataVenc||((isPendingStatus(l)&&l.dataPgto)?l.dataPgto:'')||'';
 }
-
-async function adicionarSubConsultoria(){
-  try{
-    const catAdm=CATS_DATA.D.find(c=>c.nome==='Administrativo');
-    if(!catAdm){alert('Categoria Administrativo não encontrada.');return;}
-    if((catAdm.subs||[]).find(s=>s.nome==='Consultoria')){alert('Subcategoria Consultoria já existe.');return;}
-    const sub={id:newId(),categoria_id:catAdm.id,nome:'Consultoria',slug:slugify('Consultoria'),ordem:(catAdm.subs||[]).length};
-    await sbFetch('POST','subcategorias',[sub]);
-    if(!catAdm.subs)catAdm.subs=[];
-    catAdm.subs.push(sub);
-    rebuildCatsObj();
-    render();
-    alert('✓ Subcategoria Consultoria adicionada em Administrativo.');
-  }catch(e){alert('Erro: '+e.message);}
+function dateForSchedule(l){
+  return effectiveVenc(l)||l.dataPgto||l.dataComp||'';
 }
-
-
-async function criarCategoriasReembolso(){
-  for(const tipo of ['R','D']){
-    if((CATS_DATA[tipo]||[]).find(c=>c.nome==='Reembolso')){
-      toast(`Categoria Reembolso (${tipo}) já existe.`,'ok');continue;
-    }
-    const id=newId();
-    const ordem=(CATS_DATA[tipo]||[]).length;
-    await sbFetch('POST','categorias',[{id,tipo,nome:'Reembolso',slug:'reembolso',ordem}]);
-    const subId=newId();
-    const sub={id:subId,categoria_id:id,nome:'Reembolso',slug:'reembolso',ordem:0};
-    await sbFetch('POST','subcategorias',[sub]);
-    CATS_DATA[tipo].push({id,tipo,nome:'Reembolso',slug:'reembolso',ordem,subs:[sub]});
-  }
-  rebuildCatsObj();
-  toast('✓ Categorias Reembolso (R e D) criadas. Não aparecem no DRE, apenas no Fluxo de Caixa.','ok');
-}
-
-async function limparReceitas01(){
-  const errados=DATA.filter(l=>l.cat==='Receita de Serviços');
-  if(!errados.length){toast('Nenhum lançamento com cat "Receita de Serviços" encontrado.','ok');return;}
-  if(!confirm(`Excluir ${errados.length} lançamento(s) com categoria "Receita de Serviços"?`))return;
-  setSyncStatus('loading','Removendo...');
-  try{
-    for(const l of errados){await sbFetch('DELETE',`${TABLE}?id=eq.${l.id}`);}
-    errados.forEach(l=>{const i=DATA.findIndex(d=>d.id===l.id);if(i>=0)DATA.splice(i,1);});
-    setSyncStatus('ok',`${DATA.length} registros`);
-    buildNav();render();
-    toast(`✓ ${errados.length} lançamentos removidos. Agora rode importarReceitas01().`,'ok');
-  }catch(e){setSyncStatus('err','Erro');toast('Erro: '+e.message,'err');}
-}
-
-async function migrarProLabore(){
-  const DE='Pró-Labore', PARA='Pro-labores/Retiradas', SLUG=slugify(PARA);
-  try{
-    // Atualiza lançamentos e recorrentes
-    await sbFetch('PATCH',`${TABLE}?sub=eq.${encodeURIComponent(DE)}`,{sub:PARA});
-    await sbFetch('PATCH',`recorrentes?sub=eq.${encodeURIComponent(DE)}`,{sub:PARA});
-    // Atualiza a subcategoria na tabela do Supabase
-    await sbFetch('PATCH',`subcategorias?nome=eq.${encodeURIComponent(DE)}`,{nome:PARA,slug:SLUG});
-    // Atualiza em memória
-    DATA.forEach(l=>{if(l.sub===DE)l.sub=PARA;});
-    RECORRENTES_DESPESAS.forEach(r=>{if(r.sub===DE)r.sub=PARA;});
-    for(const tipo of ['R','D']){
-      for(const cat of CATS_DATA[tipo]||[]){
-        const sub=(cat.subs||[]).find(s=>s.nome===DE);
-        if(sub){sub.nome=PARA;sub.slug=SLUG;}
-      }
-    }
-    rebuildCatsObj();
-    render();
-    alert(`✓ Migração concluída: "${DE}" → "${PARA}"`);
-  }catch(e){alert('Erro na migração: '+e.message);}
-}
-
-function toRow(l){return{id:l.id,tipo:l.tipo,data_comp:l.dataComp||null,data_pgto:l.dataPgto||null,cat:l.cat,sub:l.sub||null,descricao:l.desc||null,cc:l.cc||null,forma:l.forma||null,conta:normalizeConta(l.conta)||null,doc:l.doc||null,valor_bruto:parseMoney(l.valorBruto),ded:parseMoney(l.ded),valor_liq:parseMoney(l.valorLiq),status:l.status,obs:l.obs||null};}
-function fromRow(r){return{id:r.id,seq:r.seq||null,tipo:r.tipo,dataComp:r.data_comp||'',dataPgto:r.data_pgto||'',cat:r.cat||'',sub:r.sub||'',desc:r.descricao||'',cc:r.cc||'',forma:r.forma||'PIX',conta:r.conta||'',doc:r.doc||'',valorBruto:r.valor_bruto||0,ded:r.ded||0,valorLiq:r.valor_liq||0,status:r.status||'Pendente',obs:r.obs||''};}
+function toRow(l){const r={id:l.id,tipo:l.tipo,data_comp:l.dataComp||null,data_venc:effectiveVenc(l)||null,data_pgto:l.dataPgto||null,cat:l.cat,sub:l.sub||null,descricao:l.desc||null,cc:l.cc||null,cliente_id:l.clienteId||null,forma:l.forma||null,conta:normalizeConta(l.conta)||null,doc:l.doc||null,valor_bruto:parseMoney(l.valorBruto),ded:parseMoney(l.ded),valor_liq:parseMoney(l.valorLiq),status:l.status,obs:l.obs||null};if(l.parentId)r.parent_id=l.parentId;if(l.adjType)r.adj_type=l.adjType;return r;}
+function fromRow(r){const status=r.status||'Pendente';const legacyVenc=!r.data_venc&&(status==='Pendente'||status==='Parcial')?r.data_pgto||'':'';const dataVenc=r.data_venc||legacyVenc;const dataPgto=(status==='Pago'||status==='Recebido'||status==='Parcial')?r.data_pgto||'':'';return{id:r.id,seq:r.seq||null,tipo:r.tipo,dataComp:r.data_comp||'',dataVenc,dataPgto,cat:r.cat||'',sub:r.sub||'',desc:r.descricao||'',cc:r.cc||'',clienteId:r.cliente_id||'',forma:r.forma||'PIX',conta:r.conta||'',doc:r.doc||'',valorBruto:r.valor_bruto||0,ded:r.ded||0,valorLiq:r.valor_liq||0,status,obs:r.obs||'',parentId:r.parent_id||null,adjType:r.adj_type||null};}
 function extractParcHist(obs){const m=(obs||'').match(/~~P:(\[[\s\S]*?\])~~/);try{return m?JSON.parse(m[1]):[]}catch{return[];}}
 function stripParcHist(obs){return(obs||'').replace(/\s*~~P:\[[\s\S]*?\]~~/,'').trim();}
+function fromBaixaRow(r){
+  return{id:r.id,lancamentoId:r.lancamento_id,dataPgto:r.data_pgto||'',conta:r.conta||'',valor:r.valor||0,forma:r.forma||'',tipo:r.tipo||'',origem:r.origem||'manual',obs:r.obs||'',createdAt:r.created_at||''};
+}
+function toBaixaRow(b){
+  return{id:b.id,lancamento_id:b.lancamentoId||b.lancamento_id,data_pgto:b.dataPgto||b.data_pgto||null,conta:normalizeConta(b.conta)||b.conta||null,valor:parseMoney(b.valor),forma:b.forma||null,tipo:b.tipo||null,origem:b.origem||'manual',obs:b.obs||null};
+}
+function getBaixas(lancamentoId){
+  return (BAIXAS_DATA||[]).filter(b=>b.lancamentoId===lancamentoId).sort((a,b)=>(a.dataPgto||'').localeCompare(b.dataPgto||'')||(a.createdAt||'').localeCompare(b.createdAt||''));
+}
+function titleAmount(l){
+  const bruto=parseMoney(l?.valorBruto),liq=parseMoney(l?.valorLiq);
+  if(l?.status==='Parcial'&&bruto>liq+0.005)return bruto;
+  return liq||bruto;
+}
+function legacyPaidAmount(l){
+  const lows=getBaixas(l.id);
+  if(lows.length)return 0;
+  if(l.status==='Parcial'&&parseMoney(l.valorBruto)>parseMoney(l.valorLiq)+0.005)return parseMoney(l.valorLiq);
+  if((l.status==='Pago'||l.status==='Recebido')&&l.dataPgto)return titleAmount(l);
+  return 0;
+}
+function paidAmount(l){
+  if(!l||l.status==='Cancelado')return 0;
+  const lows=getBaixas(l.id).reduce((s,b)=>s+parseMoney(b.valor),0);
+  return +(lows+legacyPaidAmount(l)).toFixed(2);
+}
+function openAmount(l){
+  if(!l||l.status==='Cancelado')return 0;
+  return +Math.max(0,titleAmount(l)-paidAmount(l)).toFixed(2);
+}
+function computedStatus(l){
+  if(!l)return'Pendente';
+  if(l.status==='Cancelado')return'Cancelado';
+  const total=titleAmount(l),paid=paidAmount(l);
+  if(paid<=0.005)return'Pendente';
+  if(paid+0.005<total)return'Parcial';
+  return expectedRealizedStatus(l.tipo);
+}
+function latestBaixaDate(l){
+  const dates=getBaixas(l.id).map(b=>b.dataPgto).filter(Boolean).sort();
+  if(dates.length)return dates[dates.length-1];
+  return (l.status==='Pago'||l.status==='Recebido'||l.status==='Parcial')?l.dataPgto||'':'';
+}
+function refreshLancamentoComputed(l){
+  if(!l||l.status==='Cancelado')return l;
+  l.status=computedStatus(l);
+  l.dataPgto=paidAmount(l)>0?latestBaixaDate(l):'';
+  return l;
+}
+function baixaTipoFromLancamento(l){return l?.tipo==='D'?'pagamento':'recebimento';}
+function cashMovements(){
+  if(_cashMovementsCache&&_cashMovementsCache.version===DATA_VERSION)return _cashMovementsCache.rows;
+  const rows=[];
+  const byId=new Map(DATA.map(l=>[l.id,l]));
+  (BAIXAS_DATA||[]).forEach(b=>{
+    const l=byId.get(b.lancamentoId);
+    if(!l||l.status==='Cancelado')return;
+    rows.push({...l,id:`baixa-${b.id}`,lancamentoId:l.id,baixaId:b.id,dataPgto:b.dataPgto,dataExtrato:b.dataPgto,conta:b.conta||l.conta,forma:b.forma||l.forma,valorLiq:parseMoney(b.valor),status:computedStatus(l),origem:b.origem,baixaObs:b.obs,isBaixa:true,isPend:false});
+  });
+  DATA.forEach(l=>{
+    if(!l||l.status==='Cancelado'||getBaixas(l.id).length)return;
+    const hist=extractParcHist(l.obs||'');
+    if(hist.length){
+      hist.forEach((p,i)=>{
+        if(!p.d||parseMoney(p.v)<=0)return;
+        rows.push({...l,id:`legacy-${l.id}-${i}`,lancamentoId:l.id,dataPgto:p.d,dataExtrato:p.d,valorLiq:parseMoney(p.v),status:computedStatus(l),isBaixa:false,isPend:false});
+      });
+      return;
+    }
+    const paid=legacyPaidAmount(l);
+    if(paid>0&&l.dataPgto){
+      rows.push({...l,id:`legacy-${l.id}`,lancamentoId:l.id,dataExtrato:l.dataPgto,valorLiq:paid,status:computedStatus(l),isBaixa:false,isPend:false});
+    }
+  });
+  _cashMovementsCache={version:DATA_VERSION,rows};
+  return rows;
+}
+async function registerBaixa(lancamento,baixa){
+  const original=DATA.find(l=>l.id===lancamento.id)||lancamento;
+  if(!original||original.status==='Cancelado')throw new Error('Lancamento cancelado nao aceita baixa.');
+  const valor=parseMoney(baixa.valor);
+  const saldo=openAmount(original);
+  if(valor<=0)throw new Error('Informe um valor maior que zero.');
+  if(valor>saldo+0.005)throw new Error('Valor informado excede o saldo em aberto.');
+  if(!baixa.dataPgto)throw new Error('Informe a data da baixa.');
+  const pgClosed=assertOpenPeriod(baixa.dataPgto,'Data de pagamento');
+  if(pgClosed)throw new Error(pgClosed);
+  const conta=normalizeConta(baixa.conta)||baixa.conta;
+  if(!conta||!CONTAS.includes(conta))throw new Error('Selecione uma conta bancaria cadastrada.');
+  const row={id:baixa.id||newId(),lancamentoId:original.id,dataPgto:baixa.dataPgto,conta,valor,forma:baixa.forma||original.forma||'PIX',tipo:baixa.tipo||baixaTipoFromLancamento(original),origem:baixa.origem||'manual',obs:cleanText(baixa.obs||'')};
+  const saved=await dbInsertBaixa(row);
+  const baixaApp=saved?fromBaixaRow(saved):row;
+  BAIXAS_DATA.push(baixaApp);
+  const next={...original,status:computedStatus(original),dataPgto:latestBaixaDate(original)};
+  if(original.status==='Parcial'&&parseMoney(original.valorBruto)>parseMoney(original.valorLiq)+0.005){
+    next.valorLiq=titleAmount(original);
+    next.ded=0;
+  }
+  await dbUpdate(next);
+  const idx=DATA.findIndex(l=>l.id===original.id);
+  if(idx>=0)DATA[idx]={...DATA[idx],...next};
+  return{baixa:baixaApp,lancamento:idx>=0?DATA[idx]:next};
+}
 function fromRecorrente(r){return{id:r.id,desc:r.descricao,cat:r.cat,sub:r.sub||'',valor:r.valor,diaVenc:r.dia_venc||null,compOffset:typeof r.comp_offset==='number'?r.comp_offset:0,conta:r.conta||''};}
 function toRecorrenteRow(item){return{id:item.id,tipo:item.tipo,descricao:item.desc,cat:item.cat,sub:item.sub||null,valor:item.valor,dia_venc:item.diaVenc||null,comp_offset:typeof item.compOffset==='number'?item.compOffset:0,conta:item.conta||null};}
 
-function setSyncStatus(state,msg){const dot=document.getElementById('sync-dot'),txt=document.getElementById('sync-txt');if(!dot)return;dot.className='sync-dot '+state;txt.textContent=msg;}
+const CLOSED_PERIODS_KEY='financeiro_closed_periods';
+function normText(v){
+  return String(v||'').normalize('NFD').replace(/[\u0300-\u036f]/g,'').replace(/\s+/g,' ').trim().toLowerCase();
+}
+function cleanText(v){return String(v||'').replace(/\s+/g,' ').trim();}
+function periodKeyFromDate(d){
+  if(!d)return'';
+  const s=String(d);
+  if(/^\d{4}-\d{2}/.test(s))return s.slice(0,7);
+  const c=compFromView(s);
+  return c?c.slice(0,7):'';
+}
+function getClosedPeriods(){
+  try{return new Set(JSON.parse(localStorage.getItem(CLOSED_PERIODS_KEY)||'[]'));}
+  catch{return new Set();}
+}
+function saveClosedPeriods(set){
+  localStorage.setItem(CLOSED_PERIODS_KEY,JSON.stringify([...set].sort()));
+}
+function isPeriodClosed(dateOrComp){
+  const k=periodKeyFromDate(dateOrComp);
+  return !!k&&getClosedPeriods().has(k);
+}
+function toggleClosedPeriod(period){
+  const k=periodKeyFromDate(period);
+  if(!k)return;
+  const set=getClosedPeriods();
+  if(set.has(k))set.delete(k);else set.add(k);
+  saveClosedPeriods(set);
+  render();
+}
+function assertOpenPeriod(dateOrComp,label='periodo'){
+  if(isPeriodClosed(dateOrComp))return `${label} ${periodKeyFromDate(dateOrComp)} esta fechado. Reabra o mes antes de alterar.`;
+  return null;
+}
+function isRealizedStatus(l){
+  return l.status==='Pago'||l.status==='Recebido'||l.status==='Parcial';
+}
+function expectedRealizedStatus(tipo){return tipo==='R'?'Recebido':'Pago';}
+function validateLancamentoCore(item,opts={}){
+  const errors=[],warnings=[];
+  const l={...item};
+  l.desc=cleanText(l.desc);
+  l.doc=cleanText(l.doc);
+  l.cc=cleanText(l.cc);
+  l.obs=cleanText(l.obs);
+  l.conta=normalizeConta(l.conta);
+  const bruto=parseMoney(l.valorBruto),ded=parseMoney(l.ded),liq=parseMoney(l.valorLiq);
+  if(!['R','D'].includes(l.tipo))errors.push('Tipo invalido.');
+  if(!l.dataComp)errors.push('Competencia e obrigatoria.');
+  else{
+    const e=validarAno(l.dataComp,'Competencia');if(e)errors.push(e);
+    const c=assertOpenPeriod(l.dataComp,'Competencia');if(c)errors.push(c);
+  }
+  if(l.dataVenc){
+    const e=validarAno(l.dataVenc,'Data de vencimento');if(e)errors.push(e);
+    const c=assertOpenPeriod(l.dataVenc,'Data de vencimento');if(c)errors.push(c);
+  }
+  if(l.dataPgto){
+    const e=validarAno(l.dataPgto,'Data de pagamento');if(e)errors.push(e);
+    const c=assertOpenPeriod(l.dataPgto,'Data de pagamento');if(c)errors.push(c);
+  }
+  if(isPendingStatus(l)&&!effectiveVenc(l))errors.push('Lancamento pendente precisa de data de vencimento.');
+  if(isRealizedStatus(l)&&!l.dataPgto)errors.push('Lancamento realizado precisa de data de pagamento/recebimento.');
+  if(l.status==='Pendente'&&l.dataPgto)warnings.push('Lancamento pendente possui data de pagamento preenchida.');
+  if(l.tipo==='R'&&l.status==='Pago')errors.push('Receita deve usar status Recebido, Pendente, Parcial ou Cancelado.');
+  if(l.tipo==='D'&&l.status==='Recebido')errors.push('Despesa deve usar status Pago, Pendente, Parcial ou Cancelado.');
+  if(!l.cat)errors.push('Categoria e obrigatoria.');
+  else if(typeof validateCatSub==='function'){
+    const ce=validateCatSub(l.tipo,l.cat,l.sub);if(ce)errors.push(ce);
+  }
+  if(!l.conta||!CONTAS.includes(l.conta))errors.push('Selecione uma conta bancaria cadastrada.');
+  if(bruto<=0)errors.push('Valor bruto invalido.');
+  if(ded<0)errors.push('Deducao nao pode ser negativa.');
+  if(ded>bruto)errors.push('Deducao nao pode ser maior que o valor bruto.');
+  if(liq<=0)errors.push('Valor liquido invalido.');
+  if(liq<0)errors.push('Valor liquido nao pode ser negativo.');
+  const calc=+(bruto-ded).toFixed(2);
+  if(bruto>0&&ded>=0&&Math.abs(calc-liq)>0.01)warnings.push(`Valor liquido (${fmt(liq)}) nao confere com bruto - deducoes (${fmt(calc)}).`);
+  if(!l.desc&&!opts.allowEmptyDesc)errors.push('Descricao e obrigatoria.');
+  if(isTransfer(l)&&!opts.allowTransferEdit)errors.push('Transferencias devem ser alteradas pelo fluxo de transferencia, nao como lancamento comum.');
+  return{errors,warnings,item:l};
+}
+function firstValidationError(result){
+  return result?.errors?.[0]||'Verifique os dados informados.';
+}
+function confirmValidationWarnings(result){
+  if(!result?.warnings?.length)return true;
+  return confirm('Atencao:\n\n'+result.warnings.join('\n')+'\n\nDeseja continuar mesmo assim?');
+}
+function findProbableDuplicateLancamento(item){
+  const val=parseMoney(item.valorLiq);
+  const desc=normText(item.desc);
+  if(!item.tipo||!item.dataComp||!desc||val<=0)return null;
+  return DATA.find(l=>
+    l.id!==item.id&&
+    !isTransfer(l)&&
+    l.status!=='Cancelado'&&
+    l.tipo===item.tipo&&
+    periodKeyFromDate(l.dataComp)===periodKeyFromDate(item.dataComp)&&
+    Math.abs(parseMoney(l.valorLiq)-val)<=0.01&&
+    normText(l.desc)===desc
+  )||null;
+}
+function confirmProbableDuplicate(item){
+  const dup=findProbableDuplicateLancamento(item);
+  if(!dup)return true;
+  return confirm(`Possivel lancamento duplicado encontrado:\n\n${dup.desc||dup.cat}\n${compDisplay(dup.dataComp)||dup.dataComp} - ${fmt(dup.valorLiq)}\n\nDeseja salvar mesmo assim?`);
+}
+function validateTransferPair(doc){
+  const rows=DATA.filter(l=>l.doc===doc);
+  const deb=rows.find(l=>l.tipo==='D'),cred=rows.find(l=>l.tipo==='R');
+  if(!doc||!isTransfer({doc}))return null;
+  if(rows.length!==2||!deb||!cred)return 'Transferencia incompleta: precisa ter uma saida e uma entrada.';
+  if(Math.abs(parseMoney(deb.valorLiq)-parseMoney(cred.valorLiq))>0.01)return 'Transferencia inconsistente: valores de saida e entrada nao conferem.';
+  if(deb.dataPgto!==cred.dataPgto)return 'Transferencia inconsistente: datas de saida e entrada nao conferem.';
+  if(deb.conta===cred.conta)return 'Transferencia inconsistente: origem e destino nao podem ser a mesma conta.';
+  return null;
+}
+function getRelatedDeleteIds(item){
+  if(!item)return[];
+  const ids=new Set([item.id]);
+  if(isTransfer(item))DATA.filter(x=>x.doc===item.doc).forEach(x=>ids.add(x.id));
+  DATA.filter(x=>x.parentId===item.id).forEach(x=>ids.add(x.id));
+  return[...ids];
+}
+function canDeleteLancamentos(items){
+  for(const item of items){
+    const compClosed=assertOpenPeriod(item.dataComp,'Competencia');
+    if(compClosed)return compClosed;
+    const vencClosed=assertOpenPeriod(item.dataVenc,'Data de vencimento');
+    if(vencClosed)return vencClosed;
+    const pgClosed=assertOpenPeriod(item.dataPgto,'Data de pagamento');
+    if(pgClosed)return pgClosed;
+    for(const b of getBaixas(item.id)){
+      const baixaClosed=assertOpenPeriod(b.dataPgto,'Data da baixa');
+      if(baixaClosed)return baixaClosed;
+    }
+  }
+  return null;
+}
+
+function setSyncStatus(state,msg){const dot=document.getElementById('sync-dot'),txt=document.getElementById('sync-txt');if(!dot)return;dot.className='sync-dot '+state;if(txt)txt.textContent=msg;}
 
 let DATA=[];
+let BAIXAS_DATA=[];
+let DATA_VERSION=0;
+let _cashMovementsCache=null;
+function touchFinanceData(){
+  DATA_VERSION++;
+  _cashMovementsCache=null;
+  if(typeof clearFinanceCalcCache==='function')clearFinanceCalcCache();
+}
 const newId=()=>crypto.randomUUID();
+function isTransfer(l){return !!(l?.doc||'').startsWith('TRANSF#');}
 
 // CATS é dinâmico — carregado do Supabase
 // Estrutura: {R: [{id, nome, ordem, subs:[{id,nome,ordem,slug}]}], D: [...]}
@@ -234,6 +425,7 @@ function rebuildCatsObj() {
       CATS[tipo][cat.nome] = (cat.subs||[]).sort((a,b)=>a.ordem-b.ordem).map(s=>s.nome);
     });
   });
+  if(typeof clearFinanceCalcCache==='function')clearFinanceCalcCache();
 }
 
 // Slugify: transforma nome de categoria em chave para DRE/Fluxo
@@ -286,4 +478,3 @@ function isRecFinCat(nome){
   if(r) return (r.slug||slugify(r.nome)).includes('financeira');
   return (nome||'').toLowerCase().includes('financeira');
 }
-

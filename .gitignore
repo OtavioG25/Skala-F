@@ -1,3 +1,6 @@
 *.xlsx
 *.pdf
 *_backup*.html
+.vscode/
+.claude/
+Backup Finan - *.html

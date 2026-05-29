@@ -11,12 +11,12 @@
 (function loadAppCss(){
   const isLocalServer = ['localhost', '127.0.0.1'].includes(location.hostname);
   const cssPath = location.protocol === 'file:' || isLocalServer
-    ? 'financeiro.css?v=2.5.99'
-    : '/Skala-F/financeiro.css?v=2.5.99';
+    ? 'financeiro.css?v=2.5.151'
+    : '/Skala-F/financeiro.css?v=2.5.151';
   document.write('<link rel="stylesheet" href="' + cssPath + '"/>');
 })();
 </script>
-<script src="https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.4/dist/chart.umd.min.js"></script>
 </head>
 <body>
 
@@ -38,24 +38,33 @@
 <div id="app">
   <aside id="sidebar">
     <div class="brand">
-      <img src="img/logo.png" alt="Skala Contabilidade" style="width:100%;max-width:140px;display:block;margin:0 auto 4px"/>
-      <div style="text-align:center"><div class="brand-sub" style="color:var(--tx3);font-size:10px;letter-spacing:.05em">Financeiro — Escritório <span id="app-ver"></span></div></div>
+      <img src="img/logo-icon.png" alt="Skala" class="brand-logo-icon"/>
+      <span id="app-ver" style="display:none"></span>
+      <button class="sb-toggle" id="sb-toggle" onclick="toggleSidebar()" title="Recolher menu">«</button>
     </div>
     <nav id="nav"></nav>
     <div class="sidebar-foot">
+      <div id="pf-options" class="pf-options">
+        <button onclick="openSettingsModal()"><span data-app-icon="settings"></span>Configurações</button>
+        <button onclick="doLogout()" class="pf-logout">→ Sair</button>
+      </div>
+      <div id="profile-area" class="profile-area" onclick="toggleProfileDropdown(event)">
+        <div class="pf-avatar" id="pf-avatar">?</div>
+        <div class="pf-info">
+          <div class="pf-name" id="pf-name">Carregando...</div>
+          <div class="pf-role" id="pf-role" style="display:none"></div>
+        </div>
+        <span class="pf-chevron" id="pf-chevron">▾</span>
+      </div>
       <div class="sync-status"><div class="sync-dot" id="sync-dot"></div><span id="sync-txt">Conectando...</span></div>
-      <button class="btn-exp" onclick="doLogout()" style="color:var(--red);border-color:rgba(248,81,73,.3)"><span data-app-icon="lock"></span>Sair</button>
-      <button class="btn-exp" onclick="exportExcel()"><span data-app-icon="download"></span>Exportar Excel</button>
-      <button class="btn-exp" onclick="document.getElementById('imp-fat-file').click()"><span data-app-icon="upload"></span>Importar Faturamento</button>
       <input type="file" id="imp-fat-file" accept=".csv,.xls,.xlsx" style="display:none" onchange="onImpFatChange(event)">
-      <button class="btn-exp" onclick="openBaixarRelModal()"><span data-app-icon="clipboard"></span>Baixar por Relatório</button>
     </div>
   </aside>
   <main id="main">
     <header class="topbar">
-      <div><h1 class="page-ttl" id="page-ttl">Dashboard</h1></div>
+      <div><h1 class="page-ttl" id="page-ttl">Dashboard</h1><p class="page-sub" id="page-sub"></p></div>
       <div class="topbar-r">
-        <div class="yr-sel"><select id="yr-sel" onchange="setYear(this.value)"></select></div>
+        <div class="yr-sel"><select id="yr-sel" onchange="setDashboardPeriod(this.value)"></select></div>
         <button class="btn btn-ghost" onclick="openTransfModal()" style="font-size:13px"><span data-app-icon="transfer"></span>Transferência</button>
         <button class="btn btn-pri" onclick="openForm()"><span data-app-icon="plus"></span>Novo Lançamento</button>
       </div>
@@ -75,12 +84,12 @@
     <div id="imp-body" style="padding:18px 22px"></div>
   </div>
 </div>
-<div class="overlay" id="overlay" style="display:none">
-  <div class="modal modal-lancamento"><div class="modal-hdr"><div style="display:flex;align-items:center;gap:10px"><h2 id="modal-ttl">Novo Lançamento</h2><span id="modal-seq" style="font-size:12px;font-weight:600;color:var(--tx2);background:var(--s2);border:1px solid var(--bd);border-radius:6px;padding:2px 8px;display:none"></span></div><button class="cls" onclick="closeForm()">✕</button></div><div class="fgrid" id="fgrid"></div><div class="fa modal-footer-btns" id="modal-footer"></div></div>
+<div class="overlay" id="overlay" style="display:none" onkeydown="if(event.ctrlKey&&event.key==='Enter'){event.preventDefault();saveForm();}" onclick="if(event.target===this)closeForm()">
+  <div class="modal modal-lancamento"><div class="modal-hdr"><div style="display:flex;align-items:center;gap:10px"><h2 id="modal-ttl">Novo Lançamento</h2><span id="modal-seq" style="font-size:12px;font-weight:600;color:var(--tx2);background:var(--s2);border:1px solid var(--bd);border-radius:6px;padding:2px 8px;display:none"></span></div><button class="cls" onclick="closeForm()">✕</button></div><div id="tipo-switch-wrap"></div><div id="draft-banner" style="display:none"></div><div class="fgrid" id="fgrid"></div><div class="fa modal-footer-btns" id="modal-footer"></div></div>
 </div>
 <div class="overlay" id="parcial-overlay" style="display:none" onclick="if(event.target===this)closeParcialModal()">
   <div class="modal" style="max-width:580px">
-    <div class="modal-hdr"><h2><span data-app-icon="wallet"></span>Pagamento Parcial</h2><button class="cls" onclick="closeParcialModal()">✕</button></div>
+    <div class="modal-hdr"><h2 id="baixa-modal-title"><span data-app-icon="wallet"></span>Receber/Pagar</h2><button class="cls" onclick="closeParcialModal()">✕</button></div>
     <div id="parcial-body" style="padding:18px 22px"></div>
   </div>
 </div>
@@ -90,18 +99,52 @@
     <div id="transf-body" style="padding:20px 24px"></div>
   </div>
 </div>
+<div class="overlay" id="cliente-overlay" style="display:none" onclick="if(event.target===this)closeClienteForm()">
+  <div class="modal" style="max-width:520px">
+    <div class="modal-hdr">
+      <h2 id="cliente-modal-ttl"><span data-app-icon="clipboard"></span>Novo Cliente</h2>
+      <button class="cls" onclick="closeClienteForm()">✕</button>
+    </div>
+    <div id="cliente-body" style="padding:18px 22px"></div>
+  </div>
+</div>
+<div class="overlay" id="settings-overlay" style="display:none" onclick="if(event.target===this)closeSettingsModal()">
+  <div class="modal" style="max-width:480px">
+    <div class="modal-hdr">
+      <h2><span data-app-icon="settings"></span>Configurações da Conta</h2>
+      <button class="cls" onclick="closeSettingsModal()">✕</button>
+    </div>
+    <div style="padding:22px 24px">
+      <div class="form-sec-hdr" style="grid-column:unset;margin-bottom:14px">PERFIL</div>
+      <div style="margin-bottom:10px"><label style="display:block;font-size:12px;font-weight:600;color:var(--tx2);margin-bottom:4px">Nome</label><input id="cfg-name" type="text" style="width:100%;box-sizing:border-box;padding:8px 10px" placeholder="Seu nome completo"></div>
+      <div style="margin-bottom:16px"><label style="display:block;font-size:12px;font-weight:600;color:var(--tx2);margin-bottom:4px">E-mail</label><input id="cfg-email" type="email" style="width:100%;box-sizing:border-box;padding:8px 10px" placeholder="seu@email.com"></div>
+      <button class="btn btn-pri" style="font-size:13px" onclick="saveProfile()">Salvar alterações</button>
+      <div class="form-sec-hdr" style="grid-column:unset;margin-top:28px;margin-bottom:14px">SEGURANÇA</div>
+      <div style="margin-bottom:10px"><label style="display:block;font-size:12px;font-weight:600;color:var(--tx2);margin-bottom:4px">Senha atual</label><input id="cfg-pass-cur" type="password" style="width:100%;box-sizing:border-box;padding:8px 10px" placeholder="••••••••"></div>
+      <div style="margin-bottom:10px"><label style="display:block;font-size:12px;font-weight:600;color:var(--tx2);margin-bottom:4px">Nova senha</label><input id="cfg-pass-new" type="password" style="width:100%;box-sizing:border-box;padding:8px 10px" placeholder="••••••••" oninput="checkPassMatch()"></div>
+      <div style="margin-bottom:6px"><label style="display:block;font-size:12px;font-weight:600;color:var(--tx2);margin-bottom:4px">Confirmar nova senha</label><input id="cfg-pass-conf" type="password" style="width:100%;box-sizing:border-box;padding:8px 10px" placeholder="••••••••" oninput="checkPassMatch()"></div>
+      <div id="cfg-pass-err" style="color:var(--red);font-size:12px;margin-bottom:12px;display:none"></div>
+      <button class="btn btn-ghost" style="font-size:13px" onclick="changePassword()">Alterar senha</button>
+    </div>
+    <div class="modal-footer-btns" style="padding:14px 24px;border-top:1px solid var(--bd);display:flex;justify-content:flex-end">
+      <button class="btn btn-ghost" onclick="closeSettingsModal()">Fechar</button>
+    </div>
+  </div>
+</div>
 <script>
 (function loadAppJs(){
   const isLocalServer = ['localhost', '127.0.0.1'].includes(location.hostname);
   const basePath = location.protocol === 'file:' || isLocalServer ? 'js/' : '/Skala-F/js/';
   [
+    '00-config.js',
     '01-core.js',
     '02-relatorios.js',
     '03-lancamentos.js',
     '04-cadastros.js',
-    '05-importacoes.js'
+    '05-importacoes.js',
+    '06-clientes.js'
   ].forEach(function(file){
-    document.write('<script src="' + basePath + file + '?v=2.5.99"><\/script>');
+    document.write('<script src="' + basePath + file + '?v=2.5.151"><\/script>');
   });
 })();
 </script>

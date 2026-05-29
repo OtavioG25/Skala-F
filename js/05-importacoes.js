@@ -1,7 +1,7 @@
 function _getFilteredLancamentos(){
   let filtered=DATA.filter(l=>{
-    if(currentTipoFilter){if(l.tipo!==currentTipoFilter||(l.doc||'').startsWith('TRANSF#'))return false;}
-    else if(filterTipos.size){const isT=(l.doc||'').startsWith('TRANSF#');if(!filterTipos.has(isT?'T':l.tipo))return false;}
+    if(currentTipoFilter){if(l.tipo!==currentTipoFilter||isTransfer(l))return false;}
+    else if(filterTipos.size){const isT=isTransfer(l);if(!filterTipos.has(isT?'T':l.tipo))return false;}
     if(filterStatuses.size){
       const match=[...filterStatuses].some(fs=>fs==='Realizado'?(l.tipo==='R'?l.status==='Recebido':l.tipo==='D'?l.status==='Pago':(l.status==='Recebido'||l.status==='Pago')):l.status===fs);
       if(!match)return false;
@@ -18,12 +18,27 @@ function _getFilteredLancamentos(){
   return sortData(filtered,sortLan.col,sortLan.dir);
 }
 
-function exportLancamentosExcel(){
+let _xlsxLoadPromise=null;
+function ensureXLSX(){
+  if(window.XLSX)return Promise.resolve(window.XLSX);
+  if(_xlsxLoadPromise)return _xlsxLoadPromise;
+  _xlsxLoadPromise=new Promise((resolve,reject)=>{
+    const s=document.createElement('script');
+    s.src='https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js';
+    s.onload=()=>window.XLSX?resolve(window.XLSX):reject(new Error('Biblioteca XLSX não ficou disponível.'));
+    s.onerror=()=>reject(new Error('Não foi possível carregar a biblioteca XLSX.'));
+    document.head.appendChild(s);
+  });
+  return _xlsxLoadPromise;
+}
+
+async function exportLancamentosExcel(){
+  await ensureXLSX();
   const rows=_getFilteredLancamentos();
-  const header=['Nº','Tipo','Data Pgto','Competência','Categoria','Subcategoria','Descrição','Conta','Valor Bruto','Dedução','Valor Líquido','Status'];
+  const header=['Nº','Tipo','Vencimento','Data Pgto','Competência','Categoria','Subcategoria','Descrição','Conta','Valor Bruto','Dedução','Valor Líquido','Status'];
   const data=[header,...rows.map(l=>{
-    const isTransf=(l.doc||'').startsWith('TRANSF#');
-    return[l.seq||'',isTransf?'Transferência':l.tipo==='R'?'Receita':'Despesa',l.dataPgto?dateBR(l.dataPgto):'',compDisplay(l.dataComp)||'',l.cat||'',l.sub||'',l.desc||'',l.conta||'',parseMoney(l.valorBruto),parseMoney(l.ded)||0,parseMoney(l.valorLiq),l.status||''];
+    const isTransf=isTransfer(l);
+    return[l.seq||'',isTransf?'Transferência':l.tipo==='R'?'Receita':'Despesa',effectiveVenc(l)?dateBR(effectiveVenc(l)):'',l.dataPgto?dateBR(l.dataPgto):'',compDisplay(l.dataComp)||'',l.cat||'',l.sub||'',l.desc||'',l.conta||'',parseMoney(l.valorBruto),parseMoney(l.ded)||0,titleAmount(l),computedStatus(l)||''];
   })];
   const ws=XLSX.utils.aoa_to_sheet(data);
   const wb=XLSX.utils.book_new();
@@ -32,12 +47,13 @@ function exportLancamentosExcel(){
   toast('Excel exportado!','ok');
 }
 
-function exportExtratoExcel(){
+async function exportExtratoExcel(){
+  await ensureXLSX();
   const{rows,saldoAntes}=calcExtrato();
   const header=['Data','Competência','Tipo','Categoria','Subcategoria','Descrição','Valor','Saldo'];
   const data=[header,['—','—','Saldo Anterior','Abertura','','Saldo anterior ao período','',saldoAntes],...rows.map(r=>{
-    const isTransf=(r.doc||'').startsWith('TRANSF#');
-    return[r.dataPgto?dateBR(r.dataPgto):'',compDisplay(r.dataComp)||'',isTransf?'Transferência':r.tipo==='R'?'Receita':'Despesa',r.cat||'',r.sub||'',r.desc||'',(r.tipo==='R'?1:-1)*parseMoney(r.valorLiq),r.saldo];
+    const isTransf=isTransfer(r);
+    return[(r.dataExtrato||r.dataPgto)?dateBR(r.dataExtrato||r.dataPgto):'',compDisplay(r.dataComp)||'',isTransf?'Transferência':r.tipo==='R'?'Receita':'Despesa',r.cat||'',r.sub||'',r.desc||'',(r.tipo==='R'?1:-1)*parseMoney(r.valorLiq),r.saldo];
   })];
   const ws=XLSX.utils.aoa_to_sheet(data);
   const wb=XLSX.utils.book_new();
@@ -47,7 +63,8 @@ function exportExtratoExcel(){
   toast('Excel exportado!','ok');
 }
 
-function exportDREExcel(){
+async function exportDREExcel(){
+  await ensureXLSX();
   const dre=calcDRE(YEAR);
   const recCats=getRecCats().filter(c=>!isExclDRE(c));
   const despCats=getDespCats().filter(c=>!isExclDRE(c));
@@ -82,7 +99,8 @@ function exportDREExcel(){
   toast('Excel exportado!','ok');
 }
 
-function exportFluxoExcel(){
+async function exportFluxoExcel(){
+  await ensureXLSX();
   const f=calcFluxo(YEAR);
   const recCats=getRecCats();
   const despCats=getDespCats();
@@ -111,7 +129,7 @@ function exportFluxoExcel(){
   }
   addSep('SALDOS');
   addRow('VARIAÇÃO TOTAL DE CAIXA','saldoOp');
-  const paidData=DATA.filter(l=>(l.status==='Pago'||l.status==='Recebido')&&l.dataPgto&&getY(l.dataPgto)===YEAR);
+  const paidData=cashMovements().filter(l=>l.dataPgto&&getY(l.dataPgto)===YEAR);
   const contaFlows={};
   paidData.forEach(l=>{const c=l.conta||'(Sem conta)';if(!contaFlows[c])contaFlows[c]=Array(12).fill(0);});
   paidData.filter(l=>(l.doc||'').startsWith('TRANSF#')&&(l.obs||'').startsWith('TRANSF_DEST:')).forEach(l=>{const dest=l.obs.slice(12);if(dest&&!contaFlows[dest])contaFlows[dest]=Array(12).fill(0);});
@@ -136,7 +154,7 @@ function exportFluxoExcel(){
 
 function exportExcel(){
   const dre=calcDRE(YEAR),fluxo=calcFluxo(YEAR),sheets=[];
-  sheets.push({name:'Lançamentos',rows:[['Data Comp.','Data Pgto','Tipo','Categoria','Subcategoria','Descrição','Forma Pgto','Conta','Nº Doc','Valor Bruto','Deduções','Valor Líquido','Status','Centro Custo','Obs'],...DATA.map(l=>[l.dataComp,l.dataPgto,l.tipo==='R'?'Receita':'Despesa',l.cat,l.sub,l.desc,l.forma,l.conta,l.doc,parseMoney(l.valorBruto),parseMoney(l.ded),parseMoney(l.valorLiq),l.status,l.cc,l.obs])]});
+  sheets.push({name:'Lançamentos',rows:[['Data Comp.','Data Venc.','Data Pgto','Tipo','Categoria','Subcategoria','Descrição','Forma Pgto','Conta','Nº Doc','Valor Bruto','Deduções','Valor Líquido','Status','Centro Custo','Obs'],...DATA.map(l=>[l.dataComp,effectiveVenc(l),l.dataPgto,l.tipo==='R'?'Receita':'Despesa',l.cat,l.sub,l.desc,l.forma,l.conta,l.doc,parseMoney(l.valorBruto),parseMoney(l.ded),titleAmount(l),computedStatus(l),l.cc,l.obs])]});
   const dreKeys=[['Receita Bruta','recBruta'],['Deduções','ded'],['Receita Líquida','recLiq'],['Pessoal','pessoal'],['Impostos e Taxas','impostos'],['Infraestrutura','infra'],['Tecnologia','tec'],['Marketing','mkt'],['Administrativo','admin'],['Total Despesas','totDesp'],['EBITDA','ebitda'],['Rec. Financeira','recFin'],['Desp. Financeira','despFin'],['LAIR','lair'],['Lucro Líquido','ll']];
   sheets.push({name:'DRE',rows:[['Descrição',...MONTHS,'Total'],...dreKeys.map(([l,k])=>[l,...dre.map(m=>m[k]),dre.reduce((s,m)=>s+m[k],0)])]});
   const fcKeys=[['Honorários','hon'],['Rec. Financeiras','recFin'],['Outras Entradas','outras'],['Total Entradas','entradas'],['Pessoal','pessoal'],['Impostos','impostos'],['Infraestrutura','infra'],['Tecnologia','tec'],['Marketing','mkt'],['Administrativo','admin'],['Financeiro','fin'],['Total Saídas','saidas'],['Saldo Operacional','saldoOp'],['Saldo Inicial','saldoIni'],['Saldo Final','saldoFin']];
@@ -154,21 +172,8 @@ function badge(status){const m={Pago:'bg',Recebido:'bg',Pendente:'by',Cancelado:
 async function toggleStatus(id){
   const l=DATA.find(d=>d.id===id);
   if(!l||l.status==='Cancelado')return;
-  // Parcial → abre edição para registrar complemento
-  if(l.status==='Parcial'){openEdit(id);return;}
-  const next=l.status==='Pendente'?(l.tipo==='R'?'Recebido':'Pago'):'Pendente';
-  try{
-    await dbUpdate({...l,status:next});
-    l.status=next;
-    // Atualiza badge in-place sem re-renderizar a tabela (evita scroll para o topo)
-    const row=document.getElementById(`lan-row-${id}`);
-    if(row){
-      const span=row.querySelector('td span[onclick]');
-      if(span){span.outerHTML=`<span onclick="toggleStatus('${id}')" style="cursor:pointer" title="Clique para alternar status">${badge(next)}</span>`;}
-    }
-    buildNav();
-    renderSaldoCards();
-  }catch(e){toast('Erro ao atualizar status: '+e.message,'err');}
+  if(openAmount(l)>0.005){openBaixaModal(id);return;}
+  openEdit(id);
 }
 let toastTimeout;
 function toast(msg,type='ok'){clearTimeout(toastTimeout);const existing=document.getElementById('toast-el');if(existing)existing.remove();const el=document.createElement('div');el.id='toast-el';el.className=`toast ${type}`;el.textContent=msg;document.body.appendChild(el);toastTimeout=setTimeout(()=>el.remove(),2800);}
@@ -177,10 +182,12 @@ function _saveSession(d){
   localStorage.setItem('sb_token',d.access_token);
   localStorage.setItem('sb_refresh',d.refresh_token);
   localStorage.setItem('sb_expires',Date.now()+d.expires_in*1000);
+  if(d.user){localStorage.setItem('sb_user',JSON.stringify({email:d.user.email||'',name:d.user.user_metadata?.full_name||d.user.email||'',role:d.user.user_metadata?.role||d.user.user_metadata?.cargo||''}));}
 }
 function _clearSession(){
-  ['sb_token','sb_refresh','sb_expires'].forEach(k=>localStorage.removeItem(k));
+  ['sb_token','sb_refresh','sb_expires','sb_user'].forEach(k=>localStorage.removeItem(k));
 }
+function _getUserData(){try{return JSON.parse(localStorage.getItem('sb_user')||'{}');}catch{return{};} }
 function _showLogin(){document.getElementById('login-screen').style.display='flex';}
 function _hideLogin(){document.getElementById('login-screen').style.display='none';}
 
@@ -242,6 +249,12 @@ async function startApp(){
   if(Date.now()>expires-60000){
     const ok=await _refreshToken();
     if(!ok){_showLogin();return;}
+  }
+  if(!localStorage.getItem('sb_user')){
+    try{
+      const res=await fetch(`${SUPABASE_URL}/auth/v1/user`,{headers:{'apikey':SUPABASE_KEY,'Authorization':`Bearer ${localStorage.getItem('sb_token')}`}});
+      if(res.ok){const u=await res.json();localStorage.setItem('sb_user',JSON.stringify({email:u.email||'',name:u.user_metadata?.full_name||u.email||'',role:u.user_metadata?.role||u.user_metadata?.cargo||''}));}
+    }catch{}
   }
   _hideLogin();
   init();
@@ -326,8 +339,9 @@ function onImpFatChange(event){
     };
     reader.readAsText(file,'UTF-8');
   }else{
-    reader.onload=e=>{
+    reader.onload=async e=>{
       try{
+        await ensureXLSX();
         const wb=readWorkbookCompat(e.target.result);
         const result=parseFaturamentoXLS(wb);
         showImpModal(result);
@@ -418,6 +432,7 @@ function parseFaturamentoCSV(text){
     evento:r.evento||String(idx+1),
     codigo:r.codigo||'',
     nome:r.nome||'',
+    cpfCnpj:r.cnpj||r.cpf||r.cpf_cnpj||r.cpfcnpj||'',
     valorLiq:parseMoney(r.valor_liq)||Math.max(0,parseMoney(r.valor_bruto)-parseMoney(r.desconto)-parseMoney(r.retencoes)),
     valorBruto:parseMoney(r.valor_bruto),
     desconto:parseMoney(r.desconto),
@@ -490,8 +505,15 @@ function parseFaturamentoXLS(wb){
     const codigoIdx=parts.findIndex(p=>/^\d+$/.test(p));
     const codigo=codigoIdx>=0?parts[codigoIdx]:'';
     const nome=parts.filter((_,idx)=>idx!==codigoIdx).join(' ').trim();
+    let cpfCnpj='';
+    if(cnpjIdx>=0){
+      for(let j=cnpjIdx+1;j<row.length;j++){
+        const v=normCell(row[j]);
+        if(v&&/\d/.test(v)){cpfCnpj=v;break;}
+      }
+    }
     const vlIdx=findLike(row,/^valor\s*l[íi]quido:?$/i);
-    return {codigo,nome,valorLiq:vlIdx>=0?parseMoney(findNextValue(row,vlIdx)):0};
+    return {codigo,nome,cpfCnpj,valorLiq:vlIdx>=0?parseMoney(findNextValue(row,vlIdx)):0};
   };
 
   // Competência: busca nas primeiras 6 linhas
@@ -516,7 +538,7 @@ function parseFaturamentoXLS(wb){
       const nome=parsedCliente.nome;
       // valor líquido: busca "Valor líquido:" na mesma linha
       const valorLiq=parsedCliente.valorLiq;
-      const cliente={codigo,nome,valorLiq,eventos:[],vencimento:''};
+      const cliente={codigo,nome,cpfCnpj:parsedCliente.cpfCnpj||'',valorLiq,eventos:[],vencimento:''};
       i++;
       // pula linha de cabeçalho dos eventos
       let eventIdx=1, descIdx=2, valorIdx=9, descontoIdx=17, retIdx=31;
@@ -580,7 +602,7 @@ const IMP_COLS=[
   {id:'servico',lbl:'Descrição',      sort:'servico', w:160,min:80},
   {id:'cat',    lbl:'Categoria',     sort:'cat',     w:150,min:100},
   {id:'sub',    lbl:'Subcategoria',  sort:'sub',     w:150,min:100},
-  {id:'data',   lbl:'Data Pagto',    sort:'data',    w:120,min:90},
+  {id:'data',   lbl:'Vencimento',    sort:'data',    w:120,min:90},
   {id:'valor',  lbl:'Líquido',       sort:'valor',   w:100,min:80},
 ];
 let impColWidths=(()=>{try{const s=localStorage.getItem(IMP_COL_WIDTHS_KEY);if(s){const p=JSON.parse(s);const o={};IMP_COLS.forEach(c=>{o[c.id]=p[c.id]||c.w;});return o;}}catch(e){}const o={};IMP_COLS.forEach(c=>o[c.id]=c.w);return o;})();
@@ -589,19 +611,28 @@ function saveImpColWidths(){try{localStorage.setItem(IMP_COL_WIDTHS_KEY,JSON.str
 const IMP_SORT={col:'',dir:'asc'};
 const IMP_INP_BASE='font-size:11px;width:100%;background:var(--s2);color:var(--tx);color-scheme:dark;border:1px solid var(--bd);border-radius:5px;padding:2px 5px;box-sizing:border-box';
 
+function _impClienteStatus(entry){
+  const codigo=String(entry.cc||'').trim();
+  if(!codigo)return {icon:'⚠️',title:'Sem código — não será vinculado'};
+  const existing=(typeof _matchClienteByCodigo==='function')?_matchClienteByCodigo(codigo):null;
+  if(existing)return {icon:'✅',title:`Vinculado a: ${existing.nome}`};
+  if(!String(entry.desc||'').trim())return {icon:'⚠️',title:'Sem nome — não será criado'};
+  return {icon:'🆕',title:'Será cadastrado automaticamente'};
+}
 function buildImpRows(){
   return IMP_ENTRIES.map((e,idx)=>{
     const catOpts=Object.keys(CATS['R']).map(c=>`<option value="${esc(c)}"${c===e.cat?' selected':''}>${esc(c)}</option>`).join('');
     const subOpts=(CATS['R'][e.cat]||[]).map(s=>`<option value="${esc(s)}"${s===e.sub?' selected':''}>${esc(s)}</option>`).join('');
     const warnSub=!e.sub?';border-color:var(--orange)':'';
-    const warnDt=!e.dataPgto?';border-color:var(--orange)':'';
+    const warnDt=!e.dataVenc?';border-color:var(--orange)':'';
     const sel=IMP_SELECTED.has(idx);
+    const cliSt=_impClienteStatus(e);
     return `
     <tr class="lr" style="${sel?'background:color-mix(in srgb,var(--blue) 10%,transparent)':''}">
       <td style="width:32px;text-align:center;padding:4px 2px;border-bottom:1px solid var(--bd)">
         <input type="checkbox" ${sel?'checked':''} onchange="impToggleRow(${idx},this.checked)">
       </td>
-      <td class="ct" style="overflow:hidden;text-overflow:ellipsis;white-space:nowrap;font-size:12px">${esc(e.desc)}</td>
+      <td class="ct" style="overflow:hidden;text-overflow:ellipsis;white-space:nowrap;font-size:12px"><span title="${esc(cliSt.title)}" style="margin-right:6px">${cliSt.icon}</span>${esc(e.desc)}</td>
       <td style="font-size:12px;color:var(--tx2);overflow:hidden;text-overflow:ellipsis;white-space:nowrap">${esc((e.obs||'').replace(/^Servico:\s*/,'')||'—')}</td>
       <td style="padding:4px 8px;overflow:hidden">
         <select style="${IMP_INP_BASE}" onchange="impEditEntry(${idx},'cat',this.value)">${catOpts}</select>
@@ -612,7 +643,7 @@ function buildImpRows(){
         </select>
       </td>
       <td style="padding:4px 8px;overflow:hidden">
-        <input type="date" id="imp-dt-${idx}" value="${e.dataPgto||''}" style="${IMP_INP_BASE}${warnDt}" onchange="impEditEntry(${idx},'dataPgto',this.value)">
+        <input type="date" id="imp-dt-${idx}" value="${e.dataVenc||''}" style="${IMP_INP_BASE}${warnDt}" onchange="impEditEntry(${idx},'dataVenc',this.value)">
       </td>
       <td style="text-align:right;font-weight:600;color:var(--teal);font-size:12px;white-space:nowrap">${fmt(e.valorLiq)}</td>
     </tr>`;
@@ -660,7 +691,7 @@ function impApplyBulk(){
   IMP_SELECTED.forEach(idx=>{
     if(cat){IMP_ENTRIES[idx].cat=cat;if(sub)IMP_ENTRIES[idx].sub=sub;else IMP_ENTRIES[idx].sub='';}
     else if(sub){IMP_ENTRIES[idx].sub=sub;}
-    if(date)IMP_ENTRIES[idx].dataPgto=date;
+    if(date)IMP_ENTRIES[idx].dataVenc=date;
   });
   const tbody=document.querySelector('.imp-tbl tbody');
   if(tbody)tbody.innerHTML=buildImpRows();
@@ -684,7 +715,7 @@ function sortImpCol(col){
     else if(col==='servico'){va=(a.obs||'').replace(/^Servico:\s*/,'');vb=(b.obs||'').replace(/^Servico:\s*/,'');}
     else if(col==='cat'){va=a.cat||'';vb=b.cat||'';}
     else if(col==='sub'){va=a.sub||'';vb=b.sub||'';}
-    else if(col==='data'){va=a.dataPgto||'';vb=b.dataPgto||'';}
+    else if(col==='data'){va=a.dataVenc||'';vb=b.dataVenc||'';}
     else if(col==='valor'){return(parseMoney(a.valorLiq)-parseMoney(b.valorLiq))*dir;}
     else return 0;
     return va.localeCompare(vb,'pt-BR')*dir;
@@ -730,7 +761,7 @@ function impEditEntry(idx, field, value) {
     const el = document.getElementById(`imp-sub-${idx}`);
     if (el) el.style.borderColor = value ? '' : 'var(--orange)';
   }
-  if (field === 'dataPgto') {
+  if (field === 'dataVenc') {
     const el = document.getElementById(`imp-dt-${idx}`);
     if (el) el.style.borderColor = value ? '' : 'var(--orange)';
   }
@@ -759,8 +790,8 @@ function showImpModal({dataComp,clientes}){
         const {cat:detCat,sub:detSub}=detectCatAndSub(descs,recCats,defaultRecCat);
         const eventoId=ev.evento||String(idx+1).padStart(2,'0');
         return{
-          tipo:'R',dataComp,dataPgto:parseDateBR(c.vencimento),
-          desc:c.nome,sub:detSub,cc:c.codigo,
+          tipo:'R',dataComp,dataVenc:parseDateBR(c.vencimento),dataPgto:'',
+          desc:c.nome,sub:detSub,cc:c.codigo,cpfCnpj:c.cpfCnpj||'',
           doc:`FAT-${dataComp.slice(0,7)}-${c.codigo}-${eventoId}`,
           valorBruto,ded:totalDed,valorLiq,
           cat:detCat,forma:'Boleto',conta:'Dominio Conta Digital',status:'Pendente',
@@ -776,8 +807,8 @@ function showImpModal({dataComp,clientes}){
     const {cat:detCat,sub:detSub}=detectCatAndSub(descs,recCats,defaultRecCat);
 
     return{
-      tipo:'R',dataComp,dataPgto:parseDateBR(c.vencimento),
-      desc:c.nome,sub:detSub,cc:c.codigo,
+      tipo:'R',dataComp,dataVenc:parseDateBR(c.vencimento),dataPgto:'',
+      desc:c.nome,sub:detSub,cc:c.codigo,cpfCnpj:c.cpfCnpj||'',
       doc:`FAT-${dataComp.slice(0,7)}-${c.codigo}${eventoId?`-${eventoId}`:''}`,
       valorBruto:totalBruto,ded:totalDed,valorLiq:parseMoney(c.valorLiq),
       cat:detCat,forma:'Boleto',conta:'Caixa',status:'Pendente',
@@ -813,7 +844,7 @@ function showImpModal({dataComp,clientes}){
       <select id="imp-bulk-sub" style="${IMP_INP_BASE};width:160px">
         <option value="">— subcategoria —</option>
       </select>
-      <input type="date" id="imp-bulk-date" style="${IMP_INP_BASE};width:130px" placeholder="Data pagto">
+      <input type="date" id="imp-bulk-date" style="${IMP_INP_BASE};width:130px" placeholder="Vencimento">
       <button class="btn btn-pri" style="font-size:11px;padding:4px 12px" onclick="impApplyBulk()">Aplicar</button>
       <button class="btn btn-ghost" style="font-size:11px;padding:4px 10px" onclick="impClearSelection()">Limpar seleção</button>
     </div>
@@ -851,31 +882,92 @@ function closeImpModal(){
   IMP_SELECTED=new Set();
 }
 
+function _matchClienteByCodigo(codigo){
+  if(!codigo)return null;
+  const c=String(codigo).trim();
+  if(!c)return null;
+  let m=CLIENTES.find(x=>String(x.codigo||'').trim()===c);
+  if(m)return m;
+  const stripped=c.replace(/^0+/,'');
+  if(stripped&&stripped!==c){
+    m=CLIENTES.find(x=>String(x.codigo||'').trim().replace(/^0+/,'')===stripped);
+    if(m)return m;
+  }
+  return null;
+}
+async function _resolveClienteIdForEntry(entry,localCache){
+  const codigo=String(entry.cc||'').trim();
+  if(!codigo)return null;
+  if(localCache.has(codigo))return localCache.get(codigo);
+  const cpfCnpj=entry.cpfCnpj?maskCpfCnpj(entry.cpfCnpj):'';
+  const nome=String(entry.desc||'').trim();
+  const existing=_matchClienteByCodigo(codigo);
+  if(existing){
+    if(!existing.cpfCnpj&&cpfCnpj){
+      try{
+        await dbUpdateCliente({...existing,cpfCnpj});
+        existing.cpfCnpj=cpfCnpj;
+        existing.tipo=clienteTipoFromDoc(cpfCnpj);
+      }catch(e){console.warn('Falha ao preencher CPF/CNPJ retroativo',codigo,e);}
+    }
+    localCache.set(codigo,existing.id);
+    return existing.id;
+  }
+  if(!nome)return null;
+  try{
+    const novo={
+      id:newId(),
+      codigo,
+      nome,
+      cpfCnpj,
+      recorrente:true,
+      recorrenteDesde:new Date().toISOString().slice(0,10)
+    };
+    await dbInsertCliente(novo);
+    const inMem={...novo,tipo:clienteTipoFromDoc(cpfCnpj),createdAt:new Date().toISOString()};
+    CLIENTES.push(inMem);
+    localCache.set(codigo,novo.id);
+    return novo.id;
+  }catch(e){
+    console.warn('Falha ao criar cliente automaticamente',codigo,nome,e);
+    return null;
+  }
+}
+
 async function confirmarImport(){
   const forma=document.getElementById('imp-forma')?.value||'Boleto';
   const skipDup=document.getElementById('imp-skip-dup')?.checked;
 
   const entries=[...IMP_ENTRIES];
+  for(const entry of entries){
+    const validation=validateLancamentoCore({...entry,forma});
+    if(validation.errors.length){toast(`${entry.desc||'Linha importada'}: ${firstValidationError(validation)}`,'err');return;}
+  }
   closeImpModal();
   setSyncStatus('loading','Importando...');
 
   let inserted=0,skipped=0,errors=0;
+  const clienteCache=new Map();
+  const clientesAntes=CLIENTES.length;
   for(const entry of entries){
     try{
       if(skipDup&&DATA.some(d=>d.doc===entry.doc)){skipped++;continue;}
       const id=newId();
-      const item={...entry,id,forma};
+      const clienteId=await _resolveClienteIdForEntry(entry,clienteCache);
+      const item={...entry,id,forma,clienteId:clienteId||''};
       const saved=await dbInsert(item);
       DATA.unshift(fromRow({...toRow(item),id:saved?.id||id}));
       inserted++;
-    }catch(e){errors++;}
+    }catch(e){errors++;console.error('Erro ao importar linha',entry?.desc,e);}
   }
+  const createdClientes=CLIENTES.length-clientesAntes;
 
   setSyncStatus('ok',`${DATA.length} registros`);
   render();
   let msg=`${inserted} registro(s) importado(s)`;
   if(skipped)msg+=`, ${skipped} ignorado(s)`;
   if(errors)msg+=`, ${errors} erro(s)`;
+  if(createdClientes)msg+=` · ${createdClientes} cliente(s) cadastrado(s)`;
   toast(msg,inserted>0?'ok':'err');
 }
 
@@ -928,6 +1020,7 @@ async function onRelChange(event){
   const div=document.getElementById('rel-result');
   div.innerHTML=`<div style="color:var(--tx2);padding:10px 0">⏳ Lendo arquivo...</div>`;
   try{
+    await ensureXLSX();
     const buf=await file.arrayBuffer();
     const wb=XLSX.read(buf,{type:'array'});
     const entries=parseRelatorioXLSX(wb);
@@ -1033,15 +1126,16 @@ function parseRelatorioXLSX(wb){
 
 function _scoreEntry(rel,p,looseVal){
   // REGRAS MÁXIMAS — se falhar qualquer uma: sem match
-  const venMonthOk=!!(rel.vencimento&&p.dataPgto&&rel.vencimento.slice(0,7)===p.dataPgto.slice(0,7));
+  const pVenc=effectiveVenc(p);
+  const venMonthOk=!!(rel.vencimento&&pVenc&&rel.vencimento.slice(0,7)===pVenc.slice(0,7));
   if(!venMonthOk)return null; // mês de vencimento obrigatório
   // Nome deve ser idêntico (ambos vêm do Domínio — variações indicam clientes diferentes)
   const normDesc=_normName(p.desc||'');
   const nameExact=rel.nameCandidates.some(c=>_normName(c)===normDesc);
   if(!nameExact)return null;
   const ns=1;
-  const venExact=rel.vencimento===p.dataPgto;
-  const pVal=Number(p.valorLiq)||Number(p.valorBruto)||0;
+  const venExact=rel.vencimento===pVenc;
+  const pVal=openAmount(p)||titleAmount(p);
   const relBase=rel.valorRec-rel.juros;
   const diff=pVal>0?Math.abs(pVal-relBase)/pVal:1;
   // Em modo estrito (1ª passagem): ignora se valor difere >10%
@@ -1056,7 +1150,7 @@ function _scoreEntry(rel,p,looseVal){
 }
 
 function matchRelatorio(relEntries){
-  const pending=DATA.filter(d=>d.tipo==='R'&&d.status==='Pendente');
+  const pending=DATA.filter(d=>d.tipo==='R'&&openAmount(d)>0.005);
   const matched=[],uncertain=[],notFound=[];
   const usedIds=new Set();
   const unmatchedRel=[]; // rel entries sem match de valor na 1ª passagem
@@ -1068,7 +1162,7 @@ function matchRelatorio(relEntries){
       if(usedIds.has(p.id))continue;
       const r=_scoreEntry(rel,p,false);
       if(!r)continue; // mês/nome/valor falharam
-      if(r.score>bestScore){bestScore=r.score;best=p;bestVenExact=(rel.vencimento===p.dataPgto);}
+      if(r.score>bestScore){bestScore=r.score;best=p;bestVenExact=(rel.vencimento===effectiveVenc(p));}
     }
     if(!best||bestScore<2){
       unmatchedRel.push(rel); // tenta na 2ª passagem
@@ -1165,15 +1259,15 @@ function _relManualPanel(type,idx){
   ].filter(Boolean));
   const filter=_normName(REL_MANUAL_OPEN?.filter||'');
   const fmtD=iso=>iso?iso.split('-').reverse().join('/'):'?';
-  const pending=DATA.filter(d=>d.tipo==='R'&&d.status==='Pendente'&&!usedIds.has(d.id));
-  const filtered=filter?pending.filter(p=>_normName(p.desc||'').includes(filter)||(p.dataPgto||'').includes(REL_MANUAL_OPEN?.filter||'')):pending;
+  const pending=DATA.filter(d=>d.tipo==='R'&&openAmount(d)>0.005&&!usedIds.has(d.id));
+  const filtered=filter?pending.filter(p=>_normName(p.desc||'').includes(filter)||effectiveVenc(p).includes(REL_MANUAL_OPEN?.filter||'')):pending;
   const rows=filtered.slice(0,40).map(p=>`
     <div onclick="relSetManual('${p.id}')" style="padding:7px 10px;cursor:pointer;border-bottom:1px solid var(--br);display:grid;grid-template-columns:1fr auto;gap:8px;align-items:center" onmouseenter="this.style.background='var(--s3)'" onmouseleave="this.style.background=''">
       <div>
         <div style="font-size:12.5px;font-weight:600;color:var(--tx)">${p.desc||'?'}</div>
-        <div style="font-size:11px;color:var(--tx2)">Venc: ${fmtD(p.dataPgto)} | Comp: ${(p.dataComp||'').slice(0,7)} | ${p.cat||''}${p.sub?` > ${p.sub}`:''}</div>
+        <div style="font-size:11px;color:var(--tx2)">Venc: ${fmtD(effectiveVenc(p))} | Comp: ${(p.dataComp||'').slice(0,7)} | ${p.cat||''}${p.sub?` > ${p.sub}`:''}</div>
       </div>
-      <div style="font-size:13px;font-weight:700;color:var(--teal);white-space:nowrap">${fmt(Number(p.valorLiq)||0)}</div>
+      <div style="font-size:13px;font-weight:700;color:var(--teal);white-space:nowrap">${fmt(openAmount(p))}</div>
     </div>`).join('');
   return`<div style="margin-top:6px;border:1px solid var(--blue);border-radius:7px;overflow:hidden">
     <div style="background:color-mix(in srgb,var(--blue) 12%,transparent);padding:7px 10px;display:flex;align-items:center;gap:8px">
@@ -1206,8 +1300,9 @@ function renderRelPreview(){
 
   const mkRows=(list,type)=>list.map((item,i)=>{
     const{rel,match,selected,manualSet}=item;
-    const venMismatch=match&&rel.vencimento&&match.dataPgto&&rel.vencimento.slice(0,7)!==match.dataPgto.slice(0,7);
-    const pVal=Number(match?.valorLiq)||0;const relBase=rel.valorRec-rel.juros;
+    const matchVenc=match?effectiveVenc(match):'';
+    const venMismatch=match&&rel.vencimento&&matchVenc&&rel.vencimento.slice(0,7)!==matchVenc.slice(0,7);
+    const pVal=match?openAmount(match):0;const relBase=rel.valorRec-rel.juros;
     const valMismatch=match&&pVal>0&&Math.abs(pVal-relBase)/pVal>0.05;
     // Pagamento parcial: cliente pagou menos que o lançamento
     const isPartial=match&&pVal>0&&relBase>0&&relBase<pVal*0.95;
@@ -1215,7 +1310,7 @@ function renderRelPreview(){
     const jurosTag=rel.juros>0?`<span style="font-size:10px;background:color-mix(in srgb,var(--orange) 18%,transparent);color:var(--orange);padding:1px 6px;border-radius:10px;margin-left:5px">+${fmt(rel.juros)} juros</span>`:'';
     const descLine=rel.desc&&rel.desc!==rel.clientName?`<div style="font-size:11.5px;color:var(--tx2);margin-top:1px">${rel.desc}</div>`:'';
     const partialNote=isPartial?`<div style="margin-top:4px;padding:4px 8px;border-radius:4px;background:color-mix(in srgb,var(--orange) 12%,transparent);font-size:11px;color:var(--orange)">
-      Pagamento parcial: <b>${fmt(relBase)}</b> recebido de <b>${fmt(pVal)}</b> — sera criado novo lancamento pendente de <b>${fmt(restante)}</b>
+      Pagamento parcial: <b>${fmt(relBase)}</b> recebido de <b>${fmt(pVal)}</b> em aberto
     </div>`:'';
     const relBlock=`<div style="border-radius:5px;padding:5px 8px;margin-bottom:3px;background:color-mix(in srgb,var(--blue) 7%,transparent);border-left:2px solid var(--blue)">
       <div style="font-size:9.5px;font-weight:700;color:var(--blue);letter-spacing:.4px;margin-bottom:2px">RELATORIO DOMINIO</div>
@@ -1227,7 +1322,7 @@ function renderRelPreview(){
     const sysBlock=match?`<div style="border-radius:5px;padding:5px 8px;background:color-mix(in srgb,var(--teal) 7%,transparent);border-left:2px solid var(--teal)">
       <div style="font-size:9.5px;font-weight:700;color:var(--teal);letter-spacing:.4px;margin-bottom:2px">LANCAMENTO NO SISTEMA</div>
       <div style="font-size:12.5px;color:var(--tx)">${match.desc||'?'}</div>
-      <div style="font-size:11px;color:var(--tx2);margin-top:1px">Comp: <b>${(match.dataComp||'').slice(0,7)||'?'}</b> | Venc: <b style="${venMismatch?'color:var(--red)':''}">${fmtD(match.dataPgto)}</b> | Valor: <b style="${valMismatch?'color:var(--orange)':''}">${fmt(Number(match.valorLiq)||0)}</b> | ${match.cat||''}${match.sub?` > ${match.sub}`:''}</div>
+      <div style="font-size:11px;color:var(--tx2);margin-top:1px">Comp: <b>${(match.dataComp||'').slice(0,7)||'?'}</b> | Venc: <b style="${venMismatch?'color:var(--red)':''}">${fmtD(matchVenc)}</b> | Aberto: <b style="${valMismatch?'color:var(--orange)':''}">${fmt(openAmount(match))}</b> | ${match.cat||''}${match.sub?` > ${match.sub}`:''}</div>
     </div>`
     :`<div style="border-radius:5px;padding:5px 8px;background:color-mix(in srgb,var(--red) 7%,transparent);border-left:2px solid var(--red)">
       <div style="font-size:9.5px;font-weight:700;color:var(--red);margin-bottom:2px">SISTEMA</div>
@@ -1345,31 +1440,40 @@ async function confirmarBaixarRel(){
     const{rel,match}=item;
     try{
       const valorBase=rel.valorRec-rel.juros;
-      const pValOrig=Number(match.valorLiq)||Number(match.valorBruto)||0;
-      const isPartial=valorBase>0&&pValOrig>0&&valorBase<pValOrig*0.95;
-      const novoStatus=isPartial?'Parcial':(match.tipo==='R'?'Recebido':'Pago');
-      const updated={...match,
-        status:novoStatus,
-        dataPgto:rel.dataRec,
-        valorBruto:pValOrig,                                       // mantém total original
-        valorLiq:valorBase>0?valorBase:(Number(match.valorLiq)||rel.valorRec), // apenas o que entrou
-        conta,
-        obs:isPartial?`[Parcial ${rel.dataRec}: ${fmt(valorBase)} de ${fmt(pValOrig)}]`:(match.obs||'')
-      };
-      await dbUpdate(updated);
-      const di=DATA.findIndex(d=>d.id===match.id);
-      if(di>=0)DATA[di]={...DATA[di],...updated};
+      const saldo=openAmount(match);
+      if(valorBase<=0)throw new Error('Valor recebido invalido.');
+      if(valorBase>saldo+0.01)throw new Error(`Valor recebido (${fmt(valorBase)}) excede o saldo em aberto (${fmt(saldo)}).`);
+      // Vinculação retroativa ao cliente (item #51)
+      let cliVinc=null;
+      if(!match.clienteId&&rel.cod){
+        cliVinc=_matchClienteByCodigo(rel.cod);
+        if(cliVinc){
+          try{
+            await sbFetch('PATCH',`lancamentos?id=eq.${match.id}`,{cliente_id:cliVinc.id});
+            match.clienteId=cliVinc.id;
+            const inData=DATA.find(d=>d.id===match.id);
+            if(inData)inData.clienteId=cliVinc.id;
+          }catch(e){
+            console.warn('Falha ao vincular cliente ao lançamento',match.id,rel.cod,e);
+            cliVinc=null;
+          }
+        }
+      }
+      await registerBaixa(match,{valor:valorBase,dataPgto:rel.dataRec,conta,forma:match.forma||'PIX',origem:'importacao',obs:`Relatorio Dominio - ${rel.clientName||match.desc||''}`});
       if(rel.juros>0){
         const jEntry={
-          tipo:'R',dataComp:rel.competencia||rel.dataRec,dataPgto:rel.dataRec,
+          tipo:'R',dataComp:rel.competencia||rel.dataRec,dataVenc:rel.vencimento||rel.dataRec,dataPgto:rel.dataRec,
           desc:`Juros/Multa - ${match.desc||rel.clientName}`,
           cat:jCat,sub:jSub,
+          clienteId:match.clienteId||'',
           valorBruto:rel.juros,ded:0,valorLiq:rel.juros,
-          forma:match.forma||'PIX',conta,status:'Recebido',
+          forma:match.forma||'PIX',conta,status:'Pendente',
           obs:`Ref.: ${match.desc||rel.clientName} - venc. ${rel.vencimento||''}`
         };
         const saved=await dbInsert(jEntry);
-        if(saved){DATA.unshift(fromRow({...toRow(jEntry),id:saved.id||('j-'+Date.now())}));}
+        const jurosLanc=saved?fromRow(saved):{...jEntry,id:jEntry.id||newId()};
+        DATA.unshift(jurosLanc);
+        await registerBaixa(jurosLanc,{valor:rel.juros,dataPgto:rel.dataRec,conta,forma:match.forma||'PIX',origem:'importacao',obs:'Juros do relatorio de recebimentos'});
       }
       ok++;
     }catch(e){err++;console.error('Erro ao baixar:',e);}
@@ -1380,4 +1484,92 @@ async function confirmarBaixarRel(){
   render();
   toast(`${ok} recebimento(s) baixado(s)${err?`, ${err} erro(s)`:''}`,ok>0?'ok':'err');
   closeBaixarRelModal();
+}
+
+// ─── PERFIL E CONFIGURAÇÕES (#41) ─────────────────────────────────────────
+
+function toggleProfileDropdown(e){
+  e.stopPropagation();
+  const dd=document.getElementById('pf-options');
+  if(!dd)return;
+  const isOpen=dd.classList.contains('open');
+  dd.classList.toggle('open',!isOpen);
+  document.getElementById('pf-chevron')?.classList.toggle('open',!isOpen);
+}
+
+function openSettingsModal(){
+  document.getElementById('pf-options')?.classList.remove('open');
+  document.getElementById('pf-chevron')?.classList.remove('open');
+  const u=_getUserData();
+  document.getElementById('cfg-name').value=u.name||'';
+  document.getElementById('cfg-email').value=u.email||'';
+  document.getElementById('cfg-pass-cur').value='';
+  document.getElementById('cfg-pass-new').value='';
+  document.getElementById('cfg-pass-conf').value='';
+  document.getElementById('cfg-pass-err').style.display='none';
+  document.getElementById('settings-overlay').style.display='flex';
+}
+
+function closeSettingsModal(){
+  document.getElementById('settings-overlay').style.display='none';
+}
+
+function checkPassMatch(){
+  const np=document.getElementById('cfg-pass-new').value;
+  const cp=document.getElementById('cfg-pass-conf').value;
+  const err=document.getElementById('cfg-pass-err');
+  if(cp&&np!==cp){err.textContent='As senhas não coincidem.';err.style.display='block';}
+  else{err.style.display='none';}
+}
+
+async function saveProfile(){
+  const name=document.getElementById('cfg-name').value.trim();
+  const email=document.getElementById('cfg-email').value.trim();
+  if(!email){toast('E-mail obrigatório.','err');return;}
+  try{
+    const token=localStorage.getItem('sb_token');
+    const res=await fetch(`${SUPABASE_URL}/auth/v1/user`,{
+      method:'PUT',
+      headers:{'apikey':SUPABASE_KEY,'Authorization':`Bearer ${token}`,'Content-Type':'application/json'},
+      body:JSON.stringify({email,data:{full_name:name}})
+    });
+    if(!res.ok){const e=await res.json();throw new Error(e.message||'Erro ao salvar.');}
+    const u=await res.json();
+    localStorage.setItem('sb_user',JSON.stringify({email:u.email||email,name:u.user_metadata?.full_name||name,role:u.user_metadata?.role||u.user_metadata?.cargo||''}));
+    renderProfileArea();
+    toast('Perfil atualizado!','ok');
+  }catch(e){toast(e.message,'err');}
+}
+
+async function changePassword(){
+  const cur=document.getElementById('cfg-pass-cur').value;
+  const np=document.getElementById('cfg-pass-new').value;
+  const cp=document.getElementById('cfg-pass-conf').value;
+  const err=document.getElementById('cfg-pass-err');
+  if(!cur){toast('Informe a senha atual.','err');return;}
+  if(!np){toast('Informe a nova senha.','err');return;}
+  if(np!==cp){err.textContent='As senhas não coincidem.';err.style.display='block';return;}
+  err.style.display='none';
+  const u=_getUserData();
+  try{
+    const check=await fetch(`${SUPABASE_URL}/auth/v1/token?grant_type=password`,{
+      method:'POST',
+      headers:{'apikey':SUPABASE_KEY,'Content-Type':'application/json'},
+      body:JSON.stringify({email:u.email,password:cur})
+    });
+    if(!check.ok)throw new Error('Senha atual incorreta.');
+  }catch(e){toast(e.message,'err');return;}
+  try{
+    const token=localStorage.getItem('sb_token');
+    const res=await fetch(`${SUPABASE_URL}/auth/v1/user`,{
+      method:'PUT',
+      headers:{'apikey':SUPABASE_KEY,'Authorization':`Bearer ${token}`,'Content-Type':'application/json'},
+      body:JSON.stringify({password:np})
+    });
+    if(!res.ok){const e=await res.json();throw new Error(e.message||'Erro ao alterar senha.');}
+    document.getElementById('cfg-pass-cur').value='';
+    document.getElementById('cfg-pass-new').value='';
+    document.getElementById('cfg-pass-conf').value='';
+    toast('Senha alterada com sucesso!','ok');
+  }catch(e){toast(e.message,'err');}
 }
