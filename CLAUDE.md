@@ -317,7 +317,7 @@ startApp()      // Verifica sessão ao carregar, refresh automático se necessá
 
 3. **API key de IA no browser** — Quando implementar insights de IA, NUNCA colocar a API key da Anthropic no frontend. Usar Supabase Edge Function como proxy. Ver item #75 do roadmap.
 
-4. **Campo `projection_rule` ausente nas categorias** — Necessário para a engine de projeção do Fluxo de Caixa (Fase 4, item #70).
+4. ~~**Campo `projection_rule` ausente nas categorias**~~ ✅ **Concluído (item #70).** Coluna `projection_rule` adicionada à tabela `categorias` (default `'media_3'`). Tabela `projecoes_manuais` criada com GRANT+RLS. `PROJECOES`, `fromProjecao`, `dbLoadProjecoes`, `dbUpsertProjecao`, `dbDeleteProjecao` implementados em `01-core.js`. UI em `renderCategorias` e `saveProjectionRule` em `04-cadastros.js`.
 
 5. ~~**Filtros usam `dataPgto` onde deveriam usar `data_venc`**~~ ✅ **Concluído (item #6).** Todos os cálculos de "atrasados" e os filtros de Vencimento já usam `effectiveVenc(l)`, que retorna `dataVenc` se preenchido, ou `dataPgto` como fallback legacy. Filtro de Data de Pagamento continua usando `dataPgto` corretamente.
 
@@ -334,7 +334,7 @@ Documentação completa no Notion: Skala 2.0 → Projetos → Gestão → Açõe
 - **Fase 4 (itens #52–74):** DRE, Fluxo de Caixa, engine de projeção
 - **Fase 5 (itens #75–77):** Insights de IA (Edge Function + DRE + Fluxo de Caixa)
 
-**Fase 1 CONCLUÍDA. Próximo: Fase 2 (melhorias de UX).**
+**Fase 1 CONCLUÍDA. Itens #70–71 da Fase 4 concluídos. Próximo: Fase 4 Parte B — itens #72–73 (`calcFluxoProj` e integração no `renderFluxo`).**
 
 ---
 
