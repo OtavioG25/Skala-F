@@ -1,8 +1,10 @@
 let _calcDreCache={};
 let _calcFluxoCache={};
+let _calcFluxoProjCache={};
 function clearFinanceCalcCache(){
   _calcDreCache={};
   _calcFluxoCache={};
+  _calcFluxoProjCache={};
 }
 function calcDRE(year){
   const cacheKey=`${year}:${DATA_VERSION}`;
@@ -128,6 +130,120 @@ function calcFluxo(year){
   });
   _calcFluxoCache[cacheKey]=m;
   return m;
+}
+
+function _projTooltip(src){
+  const t={manual:'Valor manual',pendentes:'Pendentes do mês',pendentes_cur:'Realizado + pendentes',media_3:'Projeção automática (média 3 meses)',media_6:'Projeção automática (média 6 meses)',ultimo_mes:'Projeção automática (último mês)'};
+  return t[src]||'';
+}
+
+function calcFluxoProj(year){
+  const cacheKey=`${year}:${DATA_VERSION}`;
+  if(_calcFluxoProjCache[cacheKey])return _calcFluxoProjCache[cacheKey];
+
+  const now=new Date();
+  const curY=now.getFullYear(),curM=now.getMonth();
+  const recCats=getRecCats(),despCats=getDespCats();
+  const real=calcFluxo(year);
+
+  // openAmount de cada lançamento pendente indexado por (prefixo+slug|mesIdx)
+  const pendMap={};
+  DATA.forEach(l=>{
+    if(l.status==='Cancelado')return;
+    const open=openAmount(l);
+    if(open<=0.005)return;
+    const d=effectiveVenc(l);
+    if(!d||getY(d)!==year)return;
+    const mi=getM(d);
+    if(mi==null||mi<0||mi>11)return;
+    const cats=l.tipo==='R'?recCats:despCats;
+    const cat=cats.find(c=>c.nome===l.cat);
+    if(!cat)return;
+    const slug=cat.slug||slugify(cat.nome);
+    const k=(l.tipo==='R'?'r_':'d_')+slug+'|'+mi;
+    pendMap[k]=(pendMap[k]||0)+open;
+  });
+
+  // últimos N valores realizados não-nulos de uma chave, retrocedendo do mês atual
+  function lastNVals(catKey,n){
+    const vals=[];
+    const topM=year===curY?curM:year<curY?11:-1;
+    for(let m=topM;m>=0&&vals.length<n;m--){
+      const v=real[m]?.[catKey]||0;
+      if(v>0.005)vals.push(v);
+    }
+    if(vals.length<n){
+      const py=calcFluxo(year-1);
+      for(let m=11;m>=0&&vals.length<n;m--){
+        const v=py[m]?.[catKey]||0;
+        if(v>0.005)vals.push(v);
+      }
+    }
+    return vals;
+  }
+
+  function recomputeTotals(mb){
+    mb.entradasOp=recCats.filter(c=>(c.fluxo||'operacional')!=='nao_operacional').reduce((s,c)=>s+(mb['r_'+(c.slug||slugify(c.nome))]||0),0);
+    mb.saidasOp=despCats.filter(c=>(c.fluxo||'operacional')!=='nao_operacional').reduce((s,c)=>s+(mb['d_'+(c.slug||slugify(c.nome))]||0),0);
+    mb.resultadoOp=mb.entradasOp-mb.saidasOp;
+    mb.entradasNaoOp=recCats.filter(c=>(c.fluxo||'operacional')==='nao_operacional').reduce((s,c)=>s+(mb['r_'+(c.slug||slugify(c.nome))]||0),0);
+    mb.saidasNaoOp=despCats.filter(c=>(c.fluxo||'operacional')==='nao_operacional').reduce((s,c)=>s+(mb['d_'+(c.slug||slugify(c.nome))]||0),0);
+    mb.resultadoNaoOp=mb.entradasNaoOp-mb.saidasNaoOp;
+    mb.entradas=mb.entradasOp+mb.entradasNaoOp;
+    mb.totSaidas=mb.saidasOp+mb.saidasNaoOp;
+    mb.saldoOp=mb.entradas-mb.totSaidas;
+  }
+
+  const result=real.map((rm,mi)=>{
+    const base={...rm,_sources:{},_isManual:{}};
+    const isPast=year<curY||(year===curY&&mi<curM);
+    const isCur=year===curY&&mi===curM;
+
+    if(isPast){
+      [...recCats,...despCats].forEach(c=>{
+        const p=recCats.includes(c)?'r_':'d_';
+        base._sources[p+(c.slug||slugify(c.nome))]='realizado';
+      });
+    } else if(isCur){
+      // mês atual: realizados + pendentes de cada categoria
+      [...recCats.map(c=>({c,p:'r_'})),...despCats.map(c=>({c,p:'d_'}))].forEach(({c,p})=>{
+        const slug=c.slug||slugify(c.nome);
+        const catKey=p+slug;
+        const pend=pendMap[catKey+'|'+mi]||0;
+        if(pend>0.005){base[catKey]=(base[catKey]||0)+pend;base._sources[catKey]='pendentes_cur';}
+        else base._sources[catKey]='realizado';
+      });
+      recomputeTotals(base);
+    } else {
+      // meses futuros: prioridade manual > pendentes > regra da categoria
+      const comp=`${year}-${String(mi+1).padStart(2,'0')}-01`;
+      [...recCats.map(c=>({c,tipo:'R',p:'r_'})),...despCats.map(c=>({c,tipo:'D',p:'d_'}))].forEach(({c,tipo,p})=>{
+        const slug=c.slug||slugify(c.nome);
+        const catKey=p+slug;
+        const pend=pendMap[catKey+'|'+mi]||0;
+        const override=(PROJECOES||[]).find(x=>x.catSlug===slug&&x.tipo===tipo&&x.comp===comp);
+        let value=0,source='nao_projetar',isManual=false;
+        if(override){
+          value=override.valor;source='manual';isManual=true;
+        } else if(pend>0.005){
+          value=pend;source='pendentes';
+        } else {
+          const rule=c.projection_rule||'media_3';
+          if(rule==='nao_projetar'||rule==='manual'){value=0;source=rule;}
+          else if(rule==='ultimo_mes'){const vs=lastNVals(catKey,1);value=vs[0]||0;source='ultimo_mes';}
+          else{const n=rule==='media_6'?6:3;const vs=lastNVals(catKey,n);value=vs.length?vs.reduce((s,v)=>s+v,0)/vs.length:0;source=rule;}
+        }
+        base[catKey]=value;
+        base._sources[catKey]=source;
+        base._isManual[catKey]=isManual;
+      });
+      recomputeTotals(base);
+    }
+    return base;
+  });
+
+  _calcFluxoProjCache[cacheKey]=result;
+  return result;
 }
 
 const FORMAS=['PIX','TED','Boleto','Cartão Crédito','Cartão Débito','Dinheiro','Cheque'];
@@ -2008,6 +2124,7 @@ function renderFluxo(c){
   const despCats=getDespCats();
   const tot=k=>f.reduce((s,m)=>s+(m[k]||0),0);
   const curMonthIdx=YEAR===new Date().getFullYear()?new Date().getMonth():-1;
+  const proj=showFluxoProj&&fluxoView==='anual'?calcFluxoProj(YEAR):null;
   if(!window._fluxoExpanded)window._fluxoExpanded={};
   window._fluxoDrillCells=[];
 
@@ -2019,8 +2136,16 @@ function renderFluxo(c){
     let style='';
     if(parentId&&window._fluxoExpanded[parentId]!==true)style='display:none';
     const cells=f.map((m,i)=>{
-      const v=(neg?-1:1)*(m[k]||0);
+      const isFuture=!!proj&&i>curMonthIdx;
+      const data=isFuture?proj[i]:m;
+      const v=(neg?-1:1)*(data[k]||0);
       const hlSt=i===curMonthIdx?';background:rgba(19,124,60,.06)':'';
+      if(isFuture){
+        const src=proj[i]._sources?.[k]||'';
+        const manual=proj[i]._isManual?.[k];
+        const tip=_projTooltip(src);
+        return`<td class="${v<0?'neg':v>0?'pos':''}" style="font-style:italic;color:var(--blue);font-size:11.5px${hlSt}"${tip?` title="${tip}"`:''}>${v!==0?`~${fmt(v)}${manual?' ✏':''}` :'—'}</td>`;
+      }
       if(drillInfo&&v!==0){
         const di=window._fluxoDrillCells.length;
         window._fluxoDrillCells.push({cat:drillInfo.cat,sub:drillInfo.sub,tipo:drillInfo.tipo,mes:i});
@@ -2028,7 +2153,9 @@ function renderFluxo(c){
       }
       return`<td class="${v<0?'neg':v>0?'pos':''}" style="font-size:11.5px${hlSt}">${v!==0?fmt(v):'—'}</td>`;
     }).join('');
-    const tv=(neg?-1:1)*tot(k);
+    const tv=(neg?-1:1)*(proj
+      ?f.reduce((s,m2,i)=>s+((i>curMonthIdx?proj[i]:m2)[k]||0),0)
+      :tot(k));
     let cls='dr';
     if(bold)cls+=' bold';
     if(isResult)cls+=' hl';
@@ -2038,7 +2165,9 @@ function renderFluxo(c){
     const toggleBtn=hasSubs
       ?`<span onclick="toggleFluxo('${groupId}')" style="cursor:pointer;margin-right:6px;font-size:10px;display:inline-block;width:12px">${expanded?'▼':'▶'}</span>`
       :`<span style="display:inline-block;width:18px"></span>`;
-    return`<tr class="${cls}" style="${style}"><td style="${tdSt}">${toggleBtn}${lbl}</td>${cells}<td class="${tv<0?'neg':tv>0?'pos':''} tc" style="font-weight:${bold?700:400}">${tv!==0?fmt(tv):'—'}</td></tr>`;
+    const tvHasProj=!!proj&&curMonthIdx>=0&&curMonthIdx<11;
+    const tcSt=`font-weight:${bold?700:400}${tvHasProj?';font-style:italic;color:var(--blue)':''}`;
+    return`<tr class="${cls}" style="${style}"><td style="${tdSt}">${toggleBtn}${lbl}</td>${cells}<td class="${tv<0?'neg':tv>0?'pos':''} tc" style="${tcSt}">${tv!==0?fmt(tv):'—'}</td></tr>`;
   }
   function groupRows(cat,tipo){
     const neg=tipo==='D';
@@ -2299,44 +2428,30 @@ function renderFluxo(c){
     const tv=vals.reduce((s,v)=>s+v,0);
     return`<tr class="dr"><td style="padding-left:28px;position:sticky;left:0;z-index:2;background:var(--s1)">${esc(conta)}</td>${cells}<td class="${tv<0?'neg':'pos'} tc">${fmt(tv)}</td></tr>`;
   }).join('');
-  const mkBalRow=(lbl,vals,bold,indent,cls='')=>{
-    const cells=vals.map((v,i)=>`<td class="${v<0?'neg':'pos'}"${i===curMonthIdx?' style="background:rgba(19,124,60,.06)"':''}>${fmt(v)}</td>`).join('');
+  const mkBalRow=(lbl,vals,bold,indent,cls='',projFromIdx=-1)=>{
+    const cells=vals.map((v,i)=>{
+      const isFut=projFromIdx>=0&&i>projFromIdx;
+      const bg=i===curMonthIdx?'background:rgba(19,124,60,.06)':'';
+      if(isFut)return`<td class="${v<0?'neg':v>0?'pos':''}" style="font-style:italic;color:var(--blue)${bg?';'+bg:''}">${v!==0?`~${fmt(v)}`:'—'}</td>`;
+      return`<td class="${v<0?'neg':'pos'}"${bg?` style="${bg}"`:''}>${fmt(v)}</td>`;
+    }).join('');
     const tv=vals[vals.length-1];
-    return`<tr class="dr${bold?' bold':''} ${cls}"><td style="padding-left:${indent?28:12}px;position:sticky;left:0;z-index:2;background:var(--s1)">${lbl}</td>${cells}<td class="${tv<0?'neg':'pos'} tc">${fmt(tv)}</td></tr>`;
+    const tvFut=projFromIdx>=0&&11>projFromIdx;
+    const tcSt=`font-weight:${bold?700:400}${tvFut?';font-style:italic;color:var(--blue)':''}`;
+    return`<tr class="dr${bold?' bold':''} ${cls}"><td style="padding-left:${indent?28:12}px;position:sticky;left:0;z-index:2;background:var(--s1)">${lbl}</td>${cells}<td class="${tv<0?'neg':tv>0?'pos':''} tc" style="${tcSt}">${tv!==0?fmt(tv):'—'}</td></tr>`;
   };
   const contaSaldoFinRows=contaSet.map(conta=>mkBalRow(esc(conta),contaSaldoFin[conta],false,true)).join('');
-  const totalSaldoFinRow=mkBalRow('SALDO FINAL TOTAL',totalSaldoFinVals,true,false,'tot-bal');
 
-  let projSection='';
-  if(showFluxoProj){
-    const pendData=DATA.filter(l=>{
-      if(openAmount(l)<=0.005)return false;
-      const d=dateForSchedule(l);
-      return d&&getY(d)===YEAR;
-    });
-    const projEnt=Array(12).fill(0);
-    const projSai=Array(12).fill(0);
-    pendData.forEach(l=>{
-      const d=dateForSchedule(l);
-      const i=getM(d);
-      if(i==null||i<0||i>11)return;
-      const v=openAmount(l);
-      if(l.tipo==='R')projEnt[i]+=v;
-      else projSai[i]+=v;
-    });
-    const projSaldoOp=projEnt.map((e,i)=>e-projSai[i]);
-    let cumProj=0;
-    const projSaldoFin=f.map((m,i)=>{cumProj+=projSaldoOp[i];return m.saldoFin+cumProj;});
-    const mkRow=(lbl,vals,bold,cls='')=>{
-      const cells=vals.map(v=>`<td class="${v<0?'neg':'pos'}">${fmt(v)}</td>`).join('');
-      const tv=vals.reduce((s,v)=>s+v,0);
-      return`<tr class="dr${bold?' bold':''} ${cls}"><td style="padding-left:12px;position:sticky;left:0;z-index:2;background:var(--s1)">${lbl}</td>${cells}<td class="${tv<0?'neg':'pos'} tc">${fmt(tv)}</td></tr>`;
-    };
-    projSection=`<tr class="sep proj-sep"><td colspan="14" style="position:sticky;left:0;z-index:2;background:#eaf2e7">${appIcon('chart')} PROJEÇÃO — Lançamentos Pendentes</td></tr>
-    ${mkRow('Entradas Previstas',projEnt,false,'proj-row')}
-    ${mkRow('Saídas Previstas',projSai,false,'proj-row')}
-    ${mkRow('Saldo Final Projetado',projSaldoFin,true,'proj-tot')}`;
-  }
+  // saldo final projetado: saldo real do mês atual + saldoOp projetado acumulado
+  const projTotalSaldoFin=proj&&curMonthIdx>=0?Array(12).fill(0).map((_,i)=>{
+    if(i<=curMonthIdx)return totalSaldoFinVals[i];
+    let s=totalSaldoFinVals[curMonthIdx];
+    for(let j=curMonthIdx+1;j<=i;j++)s+=(proj[j]?.saldoOp||0);
+    return s;
+  }):null;
+
+  const totalSaldoFinRow=mkBalRow('SALDO FINAL TOTAL',projTotalSaldoFin||totalSaldoFinVals,true,false,'tot-bal',projTotalSaldoFin?curMonthIdx:-1);
+  const projSection='';
 
   const oldDrill=document.getElementById('fluxo-drill');if(oldDrill)oldDrill.remove();
 
