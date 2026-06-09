@@ -161,6 +161,18 @@ table{width:100%;border-collapse:collapse}
 .dr.proj-tot td{background:rgba(88,166,255,.12);font-weight:700!important;color:#58a6ff!important}
 .dr td{transition:background .1s}
 .dr.group-hdr td:first-child{cursor:pointer}
+/* ── Segmented control DRE/Fluxo ─────────────────────────────── */
+.dre-seg{display:flex;border:1px solid var(--bd);border-radius:8px;overflow:hidden}
+.dre-seg-btn{background:none;border:none;cursor:pointer;padding:6px 16px;font-size:12px;color:var(--tx2);font-weight:500;transition:background .15s,color .15s}
+.dre-seg-btn.on{background:var(--brand);color:#fff;font-weight:600}
+/* ── Navegador de mês (mensal) ────────────────────────────────── */
+.dre-mes-nav{display:flex;align-items:center;gap:10px;justify-content:center;padding:10px 0 12px;flex-shrink:0}
+.dre-mes-nav button{background:var(--s2);border:1px solid var(--bd);border-radius:6px;cursor:pointer;width:28px;height:28px;display:flex;align-items:center;justify-content:center;font-size:18px;color:var(--tx);line-height:1;transition:background .12s}
+.dre-mes-nav button:disabled{opacity:.35;cursor:default}
+.dre-mes-nav button:not(:disabled):hover{background:var(--s3)}
+.dre-mes-nav span{font-size:14px;font-weight:700;color:var(--tx);min-width:150px;text-align:center}
+/* ── KPI strip (Fluxo/DRE) ────────────────────────────────────── */
+.dre-kpis{display:grid;grid-template-columns:repeat(4,1fr);gap:12px;padding:12px 20px 0}
 .dr.group-hdr:hover td{background:rgba(255,255,255,.03)}
 .sep td{background:var(--s2);padding:6px 16px;font-size:10px;font-weight:700;color:var(--tx3);text-transform:uppercase;letter-spacing:1px;border-bottom:1px solid var(--bd)}
 .sep.proj-sep td{background:rgba(88,166,255,.08);color:#58a6ff}

@@ -275,6 +275,11 @@ function onDataVencBlur(el){
 }
 
 let TAB='dashboard',prevTAB='',YEAR=new Date().getFullYear(),DASHBOARD_MONTH=new Date().getMonth(),editingId=null;
+let dreViewMes=new Date().getMonth();
+let fluxoViewMes=new Date().getMonth();
+let fluxoDrillDown=null;
+let dreDrillDown=null;
+let showFluxoProj=false;
 const TABS=[
   {id:'dashboard',lbl:'Dashboard',ico:appIcon('dashboard'),sub:()=>`Visão consolidada do mês · ${MONTHS_FULL[getDashboardMonthIndex()]}/${YEAR}`},
   {id:'receber',lbl:'Contas a Receber',ico:appIcon('arrowDown'),sub:'Honorários, mensalidades e recebíveis em aberto'},
@@ -538,6 +543,8 @@ function render(){
   else if(TAB==='categorias')renderCategorias(c);
   else if(TAB==='contas')renderContas(c);
   else if(TAB==='extrato')renderExtrato(c);
+  if(TAB!=='fluxo'){fluxoDrillDown=null;const _pd=document.getElementById('fluxo-drill');if(_pd)_pd.remove();}
+  if(TAB!=='dre'){dreDrillDown=null;const _dd=document.getElementById('dre-drill');if(_dd)_dd.remove();}
   prevTAB=TAB;
 }
 
@@ -1128,108 +1135,384 @@ function pieClickCat(cat,tipo){
   TAB='receber';buildNav();render();
 }
 
+// ── Nav / drill helpers ──────────────────────────────────────────────────────
+function setDREView(v){localStorage.setItem('skala_dre_view',v);renderDRE(document.getElementById('content'));}
+function navDREMes(d){dreViewMes=Math.max(0,Math.min(11,dreViewMes+d));renderDRE(document.getElementById('content'));}
+function setFluxoView(v){localStorage.setItem('skala_fluxo_view',v);renderFluxo(document.getElementById('content'));}
+function navFluxoMes(d){fluxoViewMes=Math.max(0,Math.min(11,fluxoViewMes+d));renderFluxo(document.getElementById('content'));}
+function toggleFluxoProj(){showFluxoProj=!showFluxoProj;renderFluxo(document.getElementById('content'));}
+
+function openFluxoDrillByIdx(idx){
+  if(!window._fluxoDrillCells||idx>=window._fluxoDrillCells.length)return;
+  fluxoDrillDown=window._fluxoDrillCells[idx];
+  renderFluxo(document.getElementById('content'));
+}
+function closeFluxoDrill(){
+  fluxoDrillDown=null;
+  const p=document.getElementById('fluxo-drill');if(p)p.remove();
+  renderFluxo(document.getElementById('content'));
+}
+function openDREDrillByIdx(idx){
+  if(!window._dreDrillCells||idx>=window._dreDrillCells.length)return;
+  dreDrillDown=window._dreDrillCells[idx];
+  renderDRE(document.getElementById('content'));
+}
+function closeDREDrill(){
+  dreDrillDown=null;
+  const p=document.getElementById('dre-drill');if(p)p.remove();
+  renderDRE(document.getElementById('content'));
+}
+
+// ── Fluxo expandable toggle functions ────────────────────────────────────────
+function toggleFluxo(groupId){
+  if(!window._fluxoExpanded)window._fluxoExpanded={};
+  window._fluxoExpanded[groupId]=window._fluxoExpanded[groupId]!==true;
+  const sc=document.querySelector('.tbl-scroll');const st=sc?sc.scrollTop:0;
+  renderFluxo(document.getElementById('content'));
+  if(st>0)requestAnimationFrame(()=>{const el=document.querySelector('.tbl-scroll');if(el)el.scrollTop=st;});
+}
+function toggleAllFluxo(){
+  if(!window._fluxoExpanded)window._fluxoExpanded={};
+  const rc=getRecCats(),dc=getDespCats();
+  const allExp=[...rc,...dc].every(c=>window._fluxoExpanded[(c.tipo==='R'?'r_':'d_')+(c.slug||slugify(c.nome))]===true);
+  [...rc,...dc].forEach(c=>{const k=(c.tipo==='R'?'r_':'d_')+(c.slug||slugify(c.nome));window._fluxoExpanded[k]=!allExp;});
+  renderFluxo(document.getElementById('content'));
+}
+function toggleFluxoMes(groupId){
+  if(!window._fluxoExpandedMes)window._fluxoExpandedMes={};
+  window._fluxoExpandedMes[groupId]=window._fluxoExpandedMes[groupId]!==true;
+  renderFluxo(document.getElementById('content'));
+}
+function toggleAllFluxoMes(){
+  if(!window._fluxoExpandedMes)window._fluxoExpandedMes={};
+  const rc=getRecCats(),dc=getDespCats();
+  const allExp=[...rc,...dc].every(c=>window._fluxoExpandedMes[(c.tipo==='R'?'r_':'d_')+(c.slug||slugify(c.nome))]===true);
+  [...rc,...dc].forEach(c=>{const k=(c.tipo==='R'?'r_':'d_')+(c.slug||slugify(c.nome));window._fluxoExpandedMes[k]=!allExp;});
+  renderFluxo(document.getElementById('content'));
+}
+
+// ── Chart helpers (SVG-free, usa Chart.js já carregado) ──────────────────────
+function _drawMesChart(canvasId,months,ds,tipId){
+  const canvas=document.getElementById(canvasId);if(!canvas)return;
+  const key=`_chart_${canvasId}`;
+  if(window[key]){try{window[key].destroy();}catch(e){}window[key]=null;}
+  const ctx=canvas.getContext('2d');
+  const cH=canvas.parentElement?.offsetHeight||200;
+  const mkGrad=(r,g,b)=>{const gr=ctx.createLinearGradient(0,0,0,cH);gr.addColorStop(0,`rgba(${r},${g},${b},.25)`);gr.addColorStop(1,`rgba(${r},${g},${b},0)`);return gr;};
+  const hasMultiYear=new Set(months.map(m=>m.year)).size>1;
+  const labels=months.map(m=>hasMultiYear?`${m.label}/${String(m.year).slice(2)}`:m.label);
+  window[key]=new Chart(ctx,{
+    type:'bar',
+    data:{
+      labels,
+      datasets:[
+        {label:ds[0].label,data:ds[0].data,backgroundColor:mkGrad(...ds[0].rgb),borderColor:`rgb(${ds[0].rgb})`,borderWidth:2,borderRadius:4,order:2},
+        {label:ds[1].label,data:ds[1].data,backgroundColor:mkGrad(...ds[1].rgb),borderColor:`rgb(${ds[1].rgb})`,borderWidth:2,borderRadius:4,order:3},
+        {label:ds[2].label,data:ds[2].data,type:'line',borderColor:`rgb(${ds[2].rgb})`,backgroundColor:'transparent',tension:0.4,borderWidth:2.5,pointRadius:4,pointBackgroundColor:`rgb(${ds[2].rgb})`,pointHoverRadius:6,order:1},
+      ]
+    },
+    options:{
+      responsive:true,maintainAspectRatio:false,animation:false,
+      interaction:{mode:'index',intersect:false},
+      plugins:{
+        legend:{display:false},
+        tooltip:{
+          enabled:false,
+          external:({chart,tooltip})=>{
+            const tip=document.getElementById(tipId);if(!tip)return;
+            if(tooltip.opacity===0){tip.style.opacity='0';return;}
+            const rect=chart.canvas.getBoundingClientRect();
+            tip.style.opacity='1';tip.style.left=(rect.left+tooltip.caretX+16)+'px';tip.style.top=(rect.top+tooltip.caretY-10)+'px';
+            const di=tooltip.dataPoints[0].dataIndex;
+            const m=months[di];const lbl=m?`${MONTHS_FULL[m.month]}/${m.year}`:(tooltip.title[0]||'');
+            const v0=tooltip.dataPoints.find(p=>p.dataset.label===ds[0].label)?.raw??0;
+            const v1=tooltip.dataPoints.find(p=>p.dataset.label===ds[1].label)?.raw??0;
+            const v2=tooltip.dataPoints.find(p=>p.dataset.label===ds[2].label)?.raw??0;
+            const c2col=v2>=0?`rgb(${ds[2].rgb})`:'var(--red)';
+            tip.innerHTML=`<div style="font-weight:700;margin-bottom:6px;font-size:12px;color:var(--tx)">${lbl}</div><div style="display:flex;flex-direction:column;gap:4px;font-size:12px">`+
+              `<div style="display:flex;justify-content:space-between;gap:16px"><span style="color:var(--tx2)">${ds[0].label}</span><strong style="color:rgb(${ds[0].rgb})">${fmt(v0)}</strong></div>`+
+              `<div style="display:flex;justify-content:space-between;gap:16px"><span style="color:var(--tx2)">${ds[1].label}</span><strong style="color:rgb(${ds[1].rgb})">${fmt(v1)}</strong></div>`+
+              `<div style="display:flex;justify-content:space-between;gap:16px"><span style="color:var(--tx2)">${ds[2].label}</span><strong style="color:${c2col}">${fmt(v2)}</strong></div></div>`;
+          }
+        }
+      },
+      scales:{
+        x:{grid:{color:'rgba(128,128,128,.08)'},ticks:{color:'#8b949e',font:{size:11}},border:{display:false}},
+        y:{grid:{color:'rgba(128,128,128,.08)'},ticks:{color:'#8b949e',font:{size:11},callback:v=>v>=1000?`${(v/1000).toFixed(0)}k`:v.toFixed(0)},border:{display:false}}
+      }
+    }
+  });
+}
+function drawDREMesChart(){
+  const months=dashboardMonthWindow(YEAR,dreViewMes,6);
+  _drawMesChart('dre-mes-canvas',months,[
+    {label:'Receita',data:months.map(m=>m.dre.recOpBruta),rgb:[26,157,77]},
+    {label:'Despesa',data:months.map(m=>m.dre.totDesp),rgb:[227,179,65]},
+    {label:'Lucro/Prej.',data:months.map(m=>m.dre.ll),rgb:[0,83,44]},
+  ],'dre-mes-tip');
+}
+function drawFluxoMesChart(){
+  const months=dashboardMonthWindow(YEAR,fluxoViewMes,6);
+  _drawMesChart('fluxo-mes-canvas',months,[
+    {label:'Entradas',data:months.map(m=>m.fluxo.entradasOp),rgb:[26,157,77]},
+    {label:'Saídas',data:months.map(m=>m.fluxo.saidasOp),rgb:[227,179,65]},
+    {label:'Resultado',data:months.map(m=>m.fluxo.resultadoOp),rgb:[0,83,44]},
+  ],'fluxo-mes-tip');
+}
+
+// ── Drill panel builder (compartilhado DRE + Fluxo) ──────────────────────────
+function _buildDrillPanel(id,titleHtml,items,closeCallbackName){
+  const old=document.getElementById(id);if(old)old.remove();
+  if(!items)return;
+  const panel=document.createElement('div');
+  panel.id=id;
+  panel.style.cssText='position:fixed;right:0;top:0;height:100vh;width:480px;background:var(--s1);border-left:1px solid var(--bd);box-shadow:-4px 0 24px rgba(0,0,0,.14);z-index:200;display:flex;flex-direction:column;overflow:hidden';
+  const total=items.reduce((s,l)=>s+parseMoney(l.valorLiq),0);
+  const tipo=items[0]?.tipo||'R';
+  const rows=items.map(l=>{
+    const dt=l.dataPgto||l.dataVenc||l.dataComp||'';
+    const stBadge=(l.status==='Pendente'||l.status==='Parcial')?`<span style="font-size:9px;background:rgba(227,179,65,.18);color:var(--gold);border-radius:4px;padding:1px 5px;margin-left:4px">${l.status}</span>`:'';
+    const lid=l.lancamentoId||l.id;
+    return`<tr style="cursor:pointer;border-bottom:1px solid var(--bd2)" onclick="openEdit('${lid}')">
+      <td style="font-size:11px;padding:7px 8px;white-space:nowrap">${dt?dateBR(dt):'—'}</td>
+      <td style="font-size:11px;padding:7px 8px;max-width:160px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;color:var(--tx)">${esc(l.desc||l.sub||l.cat)}${stBadge}</td>
+      <td style="font-size:11px;padding:7px 8px;color:var(--tx2);white-space:nowrap">${esc(l.conta||'—')}</td>
+      <td style="font-size:11px;padding:7px 8px;text-align:right;white-space:nowrap;color:${l.tipo==='R'?'var(--teal)':'var(--red)'};font-weight:600">${fmt(parseMoney(l.valorLiq))}</td>
+    </tr>`;
+  }).join('');
+  panel.innerHTML=`
+    <div style="padding:16px 20px;border-bottom:1px solid var(--bd);display:flex;align-items:flex-start;justify-content:space-between;gap:12px;flex-shrink:0">
+      <div>${titleHtml}</div>
+      <button onclick="${closeCallbackName}()" style="background:none;border:none;cursor:pointer;color:var(--tx2);font-size:22px;line-height:1;padding:0 4px;flex-shrink:0;margin-top:-2px" title="Fechar">×</button>
+    </div>
+    ${items.length?`
+    <div style="flex:1;overflow-y:auto"><table style="width:100%;border-collapse:collapse">
+      <thead><tr style="border-bottom:2px solid var(--bd)">
+        <th style="font-size:10px;font-weight:700;text-align:left;padding:7px 8px;color:var(--tx2);letter-spacing:.06em;text-transform:uppercase">Data</th>
+        <th style="font-size:10px;font-weight:700;text-align:left;padding:7px 8px;color:var(--tx2);letter-spacing:.06em;text-transform:uppercase">Descrição</th>
+        <th style="font-size:10px;font-weight:700;text-align:left;padding:7px 8px;color:var(--tx2);letter-spacing:.06em;text-transform:uppercase">Conta</th>
+        <th style="font-size:10px;font-weight:700;text-align:right;padding:7px 8px;color:var(--tx2);letter-spacing:.06em;text-transform:uppercase">Valor</th>
+      </tr></thead>
+      <tbody>${rows}</tbody>
+    </table></div>
+    <div style="padding:12px 20px;border-top:1px solid var(--bd);display:flex;align-items:center;justify-content:space-between;flex-shrink:0;background:var(--s2)">
+      <span style="font-size:12px;color:var(--tx2);font-weight:600">Total</span>
+      <strong style="font-size:14px;color:${tipo==='R'?'var(--teal)':'var(--red)'}">${fmt(total)}</strong>
+    </div>`
+    :`<div style="flex:1;display:flex;align-items:center;justify-content:center;color:var(--tx3);font-size:13px">Nenhum lançamento encontrado</div>`}
+  `;
+  document.body.appendChild(panel);
+}
+
 function renderDRE(c){
   const dre=calcDRE(YEAR);
   const recCats=getRecCats().filter(c=>!isExclDRE(c));
   const despCats=getDespCats().filter(c=>!isExclDRE(c));
   const tot=k=>dre.reduce((s,m)=>s+(m[k]||0),0);
-  const mHdr=MONTHS.map(m=>`<th>${m}</th>`).join('');
+  const dreView=localStorage.getItem('skala_dre_view')||'anual';
 
-  // Estado de expansão
-  if(!window._dreExpanded) window._dreExpanded={};
+  if(!window._dreExpanded)window._dreExpanded={};
+  window._dreDrillCells=[];
 
-  function row(lbl,k,type='normal',groupId=null,parentId=null){
-    const isTotal   = type==='total';
-    const isSep     = type==='sep';
-    const isGroup   = type==='group';
-    const isSub     = type==='sub';
-    const isResult  = type==='result';
-
-    if(isSep) return `<tr class="sep"><td colspan="14">${lbl}</td></tr>`;
-
-    const expanded = groupId ? (window._dreExpanded[groupId]!==false) : true;
-    const hasSubs  = groupId && !parentId;
-
-    const cells=dre.map(m=>{
+  // ── row() anual — 12 colunas com drill ───────────────────────────────────
+  function row(lbl,k,type='normal',groupId=null,parentId=null,drillInfo=null){
+    if(type==='sep') return`<tr class="sep"><td colspan="14">${lbl}</td></tr>`;
+    const expanded=groupId?(window._dreExpanded[groupId]!==false):true;
+    const hasSubs=groupId&&!parentId;
+    let style='';
+    if(parentId&&window._dreExpanded[parentId]===false)style='display:none';
+    let cls='dr';
+    if(type==='total'||type==='result')cls+=' bold';
+    if(type==='result')cls+=' hl';
+    if(type==='lucro')cls+=' tot';
+    const tdStyle=`padding-left:${type==='sub'?40:type==='group'?20:12}px`;
+    const toggleBtn=hasSubs?`<span onclick="toggleDRE('${groupId}')" style="cursor:pointer;margin-right:6px;font-size:10px;display:inline-block;width:12px">${expanded?'▼':'▶'}</span>`:`<span style="display:inline-block;width:18px"></span>`;
+    const cells=dre.map((m,i)=>{
       const v=m[k]||0;
+      if(drillInfo&&v!==0){
+        const di=window._dreDrillCells.length;
+        window._dreDrillCells.push({cat:drillInfo.cat,sub:drillInfo.sub,tipo:drillInfo.tipo,mes:i});
+        return`<td class="${v<0?'neg':v>0?'pos':''}" style="font-size:11.5px;cursor:pointer;text-decoration:underline dotted" onclick="openDREDrillByIdx(${di})">${fmt(v)}</td>`;
+      }
       return`<td class="${v<0?'neg':v>0?'pos':''}" style="font-size:11.5px">${v!==0?fmt(v):'—'}</td>`;
     }).join('');
     const tv=tot(k);
-
-    let style='';
-    let tdStyle=`padding-left:${isSub?40:isGroup?20:12}px`;
-    let cls='dr';
-    if(isTotal||isResult) cls+=' bold';
-    if(isResult) cls+=' hl';
-    if(type==='lucro') cls+=' tot';
-
-    // Linha oculta se for subcategoria de grupo fechado
-    if(parentId&&window._dreExpanded[parentId]===false) style='display:none';
-
-    const toggleBtn = hasSubs ? `<span onclick="toggleDRE('${groupId}')" style="cursor:pointer;margin-right:6px;font-size:10px;display:inline-block;width:12px">${expanded?'▼':'▶'}</span>` : `<span style="display:inline-block;width:18px"></span>`;
-
-    return`<tr class="${cls}" id="dre-row-${groupId||k}" style="${style}">
+    return`<tr class="${cls}" style="${style}">
       <td style="${tdStyle}">${toggleBtn}${lbl}</td>${cells}
-      <td class="${tv<0?'neg':tv>0?'pos':''} tc" style="font-weight:${isTotal||isResult||type==='lucro'?700:400}">${tv!==0?fmt(tv):'—'}</td>
+      <td class="${tv<0?'neg':tv>0?'pos':''} tc" style="font-weight:${type==='total'||type==='result'||type==='lucro'?700:400}">${tv!==0?fmt(tv):'—'}</td>
     </tr>`;
   }
 
-  function groupRows(cat, tipo){
-    const k = tipo==='R' ? 'r_'+(cat.slug||slugify(cat.nome)) : 'd_'+(cat.slug||slugify(cat.nome));
-    const gid = k;
-    const subs = (cat.subs||[]).sort((a,b)=>a.ordem-b.ordem);
-    let html = row(cat.nome, k, 'group', gid);
+  // ── rowMes() mensal — 2 colunas com drill ────────────────────────────────
+  function rowMes(lbl,k,type='normal',groupId=null,parentId=null,drillInfo=null){
+    if(type==='sep') return`<tr class="sep"><td colspan="2" style="position:sticky;left:0;z-index:2;background:#eaf2e7">${lbl}</td></tr>`;
+    const expanded=groupId?(window._dreExpanded[groupId]!==false):true;
+    const hasSubs=groupId&&!parentId;
+    let style='';
+    if(parentId&&window._dreExpanded[parentId]===false)style='display:none';
+    let cls='dr';
+    if(type==='total'||type==='result')cls+=' bold';
+    if(type==='result')cls+=' hl';
+    if(type==='lucro')cls+=' tot';
+    const tdStyle=`padding-left:${type==='sub'?40:type==='group'?20:12}px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap`;
+    const toggleBtn=hasSubs?`<span onclick="toggleDRE('${groupId}')" style="cursor:pointer;margin-right:6px;font-size:10px;display:inline-block;width:12px;flex-shrink:0">${expanded?'▼':'▶'}</span>`:`<span style="display:inline-block;width:18px;flex-shrink:0"></span>`;
+    const v=dre[dreViewMes][k]||0;
+    const col=v<0?'var(--red)':v>0?'var(--teal)':'var(--tx3)';
+    let valTd;
+    if(drillInfo&&v!==0){
+      const di=window._dreDrillCells.length;
+      window._dreDrillCells.push({cat:drillInfo.cat,sub:drillInfo.sub,tipo:drillInfo.tipo,mes:dreViewMes});
+      valTd=`<td style="text-align:right;color:${col};font-size:12px;white-space:nowrap;padding-right:10px;cursor:pointer;text-decoration:underline dotted" onclick="openDREDrillByIdx(${di})">${fmt(v)}</td>`;
+    } else {
+      valTd=`<td style="text-align:right;color:${col};font-size:12px;white-space:nowrap;padding-right:10px">${v!==0?fmt(v):'—'}</td>`;
+    }
+    return`<tr class="${cls}" style="${style}"><td style="${tdStyle}">${toggleBtn}${lbl}</td>${valTd}</tr>`;
+  }
+
+  function groupRows(cat,tipo,rowFn=row){
+    const k=tipo==='R'?'r_'+(cat.slug||slugify(cat.nome)):'d_'+(cat.slug||slugify(cat.nome));
+    const subs=(cat.subs||[]).sort((a,b)=>a.ordem-b.ordem);
+    let html=rowFn(cat.nome,k,'group',k,null,{cat:cat.nome,sub:'',tipo});
     subs.forEach(sub=>{
-      const sk = tipo==='R' ? 'rs_'+(sub.slug||slugify(sub.nome)) : 'ds_'+(sub.slug||slugify(sub.nome));
-      html += row(sub.nome, sk, 'sub', sk, gid);
+      const sk=tipo==='R'?'rs_'+(sub.slug||slugify(sub.nome)):'ds_'+(sub.slug||slugify(sub.nome));
+      html+=rowFn(sub.nome,sk,'sub',sk,k,{cat:cat.nome,sub:sub.nome,tipo});
     });
     return html;
   }
 
-  const recOpCats    = recCats.filter(c=>!isNaoOpDRE(c));
-  const recNaoOpCats = recCats.filter(c=>isNaoOpDRE(c));
+  const recOpCats    =recCats.filter(c=>!isNaoOpDRE(c));
+  const recNaoOpCats =recCats.filter(c=>isNaoOpDRE(c));
+  const despOpBase   =despCats.filter(c=>!isNaoOpDRE(c));
+  const despNaoOpCats=despCats.filter(c=>isNaoOpDRE(c));
+  const impostoCat   =despOpBase.find(c=>(c.slug||slugify(c.nome))==='impostos_e_taxas');
+  const pessoalCat   =despOpBase.find(c=>(c.slug||slugify(c.nome))==='pessoal');
+  const EXCL_SLUGS   =['pessoal','impostos_e_taxas'];
+  const despOpCats   =despOpBase.filter(c=>!EXCL_SLUGS.includes(c.slug||slugify(c.nome)));
+  const g=(cat,tipo,fn)=>cat?groupRows(cat,tipo,fn):'';
 
-  // Grupos de despesas — dinâmico: Pessoal e Impostos e Taxas têm seções próprias, resto vai em Despesas Operacionais
-  const despOpBase   = despCats.filter(c=>!isNaoOpDRE(c));
-  const despNaoOpCats= despCats.filter(c=>isNaoOpDRE(c));
-  const impostoCat  = despOpBase.find(c=>(c.slug||slugify(c.nome))==='impostos_e_taxas');
-  const pessoalCat  = despOpBase.find(c=>(c.slug||slugify(c.nome))==='pessoal');
-  const EXCL_SLUGS  = ['pessoal','impostos_e_taxas'];
-  const despOpCats  = despOpBase.filter(c=>!EXCL_SLUGS.includes(c.slug||slugify(c.nome)));
+  const toolbar=`<div class="tbl-hdr" style="display:flex;align-items:center;justify-content:space-between;flex-wrap:wrap;gap:8px">
+    <div class="sec-ttl">DRE — Regime de Competência <span class="yr-pill">${YEAR}</span></div>
+    <div style="display:flex;gap:6px;align-items:center">
+      <div class="dre-seg">
+        <button class="dre-seg-btn${dreView==='anual'?' on':''}" onclick="setDREView('anual')">Anual</button>
+        <button class="dre-seg-btn${dreView==='mensal'?' on':''}" onclick="setDREView('mensal')">Mensal</button>
+      </div>
+      ${dreView==='anual'
+        ?`<button class="btn btn-ghost" style="font-size:12px" onclick="exportDREExcel()">${appIcon('download')}Exportar Excel</button>
+           <button class="btn btn-ghost" style="font-size:12px" onclick="toggleAllDRE()">⊞ Expandir/Recolher tudo</button>`
+        :''}
+    </div>
+  </div>`;
 
-  const g=(cat,tipo)=>cat?groupRows(cat,tipo):'';
+  if(dreView==='mensal'){
+    const tableRows=`
+      ${rowMes('RECEITAS OPERACIONAIS','','sep')}
+      ${recOpCats.map(cat=>groupRows(cat,'R',rowMes)).join('')}
+      ${rowMes('(=) RECEITA OPERACIONAL BRUTA','recOpBruta','result')}
+      ${impostoCat?`${rowMes('IMPOSTOS E TAXAS','','sep')}${g(impostoCat,'D',rowMes)}`:''}
+      ${rowMes('(=) RECEITA OPERACIONAL LÍQUIDA','recOpLiq','result')}
+      ${pessoalCat?`${rowMes('CUSTO COM PESSOAL','','sep')}${g(pessoalCat,'D',rowMes)}${rowMes('(=) CUSTO COM PESSOAL','cusPessoal','total')}`:''}
+      ${rowMes('(=) LUCRO OPERACIONAL BRUTO','lucOpBruto','result')}
+      ${despOpCats.length?`${rowMes('DESPESAS OPERACIONAIS','','sep')}${despOpCats.map(cat=>g(cat,'D',rowMes)).join('')}${rowMes('(=) DESPESAS OPERACIONAIS','despOp','total')}`:''}
+      ${rowMes('(=) RESULTADO OPERACIONAL','resOp','result')}
+      ${recNaoOpCats.length?`${rowMes('RECEITAS NÃO OPERACIONAIS','','sep')}${recNaoOpCats.map(cat=>groupRows(cat,'R',rowMes)).join('')}${rowMes('(=) RECEITAS NÃO OPERACIONAIS','outrasRec','total')}`:''}
+      ${despNaoOpCats.length?`${rowMes('DESPESAS NÃO OPERACIONAIS','','sep')}${despNaoOpCats.map(cat=>groupRows(cat,'D',rowMes)).join('')}${rowMes('(=) DESPESAS NÃO OPERACIONAIS','despNaoOp','total')}`:''}
+      ${rowMes('RESULTADO FINAL','ll','lucro')}`;
 
+    c.innerHTML=`<div class="tbl-wrap" style="display:flex;flex-direction:column;height:calc(100vh - 116px);overflow:visible">
+      ${toolbar}
+      <div style="flex:1;overflow:hidden;padding:0 20px 16px;display:flex;gap:20px;min-height:0">
+        <div style="flex:0 0 52%;display:flex;flex-direction:column;min-height:0">
+          <div class="dre-mes-nav">
+            <button onclick="navDREMes(-1)" ${dreViewMes===0?'disabled':''}>‹</button>
+            <span>${MONTHS_FULL[dreViewMes]} ${YEAR}</span>
+            <button onclick="navDREMes(1)" ${dreViewMes===11?'disabled':''}>›</button>
+          </div>
+          <div style="flex:1;overflow-y:auto">
+            <table class="fin-tbl" style="width:100%;table-layout:fixed;min-width:0">
+              <colgroup><col><col style="width:140px"></colgroup>
+              <thead><tr><th style="text-align:left;padding-left:32px">Descrição</th><th style="text-align:right;padding-right:10px">Valor</th></tr></thead>
+              <tbody>${tableRows}</tbody>
+            </table>
+          </div>
+        </div>
+        <div style="flex:1;min-width:0;background:var(--s1);border:1px solid var(--bd);border-radius:12px;align-self:flex-start">
+          <div style="padding:16px 20px 12px;display:flex;align-items:flex-start;justify-content:space-between;gap:12px">
+            <div>
+              <div style="font-size:10px;font-weight:700;letter-spacing:.1em;text-transform:uppercase;color:var(--brand);margin-bottom:3px">Performance</div>
+              <div style="font-size:15px;font-weight:700;color:var(--tx);line-height:1.2">Receita, Despesa e Resultado</div>
+              <div style="font-size:12px;color:var(--tx2);margin-top:2px">Regime de competência · últimos 6 meses</div>
+            </div>
+          </div>
+          <div style="padding:0 12px 4px;position:relative"><div style="height:220px"><canvas id="dre-mes-canvas"></canvas></div></div>
+          <div id="dre-mes-tip" style="position:fixed;background:var(--s1);border:1px solid var(--bd);border-radius:8px;padding:10px 14px;pointer-events:none;opacity:0;transition:opacity .15s;z-index:300;min-width:160px;box-shadow:var(--shadow)"></div>
+          <div style="display:flex;gap:20px;padding:12px 20px 16px;border-top:1px solid var(--bd)">
+            <span style="display:inline-flex;align-items:center;gap:7px;font-size:12px;font-weight:600;color:var(--tx2)"><span style="width:12px;height:12px;border-radius:3px;background:rgb(26,157,77);display:inline-block;flex-shrink:0"></span>Receita</span>
+            <span style="display:inline-flex;align-items:center;gap:7px;font-size:12px;font-weight:600;color:var(--tx2)"><span style="width:12px;height:12px;border-radius:3px;background:rgb(227,179,65);display:inline-block;flex-shrink:0"></span>Despesa</span>
+            <span style="display:inline-flex;align-items:center;gap:7px;font-size:12px;font-weight:600;color:var(--tx2)"><span style="width:12px;height:3px;background:rgb(0,83,44);display:inline-block;flex-shrink:0;border-radius:2px"></span>Resultado</span>
+          </div>
+        </div>
+      </div>
+    </div>`;
+
+    // DRE drill panel
+    if(dreDrillDown){
+      const d=dreDrillDown;
+      const items=DATA.filter(l=>{
+        if(l.status==='Cancelado')return false;
+        if(l.tipo!==d.tipo||l.cat!==d.cat)return false;
+        if(d.sub&&l.sub!==d.sub)return false;
+        if(!l.dataComp||getY(l.dataComp)!==YEAR||getM(l.dataComp)!==d.mes)return false;
+        return true;
+      }).sort((a,b)=>(a.dataComp||'').localeCompare(b.dataComp||''));
+      const catTitle=d.sub?`${esc(d.cat)} › ${esc(d.sub)}`:esc(d.cat);
+      _buildDrillPanel('dre-drill',
+        `<div style="font-size:13px;font-weight:700;color:var(--tx)">${catTitle}</div>
+         <div style="font-size:12px;color:var(--tx2);margin-top:3px">${MONTHS_FULL[d.mes]} ${YEAR} · ${items.length} lançamento${items.length!==1?'s':''}</div>`,
+        items,'closeDREDrill');
+    }
+    setTimeout(()=>drawDREMesChart(),0);
+    return;
+  }
+
+  // ── Visão ANUAL ──────────────────────────────────────────────────────────
   c.innerHTML=`
   <div class="tbl-wrap" style="display:flex;flex-direction:column;height:calc(100vh - 116px);overflow:visible">
-    <div class="tbl-hdr" style="display:flex;align-items:center;justify-content:space-between">
-      <div class="sec-ttl">DRE — Regime de Competência <span class="yr-pill">${YEAR}</span></div>
-      <div style="display:flex;gap:6px">
-        <button class="btn btn-ghost" style="font-size:12px" onclick="exportDREExcel()">${appIcon('download')}Exportar Excel</button>
-        <button class="btn btn-ghost" style="font-size:12px" onclick="toggleAllDRE()">⊞ Expandir/Recolher tudo</button>
-      </div>
-    </div>
+    ${toolbar}
     <div class="tbl-scroll" style="flex:1;overflow:auto"><table class="fin-tbl resizable">${renderFinColgroup()}<thead>${renderFinHead()}</thead>
       <tbody>
         ${row('RECEITAS OPERACIONAIS','','sep')}
         ${recOpCats.map(cat=>groupRows(cat,'R')).join('')}
         ${row('(=) RECEITA OPERACIONAL BRUTA','recOpBruta','result')}
-
         ${impostoCat?`${row('IMPOSTOS E TAXAS','','sep')}${g(impostoCat,'D')}`:''}
         ${row('(=) RECEITA OPERACIONAL LÍQUIDA','recOpLiq','result')}
-
         ${pessoalCat?`${row('CUSTO COM PESSOAL','','sep')}${g(pessoalCat,'D')}${row('(=) CUSTO COM PESSOAL','cusPessoal','total')}`:''}
         ${row('(=) LUCRO OPERACIONAL BRUTO','lucOpBruto','result')}
-
         ${despOpCats.length?`${row('DESPESAS OPERACIONAIS','','sep')}${despOpCats.map(cat=>g(cat,'D')).join('')}${row('(=) DESPESAS OPERACIONAIS','despOp','total')}`:''}
         ${row('(=) RESULTADO OPERACIONAL','resOp','result')}
-
         ${recNaoOpCats.length?`${row('RECEITAS NÃO OPERACIONAIS','','sep')}${recNaoOpCats.map(cat=>groupRows(cat,'R')).join('')}${row('(=) RECEITAS NÃO OPERACIONAIS','outrasRec','total')}`:''}
         ${despNaoOpCats.length?`${row('DESPESAS NÃO OPERACIONAIS','','sep')}${despNaoOpCats.map(cat=>groupRows(cat,'D')).join('')}${row('(=) DESPESAS NÃO OPERACIONAIS','despNaoOp','total')}`:''}
-
         ${row('RESULTADO FINAL','ll','lucro')}
       </tbody>
     </table></div>
   </div>`;
+
+  // DRE drill panel (anual)
+  if(dreDrillDown){
+    const d=dreDrillDown;
+    const items=DATA.filter(l=>{
+      if(l.status==='Cancelado')return false;
+      if(l.tipo!==d.tipo||l.cat!==d.cat)return false;
+      if(d.sub&&l.sub!==d.sub)return false;
+      if(!l.dataComp||getY(l.dataComp)!==YEAR||getM(l.dataComp)!==d.mes)return false;
+      return true;
+    }).sort((a,b)=>(a.dataComp||'').localeCompare(b.dataComp||''));
+    const catTitle=d.sub?`${esc(d.cat)} › ${esc(d.sub)}`:esc(d.cat);
+    _buildDrillPanel('dre-drill',
+      `<div style="font-size:13px;font-weight:700;color:var(--tx)">${catTitle}</div>
+       <div style="font-size:12px;color:var(--tx2);margin-top:3px">${MONTHS_FULL[d.mes]} ${YEAR} · ${items.length} lançamento${items.length!==1?'s':''}</div>`,
+      items,'closeDREDrill');
+  }
 }
 
 function toggleDRE(groupId){
@@ -1261,28 +1544,56 @@ function renderFluxo(c){
   const f=calcFluxo(YEAR);
   const recCats=getRecCats();
   const despCats=getDespCats();
-  const tot=k=>f.reduce((s,m)=>s+(m[k]||0),0);
+  const fluxoView=localStorage.getItem('skala_fluxo_view')||'anual';
+  const curMonthIdx=new Date().getFullYear()===YEAR?new Date().getMonth():-1;
 
-  function row(lbl,k,bold,indent,cls='',neg=false){
-    const cells=f.map(m=>{const v=(neg?-1:1)*(m[k]||0);return`<td class="${v<0?'neg':'pos'}">${fmt(v)}</td>`;}).join('');
-    const tv=(neg?-1:1)*tot(k);
-    return`<tr class="dr${bold?' bold':''} ${cls}"><td style="padding-left:${indent?28:12}px">${lbl}</td>${cells}<td class="${tv<0?'neg':'pos'} tc">${fmt(tv)}</td></tr>`;
-  }
+  window._fluxoDrillCells=[];
+  if(!window._fluxoExpanded)window._fluxoExpanded={};
+
   const sep=lbl=>`<tr class="sep"><td colspan="14">${lbl}</td></tr>`;
+  const sepSub=(lbl,col='var(--tx3)')=>`<tr class="sep"><td colspan="14" style="padding-left:28px;font-size:9px;color:${col}">${lbl}</td></tr>`;
 
-  const recCatsVis=recCats.filter(cat=>(cat.slug||slugify(cat.nome))!==TRANSF_SLUG);
-  const despCatsVis=despCats.filter(cat=>(cat.slug||slugify(cat.nome))!==TRANSF_SLUG);
-  const entradasOpRows=recCatsVis.filter(c=>(c.fluxo||'operacional')!=='nao_operacional').map(cat=>row(cat.nome,'r_'+(cat.slug||slugify(cat.nome)),false,true)).join('');
-  const saidasOpRows=despCatsVis.filter(c=>(c.fluxo||'operacional')!=='nao_operacional').map(cat=>row(cat.nome,'d_'+(cat.slug||slugify(cat.nome)),false,true,'',true)).join('');
-  const entradasNaoOpRows=recCatsVis.filter(c=>(c.fluxo||'operacional')==='nao_operacional').map(cat=>row(cat.nome,'r_'+(cat.slug||slugify(cat.nome)),false,true)).join('');
-  const saidasNaoOpRows=despCatsVis.filter(c=>(c.fluxo||'operacional')==='nao_operacional').map(cat=>row(cat.nome,'d_'+(cat.slug||slugify(cat.nome)),false,true,'',true)).join('');
-  const hasNaoOp=recCatsVis.some(c=>(c.fluxo||'operacional')==='nao_operacional')||despCatsVis.some(c=>(c.fluxo||'operacional')==='nao_operacional');
+  // ── row() anual com expansão + drill ─────────────────────────────────────
+  function row(lbl,k,bold=false,indent=false,cls='',neg=false,drillInfo=null,groupId=null,parentId=null,numSubs=0){
+    const v12=f.map(m=>(neg?-1:1)*(m[k]||0));
+    const tv=(neg?-1:1)*(f.reduce((s,m)=>s+(m[k]||0),0));
+    const hasSubs=groupId&&!parentId&&numSubs>0;
+    const expanded=groupId?(window._fluxoExpanded[groupId]===true):true;
+    let style='';
+    if(parentId&&window._fluxoExpanded[parentId]!==true)style='display:none';
+    const toggleBtn=hasSubs?`<span onclick="toggleFluxo('${groupId}')" style="cursor:pointer;margin-right:6px;font-size:10px;display:inline-block;width:12px">${expanded?'▼':'▶'}</span>`:`<span style="display:inline-block;width:18px"></span>`;
+    const cells=v12.map((v,i)=>{
+      const bg=i===curMonthIdx?' style="background:rgba(19,124,60,.06)"':'';
+      if(drillInfo&&v!==0){
+        const di=window._fluxoDrillCells.length;
+        window._fluxoDrillCells.push({cat:drillInfo.cat,sub:drillInfo.sub,tipo:drillInfo.tipo,mes:i});
+        return`<td class="${v<0?'neg':'pos'}"${bg} style="cursor:pointer;text-decoration:underline dotted;font-size:11.5px" onclick="openFluxoDrillByIdx(${di})">${fmt(v)}</td>`;
+      }
+      return`<td class="${v<0?'neg':'pos'}"${bg}>${fmt(v)}</td>`;
+    }).join('');
+    const pl=indent?28:12;
+    return`<tr class="dr${bold?' bold':''} ${cls}" style="${style}">
+      <td style="padding-left:${pl}px;position:sticky;left:0;z-index:2;background:var(--s1)">${toggleBtn}${lbl}</td>${cells}
+      <td class="${tv<0?'neg':'pos'} tc">${fmt(tv)}</td>
+    </tr>`;
+  }
 
-  // Per-account saldo calculation
+  function groupRowsFluxo(cat,tipo){
+    const neg=tipo==='D';
+    const k=(tipo==='R'?'r_':'d_')+(cat.slug||slugify(cat.nome));
+    const subs=(cat.subs||[]).sort((a,b)=>(a.ordem||0)-(b.ordem||0));
+    let html=row(cat.nome,k,false,true,'',neg,{cat:cat.nome,sub:'',tipo},k,null,subs.length);
+    subs.forEach(sub=>{
+      const sk=(tipo==='R'?'rs_':'ds_')+(sub.slug||slugify(sub.nome));
+      html+=row(sub.nome,sk,false,true,'',neg,{cat:cat.nome,sub:sub.nome,tipo},sk,k);
+    });
+    return html;
+  }
+
+  // ── Cálculo de saldo por conta (necessário em ambas as views) ────────────
   const paidData=cashMovements().filter(l=>l.dataPgto&&getY(l.dataPgto)===YEAR);
   const contaFlows={};
-  paidData.forEach(l=>{const c=l.conta||'(Sem conta)';if(!contaFlows[c])contaFlows[c]=Array(12).fill(0);});
-  // Include destination accounts from new-style single-record transfers
+  paidData.forEach(l=>{const cn=l.conta||'(Sem conta)';if(!contaFlows[cn])contaFlows[cn]=Array(12).fill(0);});
   paidData.filter(l=>(l.doc||'').startsWith('TRANSF#')&&(l.obs||'').startsWith('TRANSF_DEST:')).forEach(l=>{
     const dest=l.obs.slice(12);if(dest&&!contaFlows[dest])contaFlows[dest]=Array(12).fill(0);
   });
@@ -1290,54 +1601,217 @@ function renderFluxo(c){
   const contaSet=[...new Set(Object.keys(contaFlows))].sort((a,b)=>{const ia=contaOrder.indexOf(a),ib=contaOrder.indexOf(b);if(ia<0&&ib<0)return a.localeCompare(b);if(ia<0)return 1;if(ib<0)return -1;return ia-ib;});
   paidData.forEach(l=>{
     const i=getM(l.dataPgto),v=parseMoney(l.valorLiq);
-    const conta=l.conta||'(Sem conta)';
-    contaFlows[conta][i]+=(l.tipo==='R'?v:-v);
-    // New-style transfer: also credit destination account
+    const cn=l.conta||'(Sem conta)';
+    contaFlows[cn][i]+=(l.tipo==='R'?v:-v);
     if((l.doc||'').startsWith('TRANSF#')&&(l.obs||'').startsWith('TRANSF_DEST:')){
       const dest=l.obs.slice(12);if(dest&&!paidData.some(cr=>cr.doc===l.doc&&cr.conta===dest&&cr.tipo==='R'))contaFlows[dest][i]+=v;
     }
   });
-  const contaRows=contaSet.map(conta=>{
-    const vals=contaFlows[conta];
-    const cells=vals.map(v=>`<td class="${v<0?'neg':'pos'}">${fmt(v)}</td>`).join('');
-    const tv=vals.reduce((s,v)=>s+v,0);
-    return`<tr class="dr"><td style="padding-left:28px">${esc(conta)}</td>${cells}<td class="${tv<0?'neg':'pos'} tc">${fmt(tv)}</td></tr>`;
-  }).join('');
-
-  // Per-account closing balance: saldo_inicial + cumulative monthly flows
   const contaSaldoFin={};
   contaSet.forEach(conta=>{
     const ini=parseFloat(CONTAS_DATA.find(c=>c.nome===conta)?.saldo_inicial)||0;
-    let cum=ini;
-    contaSaldoFin[conta]=contaFlows[conta].map(v=>{cum+=v;return cum;});
+    let cum=ini;contaSaldoFin[conta]=contaFlows[conta].map(v=>{cum+=v;return cum;});
   });
   const totalSaldoFinVals=Array(12).fill(0);
   contaSet.forEach(conta=>contaSaldoFin[conta].forEach((v,i)=>totalSaldoFinVals[i]+=v));
+
+  const recCatsVis=recCats.filter(cat=>(cat.slug||slugify(cat.nome))!==TRANSF_SLUG);
+  const despCatsVis=despCats.filter(cat=>(cat.slug||slugify(cat.nome))!==TRANSF_SLUG);
+  const hasNaoOp=recCatsVis.some(c=>(c.fluxo||'operacional')==='nao_operacional')||despCatsVis.some(c=>(c.fluxo||'operacional')==='nao_operacional');
+
+  // ── KPI cards ────────────────────────────────────────────────────────────
+  const lastMesData=f.reduce((last,m,i)=>(m.entradasOp>0||m.saidasOp>0)?i:last,-1);
+  const kpiEnt=f.reduce((s,m)=>s+m.entradasOp,0);
+  const kpiSai=f.reduce((s,m)=>s+m.saidasOp,0);
+  const kpiRes=f.reduce((s,m)=>s+m.resultadoOp,0);
+  const kpiSF=lastMesData>=0?totalSaldoFinVals[lastMesData]:0;
+  const kpiResCol=kpiRes>=0?'var(--teal)':'var(--red)';
+  const kpiSFCol=kpiSF>=0?'var(--teal)':'var(--red)';
+  const fKpi=(lbl,val,sub,col)=>`<div class="kpi" style="align-self:start"><div class="kpi-lbl">${lbl}</div><div class="kpi-val" style="color:${col}">${val}</div><div class="kpi-sub">${sub}</div></div>`;
+  const fluxoKpis=`<div class="dre-kpis">
+    ${fKpi('Total Entradas',fmt(kpiEnt),`${YEAR} · regime de caixa`,'var(--tx)')}
+    ${fKpi('Total Saídas',fmt(kpiSai),`${YEAR} · regime de caixa`,'var(--tx)')}
+    ${fKpi('Resultado Operacional',fmt(kpiRes),`${YEAR} · acumulado`,kpiResCol)}
+    ${fKpi('Saldo Final',fmt(kpiSF),lastMesData>=0?`${MONTHS_FULL[lastMesData]}/${YEAR}`:'—',kpiSFCol)}
+  </div>`;
+
+  const toolbar=`<div class="tbl-hdr" style="display:flex;align-items:center;justify-content:space-between;flex-wrap:wrap;gap:8px">
+    <div class="sec-ttl">Fluxo de Caixa — Regime de Caixa <span class="yr-pill">${YEAR}</span></div>
+    <div style="display:flex;gap:6px;align-items:center">
+      <div class="dre-seg">
+        <button class="dre-seg-btn${fluxoView==='anual'?' on':''}" onclick="setFluxoView('anual')">Anual</button>
+        <button class="dre-seg-btn${fluxoView==='mensal'?' on':''}" onclick="setFluxoView('mensal')">Mensal</button>
+      </div>
+      ${fluxoView==='anual'
+        ?`<button class="btn btn-ghost" style="font-size:12px" onclick="exportFluxoExcel()">${appIcon('download')}Exportar Excel</button>
+           <button class="btn btn-ghost" style="font-size:12px" onclick="toggleAllFluxo()">⊞ Expandir/Recolher tudo</button>
+           <button class="btn btn-ghost" style="font-size:12px;${showFluxoProj?'border-color:#58a6ff;color:#58a6ff':''}" onclick="toggleFluxoProj()">${appIcon('chart')} ${showFluxoProj?'Ocultar projetado':'Fluxo Projetado'}</button>`
+        :`<button class="btn btn-ghost" style="font-size:12px" onclick="toggleAllFluxoMes()">⊞ Expandir/Recolher tudo</button>`}
+    </div>
+  </div>`;
+
+  // ── VISÃO MENSAL ─────────────────────────────────────────────────────────
+  if(fluxoView==='mensal'){
+    if(!window._fluxoExpandedMes)window._fluxoExpandedMes={};
+    const fluxoM=f[fluxoViewMes];
+
+    function rowFluxoMes(lbl,k,type='normal',groupId=null,parentId=null,neg=false,numSubs=0,drillInfo=null){
+      const isSep=type==='sep',isSubSep=type==='subsep';
+      const isGroup=type==='group',isSub=type==='sub';
+      if(isSep) return`<tr class="sep"><td colspan="2" style="position:sticky;left:0;z-index:2;background:#eaf2e7">${lbl}</td></tr>`;
+      if(isSubSep) return`<tr class="sep"><td colspan="2" style="padding-left:28px;font-size:9px;color:${k||'var(--tx3)'};position:sticky;left:0;z-index:2;background:#eaf2e7">${lbl}</td></tr>`;
+      const hasSubs=groupId&&!parentId&&numSubs>0;
+      const expanded=groupId?(window._fluxoExpandedMes[groupId]===true):true;
+      const v=(neg?-1:1)*(fluxoM[k]||0);
+      const col=v<0?'var(--red)':(v>0?'var(--teal)':'var(--tx3)');
+      let style='';
+      if(parentId&&window._fluxoExpandedMes[parentId]!==true)style='display:none';
+      let cls='dr';
+      if(type==='total'||type==='result')cls+=' bold';
+      if(type==='result')cls+=' hl';
+      if(type==='tot'||type==='tot-bal')cls+=' tot';
+      const indent=isSub?40:isGroup?20:12;
+      const tdStyle=`padding-left:${indent}px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap`;
+      const toggleBtn=hasSubs?`<span onclick="toggleFluxoMes('${groupId}')" style="cursor:pointer;margin-right:6px;font-size:10px;display:inline-block;width:12px;flex-shrink:0">${expanded?'▼':'▶'}</span>`:`<span style="display:inline-block;width:18px;flex-shrink:0"></span>`;
+      let valTd;
+      if(drillInfo&&v!==0){
+        const di=window._fluxoDrillCells.length;
+        window._fluxoDrillCells.push({cat:drillInfo.cat,sub:drillInfo.sub,tipo:drillInfo.tipo,mes:fluxoViewMes});
+        valTd=`<td style="text-align:right;color:${col};font-size:12px;white-space:nowrap;padding-right:10px;cursor:pointer;text-decoration:underline dotted" onclick="openFluxoDrillByIdx(${di})">${fmt(v)}</td>`;
+      } else {
+        valTd=`<td style="text-align:right;color:${col};font-size:12px;white-space:nowrap;padding-right:10px">${v!==0?fmt(v):'—'}</td>`;
+      }
+      return`<tr class="${cls}" style="${style}"><td style="${tdStyle}">${toggleBtn}${lbl}</td>${valTd}</tr>`;
+    }
+
+    function groupRowsFluxoMes(cat,tipo){
+      const neg=tipo==='D';
+      const k=(tipo==='R'?'r_':'d_')+(cat.slug||slugify(cat.nome));
+      const subs=(cat.subs||[]).sort((a,b)=>(a.ordem||0)-(b.ordem||0));
+      let html=rowFluxoMes(cat.nome,k,'group',k,null,neg,subs.length,{cat:cat.nome,sub:'',tipo});
+      subs.forEach(sub=>{
+        const sk=(tipo==='R'?'rs_':'ds_')+(sub.slug||slugify(sub.nome));
+        html+=rowFluxoMes(sub.nome,sk,'sub',sk,k,neg,0,{cat:cat.nome,sub:sub.nome,tipo});
+      });
+      return html;
+    }
+
+    const entradasOpRowsMes=recCatsVis.filter(c=>(c.fluxo||'operacional')!=='nao_operacional').map(cat=>groupRowsFluxoMes(cat,'R')).join('');
+    const saidasOpRowsMes=despCatsVis.filter(c=>(c.fluxo||'operacional')!=='nao_operacional').map(cat=>groupRowsFluxoMes(cat,'D')).join('');
+    const entradasNaoOpRowsMes=recCatsVis.filter(c=>(c.fluxo||'operacional')==='nao_operacional').map(cat=>groupRowsFluxoMes(cat,'R')).join('');
+    const saidasNaoOpRowsMes=despCatsVis.filter(c=>(c.fluxo||'operacional')==='nao_operacional').map(cat=>groupRowsFluxoMes(cat,'D')).join('');
+
+    const contaRowsMes=contaSet.map(conta=>{
+      const v=contaFlows[conta][fluxoViewMes];
+      const col=v<0?'var(--red)':v>0?'var(--teal)':'var(--tx3)';
+      return`<tr class="dr"><td style="padding-left:28px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap"><span style="display:inline-block;width:18px;flex-shrink:0"></span>${esc(conta)}</td><td style="text-align:right;color:${col};font-size:12px;white-space:nowrap;padding-right:10px">${v!==0?fmt(v):'—'}</td></tr>`;
+    }).join('');
+    const contaSaldoFinRowsMes=contaSet.map(conta=>{
+      const v=contaSaldoFin[conta][fluxoViewMes];
+      const col=v<0?'var(--red)':v>0?'var(--teal)':'var(--tx3)';
+      return`<tr class="dr"><td style="padding-left:28px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap"><span style="display:inline-block;width:18px;flex-shrink:0"></span>${esc(conta)}</td><td style="text-align:right;color:${col};font-size:12px;white-space:nowrap;padding-right:10px">${v!==0?fmt(v):'—'}</td></tr>`;
+    }).join('');
+    const sfv=totalSaldoFinVals[fluxoViewMes];
+    const sfCol=sfv<0?'var(--red)':sfv>0?'var(--teal)':'var(--tx3)';
+    const totalSaldoFinRowMes=`<tr class="dr tot"><td style="padding-left:12px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap"><span style="display:inline-block;width:18px;flex-shrink:0"></span>SALDO FINAL TOTAL</td><td style="text-align:right;color:${sfCol};font-size:12px;white-space:nowrap;padding-right:10px;font-weight:700">${sfv!==0?fmt(sfv):'—'}</td></tr>`;
+
+    c.innerHTML=`<div class="tbl-wrap" style="display:flex;flex-direction:column;height:calc(100vh - 116px);overflow:visible">
+      ${toolbar}
+      <div style="flex:1;overflow:hidden;padding:0 20px 16px;display:flex;gap:20px;min-height:0">
+        <div style="flex:0 0 52%;display:flex;flex-direction:column;min-height:0">
+          <div class="dre-mes-nav">
+            <button onclick="navFluxoMes(-1)" ${fluxoViewMes===0?'disabled':''}>‹</button>
+            <span>${MONTHS_FULL[fluxoViewMes]} ${YEAR}</span>
+            <button onclick="navFluxoMes(1)" ${fluxoViewMes===11?'disabled':''}>›</button>
+          </div>
+          <div style="flex:1;overflow-y:auto">
+            <table class="fin-tbl" style="width:100%;table-layout:fixed;min-width:0">
+              <colgroup><col><col style="width:140px"></colgroup>
+              <thead><tr><th style="text-align:left;padding-left:32px">Descrição</th><th style="text-align:right;padding-right:10px">Valor</th></tr></thead>
+              <tbody>
+                ${rowFluxoMes('FLUXO OPERACIONAL','','sep')}
+                ${rowFluxoMes('ENTRADAS','','subsep')}
+                ${entradasOpRowsMes}
+                ${rowFluxoMes('TOTAL ENTRADAS OPERACIONAIS','entradasOp','result')}
+                ${rowFluxoMes('SAÍDAS','','subsep')}
+                ${saidasOpRowsMes}
+                ${rowFluxoMes('TOTAL SAÍDAS OPERACIONAIS','saidasOp','result',null,null,true)}
+                ${rowFluxoMes('(=) RESULTADO OPERACIONAL','resultadoOp','tot')}
+                ${hasNaoOp?`${rowFluxoMes('NÃO-OPERACIONAL','','sep')}${entradasNaoOpRowsMes}${saidasNaoOpRowsMes}${rowFluxoMes('(=) RESULTADO NÃO-OPERACIONAL','resultadoNaoOp','tot')}`:''}
+                ${rowFluxoMes('SALDOS','','sep')}
+                ${rowFluxoMes('VARIAÇÃO NO PERÍODO','','subsep')}
+                ${contaRowsMes}
+                ${rowFluxoMes('VARIAÇÃO TOTAL DE CAIXA','saldoOp','tot')}
+                ${rowFluxoMes('SALDO FINAL POR CONTA','var(--blue)','subsep')}
+                ${contaSaldoFinRowsMes}
+                ${totalSaldoFinRowMes}
+              </tbody>
+            </table>
+          </div>
+        </div>
+        <div style="flex:1;min-width:0;background:var(--s1);border:1px solid var(--bd);border-radius:12px;align-self:flex-start">
+          <div style="padding:16px 20px 12px">
+            <div style="font-size:10px;font-weight:700;letter-spacing:.1em;text-transform:uppercase;color:var(--brand);margin-bottom:3px">Performance</div>
+            <div style="font-size:15px;font-weight:700;color:var(--tx);line-height:1.2">Entradas, Saídas e Resultado</div>
+            <div style="font-size:12px;color:var(--tx2);margin-top:2px">Regime de caixa · últimos 6 meses</div>
+          </div>
+          <div style="padding:0 12px 4px;position:relative"><div style="height:220px"><canvas id="fluxo-mes-canvas"></canvas></div></div>
+          <div id="fluxo-mes-tip" style="position:fixed;background:var(--s1);border:1px solid var(--bd);border-radius:8px;padding:10px 14px;pointer-events:none;opacity:0;transition:opacity .15s;z-index:300;min-width:160px;box-shadow:var(--shadow)"></div>
+          <div style="display:flex;gap:20px;padding:12px 20px 16px;border-top:1px solid var(--bd)">
+            <span style="display:inline-flex;align-items:center;gap:7px;font-size:12px;font-weight:600;color:var(--tx2)"><span style="width:12px;height:12px;border-radius:3px;background:rgb(26,157,77);display:inline-block;flex-shrink:0"></span>Entradas</span>
+            <span style="display:inline-flex;align-items:center;gap:7px;font-size:12px;font-weight:600;color:var(--tx2)"><span style="width:12px;height:12px;border-radius:3px;background:rgb(227,179,65);display:inline-block;flex-shrink:0"></span>Saídas</span>
+            <span style="display:inline-flex;align-items:center;gap:7px;font-size:12px;font-weight:600;color:var(--tx2)"><span style="width:12px;height:3px;background:rgb(0,83,44);display:inline-block;flex-shrink:0;border-radius:2px"></span>Resultado</span>
+          </div>
+        </div>
+      </div>
+    </div>`;
+
+    // Mensal drill panel
+    const oldDrillMes=document.getElementById('fluxo-drill');if(oldDrillMes)oldDrillMes.remove();
+    if(fluxoDrillDown){
+      const d=fluxoDrillDown;
+      const items=cashMovements().filter(l=>{
+        if((l.doc||'').startsWith('TRANSF#'))return false;
+        if(l.tipo!==d.tipo||l.cat!==d.cat)return false;
+        if(d.sub&&l.sub!==d.sub)return false;
+        if(!l.dataPgto||getY(l.dataPgto)!==YEAR||getM(l.dataPgto)!==d.mes)return false;
+        return true;
+      }).sort((a,b)=>(a.dataPgto||'').localeCompare(b.dataPgto||''));
+      const catTitle=d.sub?`${esc(d.cat)} › ${esc(d.sub)}`:esc(d.cat);
+      _buildDrillPanel('fluxo-drill',
+        `<div style="font-size:13px;font-weight:700;color:var(--tx)">${catTitle}</div>
+         <div style="font-size:12px;color:var(--tx2);margin-top:3px">${MONTHS_FULL[d.mes]} ${YEAR} · ${items.length} lançamento${items.length!==1?'s':''}</div>`,
+        items,'closeFluxoDrill');
+    }
+    setTimeout(()=>drawFluxoMesChart(),0);
+    return;
+  }
+
+  // ── VISÃO ANUAL ───────────────────────────────────────────────────────────
+  const entradasOpRows=recCatsVis.filter(c=>(c.fluxo||'operacional')!=='nao_operacional').map(cat=>groupRowsFluxo(cat,'R')).join('');
+  const saidasOpRows=despCatsVis.filter(c=>(c.fluxo||'operacional')!=='nao_operacional').map(cat=>groupRowsFluxo(cat,'D')).join('');
+  const entradasNaoOpRows=recCatsVis.filter(c=>(c.fluxo||'operacional')==='nao_operacional').map(cat=>groupRowsFluxo(cat,'R')).join('');
+  const saidasNaoOpRows=despCatsVis.filter(c=>(c.fluxo||'operacional')==='nao_operacional').map(cat=>groupRowsFluxo(cat,'D')).join('');
+
+  const contaRows=contaSet.map(conta=>{
+    const vals=contaFlows[conta];
+    const cells=vals.map((v,i)=>`<td class="${v<0?'neg':'pos'}"${i===curMonthIdx?' style="background:rgba(19,124,60,.06)"':''}>${fmt(v)}</td>`).join('');
+    const tv=vals.reduce((s,v)=>s+v,0);
+    return`<tr class="dr"><td style="padding-left:28px;position:sticky;left:0;z-index:2;background:var(--s1)">${esc(conta)}</td>${cells}<td class="${tv<0?'neg':'pos'} tc">${fmt(tv)}</td></tr>`;
+  }).join('');
   const mkBalRow=(lbl,vals,bold,indent,cls='')=>{
-    const cells=vals.map(v=>`<td class="${v<0?'neg':'pos'}">${fmt(v)}</td>`).join('');
+    const cells=vals.map((v,i)=>`<td class="${v<0?'neg':'pos'}"${i===curMonthIdx?' style="background:rgba(19,124,60,.06)"':''}>${fmt(v)}</td>`).join('');
     const tv=vals[vals.length-1];
-    return`<tr class="dr${bold?' bold':''} ${cls}"><td style="padding-left:${indent?28:12}px">${lbl}</td>${cells}<td class="${tv<0?'neg':'pos'} tc">${fmt(tv)}</td></tr>`;
+    return`<tr class="dr${bold?' bold':''} ${cls}"><td style="padding-left:${indent?28:12}px;position:sticky;left:0;z-index:2;background:var(--s1)">${lbl}</td>${cells}<td class="${tv<0?'neg':'pos'} tc">${fmt(tv)}</td></tr>`;
   };
   const contaSaldoFinRows=contaSet.map(conta=>mkBalRow(esc(conta),contaSaldoFin[conta],false,true)).join('');
   const totalSaldoFinRow=mkBalRow('SALDO FINAL TOTAL',totalSaldoFinVals,true,false,'tot-bal');
 
   let projSection='';
   if(showFluxoProj){
-    const pendData=DATA.filter(l=>{
-      if(openAmount(l)<=0.005)return false;
-      const d=dateForSchedule(l);
-      return d&&getY(d)===YEAR;
-    });
-    const projEnt=Array(12).fill(0);
-    const projSai=Array(12).fill(0);
-    pendData.forEach(l=>{
-      const d=dateForSchedule(l);
-      const i=getM(d);
-      if(i==null||i<0||i>11)return;
-      const v=openAmount(l);
-      if(l.tipo==='R')projEnt[i]+=v;
-      else projSai[i]+=v;
-    });
+    const pendData=DATA.filter(l=>{if(openAmount(l)<=0.005)return false;const d=dateForSchedule(l);return d&&getY(d)===YEAR;});
+    const projEnt=Array(12).fill(0),projSai=Array(12).fill(0);
+    pendData.forEach(l=>{const d=dateForSchedule(l);const i=getM(d);if(i==null||i<0||i>11)return;const v=openAmount(l);if(l.tipo==='R')projEnt[i]+=v;else projSai[i]+=v;});
     const projSaldoOp=projEnt.map((e,i)=>e-projSai[i]);
     let cumProj=0;
     const projSaldoFin=f.map((m,i)=>{cumProj+=projSaldoOp[i];return m.saldoFin+cumProj;});
@@ -1347,35 +1821,51 @@ function renderFluxo(c){
       return`<tr class="dr${bold?' bold':''} ${cls}"><td style="padding-left:12px">${lbl}</td>${cells}<td class="${tv<0?'neg':'pos'} tc">${fmt(tv)}</td></tr>`;
     };
     projSection=`<tr class="sep proj-sep"><td colspan="14">${appIcon('chart')} PROJEÇÃO — Lançamentos Pendentes</td></tr>
-    ${mkRow('Entradas Previstas',projEnt,false,'proj-row')}
-    ${mkRow('Saídas Previstas',projSai,false,'proj-row')}
-    ${mkRow('Saldo Final Projetado',projSaldoFin,true,'proj-tot')}`;
+      ${mkRow('Entradas Previstas',projEnt,false,'proj-row')}
+      ${mkRow('Saídas Previstas',projSai,false,'proj-row')}
+      ${mkRow('Saldo Final Projetado',projSaldoFin,true,'proj-tot')}`;
   }
 
-  c.innerHTML=`<div class="tbl-wrap"><div class="tbl-hdr" style="display:flex;align-items:center;justify-content:space-between;flex-wrap:wrap;gap:8px"><div class="sec-ttl">Fluxo de Caixa — Regime de Caixa <span class="yr-pill">${YEAR}</span></div><div style="display:flex;gap:6px"><button class="btn btn-ghost" style="font-size:12px" onclick="exportFluxoExcel()">${appIcon('download')}Exportar Excel</button><button class="btn btn-ghost" style="font-size:12px;${showFluxoProj?'border-color:#58a6ff;color:#58a6ff':''}" onclick="toggleFluxoProj()">${appIcon('chart')} ${showFluxoProj?'Ocultar projetado':'Fluxo Projetado'}</button></div></div>
-    <div class="tbl-scroll" style="max-height:calc(100vh - 190px);overflow-y:auto"><table class="fin-tbl resizable">${renderFinColgroup()}<thead>${renderFinHead()}</thead><tbody>
-    ${sep('FLUXO OPERACIONAL')}
-    <tr class="sep"><td colspan="14" style="padding-left:28px;font-size:9px;color:var(--tx3)">ENTRADAS</td></tr>
-    ${entradasOpRows}
-    ${row('TOTAL ENTRADAS OPERACIONAIS','entradasOp',true,false,'hl')}
-    <tr class="sep"><td colspan="14" style="padding-left:28px;font-size:9px;color:var(--tx3)">SAÍDAS</td></tr>
-    ${saidasOpRows}
-    ${row('TOTAL SAÍDAS OPERACIONAIS','saidasOp',true,false,'',true)}
-    ${row('(=) RESULTADO OPERACIONAL','resultadoOp',true,false,'tot')}
-    ${hasNaoOp?`
-    ${sep('NÃO-OPERACIONAL')}
-    ${entradasNaoOpRows}
-    ${saidasNaoOpRows}
-    ${row('(=) RESULTADO NÃO-OPERACIONAL','resultadoNaoOp',true,false,'tot')}
-    `:''}
-    ${sep('SALDOS')}
-    <tr class="sep"><td colspan="14" style="padding-left:28px;font-size:9px;color:var(--tx3)">VARIAÇÃO NO PERÍODO</td></tr>
-    ${contaRows}
-    ${row('VARIAÇÃO TOTAL DE CAIXA','saldoOp',true,false,'tot')}
-    <tr class="sep"><td colspan="14" style="padding-left:28px;font-size:9px;color:var(--blue)">SALDO FINAL POR CONTA</td></tr>
-    ${contaSaldoFinRows}
-    ${totalSaldoFinRow}
-    ${projSection}
-    </tbody></table></div></div>`;
+  c.innerHTML=`<div class="tbl-wrap" style="display:flex;flex-direction:column;height:calc(100vh - 116px)">
+    ${toolbar}
+    ${fluxoKpis}
+    <div class="tbl-scroll" style="flex:1;overflow:auto"><table class="fin-tbl resizable">${renderFinColgroup()}<thead>${renderFinHead()}</thead><tbody>
+      ${sep('FLUXO OPERACIONAL')}
+      ${sepSub('ENTRADAS')}
+      ${entradasOpRows}
+      ${row('TOTAL ENTRADAS OPERACIONAIS','entradasOp',true,false,'hl')}
+      ${sepSub('SAÍDAS')}
+      ${saidasOpRows}
+      ${row('TOTAL SAÍDAS OPERACIONAIS','saidasOp',true,false,'',true)}
+      ${row('(=) RESULTADO OPERACIONAL','resultadoOp',true,false,'tot')}
+      ${hasNaoOp?`${sep('NÃO-OPERACIONAL')}${entradasNaoOpRows}${saidasNaoOpRows}${row('(=) RESULTADO NÃO-OPERACIONAL','resultadoNaoOp',true,false,'tot')}`:''}
+      ${sep('SALDOS')}
+      ${sepSub('VARIAÇÃO NO PERÍODO')}
+      ${contaRows}
+      ${row('VARIAÇÃO TOTAL DE CAIXA','saldoOp',true,false,'tot')}
+      ${sepSub('SALDO FINAL POR CONTA','var(--blue)')}
+      ${contaSaldoFinRows}
+      ${totalSaldoFinRow}
+      ${projSection}
+    </tbody></table></div>
+  </div>`;
+
+  // Anual drill panel
+  const oldDrill=document.getElementById('fluxo-drill');if(oldDrill)oldDrill.remove();
+  if(fluxoDrillDown){
+    const d=fluxoDrillDown;
+    const items=cashMovements().filter(l=>{
+      if((l.doc||'').startsWith('TRANSF#'))return false;
+      if(l.tipo!==d.tipo||l.cat!==d.cat)return false;
+      if(d.sub&&l.sub!==d.sub)return false;
+      if(!l.dataPgto||getY(l.dataPgto)!==YEAR||getM(l.dataPgto)!==d.mes)return false;
+      return true;
+    }).sort((a,b)=>(a.dataPgto||'').localeCompare(b.dataPgto||''));
+    const catTitle=d.sub?`${esc(d.cat)} › ${esc(d.sub)}`:esc(d.cat);
+    _buildDrillPanel('fluxo-drill',
+      `<div style="font-size:13px;font-weight:700;color:var(--tx)">${catTitle}</div>
+       <div style="font-size:12px;color:var(--tx2);margin-top:3px">${MONTHS_FULL[d.mes]} ${YEAR} · ${items.length} lançamento${items.length!==1?'s':''}</div>`,
+      items,'closeFluxoDrill');
+  }
 }
 
