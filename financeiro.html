@@ -11,8 +11,8 @@
 (function loadAppCss(){
   const isLocalServer = ['localhost', '127.0.0.1'].includes(location.hostname);
   const cssPath = location.protocol === 'file:' || isLocalServer
-    ? 'financeiro.css?v=2.5.151'
-    : '/Skala-F/financeiro.css?v=2.5.151';
+    ? 'financeiro.css?v=2.5.161'
+    : '/Skala-F/financeiro.css?v=2.5.161';
   document.write('<link rel="stylesheet" href="' + cssPath + '"/>');
 })();
 </script>
@@ -46,6 +46,7 @@
     <div class="sidebar-foot">
       <div id="pf-options" class="pf-options">
         <button onclick="openSettingsModal()"><span data-app-icon="settings"></span>Configurações</button>
+        <button onclick="openLogPanel()"><span data-app-icon="activity"></span>Log de Eventos</button>
         <button onclick="doLogout()" class="pf-logout">→ Sair</button>
       </div>
       <div id="profile-area" class="profile-area" onclick="toggleProfileDropdown(event)">
@@ -64,7 +65,18 @@
     <header class="topbar">
       <div><h1 class="page-ttl" id="page-ttl">Dashboard</h1><p class="page-sub" id="page-sub"></p></div>
       <div class="topbar-r">
-        <div class="yr-sel"><select id="yr-sel" onchange="setDashboardPeriod(this.value)"></select></div>
+        <div class="yr-sel" id="yr-sel-wrap">
+          <button class="yr-sel-btn" id="yr-sel-btn" onclick="toggleMonthPicker()">—</button>
+          <div class="yr-sel-panel" id="yr-sel-panel" style="display:none">
+            <div class="yr-sel-nav">
+              <button onclick="shiftPickerYear(-1)">◀</button>
+              <span id="yr-sel-year"></span>
+              <button onclick="shiftPickerYear(1)">▶</button>
+            </div>
+            <div class="yr-sel-grid" id="yr-sel-grid"></div>
+            <div class="yr-sel-today"><button onclick="setPickerToday()">Hoje</button></div>
+          </div>
+        </div>
         <button class="btn btn-ghost" onclick="openTransfModal()" style="font-size:13px"><span data-app-icon="transfer"></span>Transferência</button>
         <button class="btn btn-pri" onclick="openForm()"><span data-app-icon="plus"></span>Novo Lançamento</button>
       </div>
@@ -131,6 +143,25 @@
     </div>
   </div>
 </div>
+<div class="overlay" id="log-panel" style="display:none" onclick="if(event.target===this)closeLogPanel()">
+  <div class="modal" style="max-width:500px;max-height:70vh;display:flex;flex-direction:column">
+    <div class="modal-hdr"><h2><span data-app-icon="activity"></span>Log de Eventos</h2><button class="cls" onclick="closeLogPanel()">✕</button></div>
+    <div id="log-panel-body" style="padding:0 22px 4px;overflow-y:auto;flex:1;min-height:80px"></div>
+    <div style="padding:12px 22px;border-top:1px solid var(--bd);display:flex;justify-content:flex-end">
+      <button class="btn btn-ghost" style="font-size:12px" onclick="TOAST_LOG.length=0;document.getElementById('log-panel-body').innerHTML='<div style=&quot;padding:24px 0;text-align:center;color:var(--tx3);font-size:13px&quot;>Log limpo.</div>'">Limpar log</button>
+    </div>
+  </div>
+</div>
+<div class="overlay" id="confirm-overlay" style="display:none" onclick="if(event.target===this)_cfmClose(false)">
+  <div class="modal" style="max-width:420px">
+    <div class="modal-hdr"><h2 id="confirm-title">Confirmar</h2><button class="cls" onclick="_cfmClose(false)">✕</button></div>
+    <div id="confirm-body" style="padding:18px 22px 8px;font-size:14px;color:var(--tx2);line-height:1.6"></div>
+    <div style="padding:12px 22px 18px;display:flex;justify-content:flex-end;gap:8px">
+      <button class="btn btn-ghost" id="confirm-cancel-btn" onclick="_cfmClose(false)">Cancelar</button>
+      <button class="btn btn-pri" id="confirm-ok-btn" onclick="_cfmClose(true)">Confirmar</button>
+    </div>
+  </div>
+</div>
 <script>
 (function loadAppJs(){
   const isLocalServer = ['localhost', '127.0.0.1'].includes(location.hostname);
@@ -144,7 +175,7 @@
     '05-importacoes.js',
     '06-clientes.js'
   ].forEach(function(file){
-    document.write('<script src="' + basePath + file + '?v=2.5.151"><\/script>');
+    document.write('<script src="' + basePath + file + '?v=2.5.162"><\/script>');
   });
 })();
 </script>

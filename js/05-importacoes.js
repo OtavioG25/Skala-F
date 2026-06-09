@@ -176,7 +176,27 @@ async function toggleStatus(id){
   openEdit(id);
 }
 let toastTimeout;
-function toast(msg,type='ok'){clearTimeout(toastTimeout);const existing=document.getElementById('toast-el');if(existing)existing.remove();const el=document.createElement('div');el.id='toast-el';el.className=`toast ${type}`;el.textContent=msg;document.body.appendChild(el);toastTimeout=setTimeout(()=>el.remove(),2800);}
+const TOAST_LOG=[];
+function toast(msg,type='ok'){
+  clearTimeout(toastTimeout);
+  TOAST_LOG.unshift({msg,type,time:new Date()});
+  if(TOAST_LOG.length>100)TOAST_LOG.length=100;
+  const existing=document.getElementById('toast-el');if(existing)existing.remove();
+  const el=document.createElement('div');el.id='toast-el';el.className=`toast ${type}`;el.textContent=msg;document.body.appendChild(el);
+  toastTimeout=setTimeout(()=>el.remove(),2800);
+}
+function openLogPanel(){
+  const panel=document.getElementById('log-panel');if(!panel)return;
+  const fmtT=d=>`${String(d.getHours()).padStart(2,'0')}:${String(d.getMinutes()).padStart(2,'0')}:${String(d.getSeconds()).padStart(2,'0')}`;
+  const rows=TOAST_LOG.length
+    ?TOAST_LOG.map(e=>`<div style="display:flex;align-items:flex-start;gap:10px;padding:9px 0;border-bottom:1px solid var(--bd)"><div style="width:8px;height:8px;border-radius:50%;flex-shrink:0;margin-top:5px;background:${e.type==='ok'?'var(--teal)':e.type==='err'?'var(--red)':'var(--orange)'}"></div><div style="flex:1;font-size:13px;color:var(--tx);line-height:1.4">${esc(e.msg)}</div><div style="font-size:11px;color:var(--tx3);white-space:nowrap;flex-shrink:0">${fmtT(e.time)}</div></div>`).join('')
+    :'<div style="padding:24px 0;text-align:center;color:var(--tx3);font-size:13px">Nenhum evento registrado nesta sessão.</div>';
+  document.getElementById('log-panel-body').innerHTML=rows;
+  panel.style.display='flex';
+}
+function closeLogPanel(){
+  const panel=document.getElementById('log-panel');if(panel)panel.style.display='none';
+}
 
 function _saveSession(d){
   localStorage.setItem('sb_token',d.access_token);
@@ -946,6 +966,17 @@ async function confirmarImport(){
   closeImpModal();
   setSyncStatus('loading','Importando...');
 
+  const _impProgWrap=document.createElement('div');
+  _impProgWrap.id='imp-progress-wrap';
+  _impProgWrap.style.cssText='position:fixed;bottom:0;left:0;right:0;z-index:9999;background:var(--s2);border-top:1px solid var(--bd);padding:10px 20px;display:flex;align-items:center;gap:12px;box-shadow:0 -2px 12px #0004';
+  _impProgWrap.innerHTML=`<span style="font-size:12px;color:var(--tx2);white-space:nowrap">Importando faturamento</span><div style="flex:1;height:8px;background:var(--bd);border-radius:4px;overflow:hidden"><div id="imp-prog-bar" style="height:100%;width:0%;background:var(--brand);border-radius:4px;transition:width .15s ease"></div></div><span id="imp-prog-pct" style="font-size:12px;color:var(--brand);font-weight:700;min-width:36px;text-align:right">0%</span><span id="imp-prog-txt" style="font-size:12px;color:var(--tx3);white-space:nowrap">0 / ${entries.length}</span>`;
+  document.body.appendChild(_impProgWrap);
+  const _updImpProg=done=>{
+    const pct=Math.round(done/entries.length*100);
+    const bar=document.getElementById('imp-prog-bar'),pctEl=document.getElementById('imp-prog-pct'),txt=document.getElementById('imp-prog-txt');
+    if(bar)bar.style.width=pct+'%';if(pctEl)pctEl.textContent=pct+'%';if(txt)txt.textContent=`${done} / ${entries.length}`;
+  };
+
   let inserted=0,skipped=0,errors=0;
   const clienteCache=new Map();
   const clientesAntes=CLIENTES.length;
@@ -959,7 +990,9 @@ async function confirmarImport(){
       DATA.unshift(fromRow({...toRow(item),id:saved?.id||id}));
       inserted++;
     }catch(e){errors++;console.error('Erro ao importar linha',entry?.desc,e);}
+    _updImpProg(inserted+skipped+errors);
   }
+  document.getElementById('imp-progress-wrap')?.remove();
   const createdClientes=CLIENTES.length-clientesAntes;
 
   setSyncStatus('ok',`${DATA.length} registros`);

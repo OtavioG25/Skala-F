@@ -5,6 +5,7 @@ let filterClienteRec='todos'; // 'todos' | 'rec' | 'norec'
 let editingClienteId=null;
 let formCliente={nome:'',codigo:'',cpfCnpj:'',recorrente:false,recorrenteDesde:'',inativadoEm:'',ativo:true};
 let sortCli={col:'',dir:'asc'};
+let clienteDetalheId=null;
 let clientesCompSel=''; // YYYY-MM — competência selecionada na aba Clientes ('' = mês fechado)
 
 // ---------- Mapeamento app → banco ----------
@@ -180,7 +181,7 @@ function _clienteAtivoNaComp(c,comp){
   return !c.inativadoEm||c.inativadoEm>=_compStart(comp);
 }
 function _getClientesComp(){
-  return clientesCompSel||_mesFechadoComp();
+  return `${YEAR}-${String(DASHBOARD_MONTH+1).padStart(2,'0')}`;
 }
 function navClientesMes(dir){
   const ref=_getClientesComp();
@@ -190,6 +191,11 @@ function navClientesMes(dir){
 function setClientesMes(val){
   clientesCompSel=val||'';
   renderKeepScroll();
+}
+function abrirDetalheCliente(id){
+  if(window._chartCliDetalhe){try{window._chartCliDetalhe.destroy();}catch(e){}window._chartCliDetalhe=null;}
+  clienteDetalheId=id;
+  render();
 }
 function _renderClientesPeriodControl(){
   const wrap=document.getElementById('clientes-period-wrap');
@@ -225,9 +231,11 @@ function _clientesKPIs(){
   const nrr=calcNRR(comp);
   const tot=mrr+nrr;
   const mixMRR=tot>0?Math.round(mrr/tot*100):0;
+  const mrrPrev=calcMRR(_prevComp(comp));
+  const mrrVar=mrrPrev>0?((mrr-mrrPrev)/mrrPrev*100):null;
   const inad=countInadimplentes();
   const atraso=countAtrasados();
-  return {ativos,comp,mrr,nrr,mixMRR,inad,atraso};
+  return {ativos,comp,mrr,nrr,mixMRR,mrrVar,inad,atraso};
 }
 function _clienteStatusBadge(c){
   if(!c.recorrente)return '<span class="badge bx" title="Cliente pontual / avulso">Pontual</span>';
@@ -369,6 +377,11 @@ function _mrrMesLabel(){
 }
 
 function renderClientes(c){
+  if(clienteDetalheId){
+    const cli=CLIENTES.find(x=>x.id===clienteDetalheId);
+    if(cli){renderClienteDetalhe(cli,c);return;}
+    clienteDetalheId=null;
+  }
   const k=_clientesKPIs();
   const list=_sortClientesArr(_clientesFiltered());
   const compLbl=_compShort(k.comp);
@@ -380,14 +393,13 @@ function renderClientes(c){
   const sinalEncerrados=mov.churn>0?`-${mov.churn} encerrados`:'';
   const movTxt=[sinalNovos,sinalEncerrados].filter(Boolean).join(' · ')||'Sem alteração vs mês anterior';
   c.innerHTML=`
-    <div id="clientes-period-wrap" style="margin-bottom:12px"></div>
     <div class="kpi-grid">
       <div class="kpi">
         <div class="kpi-lbl">Clientes ativos</div>
         <div class="kpi-val">${mov.total}</div>
         <div class="kpi-sub">${movTxt}</div>
       </div>
-      <div class="kpi" title="${esc(ttMRR)}" style="cursor:help"><div class="kpi-lbl">MRR</div><div class="kpi-val">${fmt(k.mrr)}</div><div class="kpi-sub">${k.mixMRR}% da receita do mês</div></div>
+      <div class="kpi" title="${esc(ttMRR)}" style="cursor:help"><div class="kpi-lbl">MRR</div><div class="kpi-val">${fmt(k.mrr)}</div><div class="kpi-sub" style="color:${k.mrrVar===null?'var(--tx3)':k.mrrVar>=0?'var(--teal)':'var(--red)'}">${k.mrrVar===null?'sem dado anterior':k.mrrVar>=0?`+${k.mrrVar.toFixed(1)}% vs mês anterior`:`${k.mrrVar.toFixed(1)}% vs mês anterior`}</div></div>
       <div class="kpi" title="${esc(ttNRR)}" style="cursor:help"><div class="kpi-lbl">NRR — Pontual</div><div class="kpi-val">${fmt(k.nrr)}</div><div class="kpi-sub">${100-k.mixMRR}% da receita do mês</div></div>
       <div class="kpi" title="${esc(ttInad)}" style="cursor:help"><div class="kpi-lbl">Inadimplentes</div><div class="kpi-val">${k.inad}</div><div class="kpi-sub">${k.atraso} em atraso</div></div>
     </div>
@@ -418,7 +430,6 @@ function renderClientes(c){
       </div>
     </div>
   `;
-  _renderClientesPeriodControl();
 }
 function _clienteRowHTML(c){
   const ult=_clienteUltimoPgto(c.id);
@@ -432,7 +443,7 @@ function _clienteRowHTML(c){
     ? `<span title="Última competência: ${compDisplay(recRec.comp+'-01')}">${fmt(recRec.valor)}</span>`
     : '<span style="opacity:.28;color:var(--tx3)">—</span>';
   const recClass=recRec.valor>0?'vc r':'';
-  return `<tr class="lr" id="cli-row-${c.id}" onclick="openEditCliente('${c.id}')">
+  return `<tr class="lr" id="cli-row-${c.id}" onclick="abrirDetalheCliente('${c.id}')">
     <td data-col="codigo" style="text-align:center">${esc(c.codigo||'—')}</td>
     <td data-col="nome" title="${esc(c.nome)}"><span class="ct">${esc(c.nome)}</span></td>
     <td data-col="cpfCnpj">${esc(c.cpfCnpj||'—')}</td>
@@ -583,15 +594,255 @@ async function deleteCliente(id){
     toast(`Cliente "${c.nome}" tem ${vinculados} lançamento(s) vinculado(s). Desvincule antes de excluir.`,'err');
     return;
   }
-  if(!confirm(`Excluir o cliente "${c.nome}"? Esta ação não pode ser desfeita.`))return;
+  if(!await openConfirmModal(`Excluir o cliente "${c.nome}"? Esta ação não pode ser desfeita.`,{danger:true,confirmLabel:'Excluir cliente'}))return;
   try{
     await dbDeleteCliente(id);
     CLIENTES=CLIENTES.filter(x=>x.id!==id);
+    if(clienteDetalheId===id)clienteDetalheId=null;
     toast('Cliente excluído','ok');
     render();
   }catch(e){
     console.error(e);
     toast('Erro ao excluir: '+(e.message||e),'err');
   }
+}
+
+// -------- Visão individual do cliente --------
+function _clienteDetalheKPIs(clienteId){
+  const anoAtual=new Date().getFullYear();
+  const lancsR=DATA.filter(l=>l.clienteId===clienteId&&l.tipo==='R');
+
+  const totalAno=lancsR
+    .filter(l=>(l.status==='Recebido'||l.status==='Parcial')
+      &&(l.dataPgto||'').startsWith(String(anoAtual)))
+    .reduce((s,l)=>s+(parseFloat(l.valorLiq)||0),0);
+
+  const porMes={};
+  lancsR.filter(l=>l.status==='Recebido'||l.status==='Parcial').forEach(l=>{
+    const m=(l.dataPgto||l.dataComp||'').slice(0,7);
+    if(m)porMes[m]=(porMes[m]||0)+(parseFloat(l.valorLiq)||0);
+  });
+  const vals=Object.values(porMes);
+  const ticketMedio=vals.length?vals.reduce((s,v)=>s+v,0)/vals.length:0;
+
+  const comps=lancsR.filter(l=>l.dataComp).map(l=>l.dataComp).sort();
+  let tempoCasa=0,inicioLabel='sem histórico';
+  if(comps.length){
+    const ini=new Date(comps[0].slice(0,7)+'-01');
+    const hoje=new Date();
+    tempoCasa=(hoje.getFullYear()-ini.getFullYear())*12+(hoje.getMonth()-ini.getMonth());
+    inicioLabel='desde '+_compShort(comps[0].slice(0,7));
+  }
+
+  const comAmbas=lancsR.filter(l=>l.dataPgto&&l.dataVenc);
+  const noPrazo=comAmbas.filter(l=>l.dataPgto<=l.dataVenc).length;
+  const scoreAdim=comAmbas.length?Math.round(noPrazo/comAmbas.length*100):null;
+
+  return{totalAno,ticketMedio,tempoCasa,inicioLabel,scoreAdim};
+}
+function _corStatusLanc(l){
+  const hoje=new Date().toISOString().slice(0,10);
+  if(l.status==='Recebido'||l.status==='Parcial')
+    return l.dataPgto&&l.dataVenc&&l.dataPgto<=l.dataVenc?'var(--teal)':'#e3b341';
+  if(l.status==='Pendente')
+    return l.dataVenc&&l.dataVenc<hoje?'var(--red)':'var(--tx2)';
+  return 'var(--tx3)';
+}
+function _alertasCliente(c){
+  const hoje=new Date().toISOString().slice(0,10);
+  const compAtual=hoje.slice(0,7);
+  const lancsR=DATA.filter(l=>l.clienteId===c.id&&l.tipo==='R');
+  const alertas=[];
+  const vencidos=lancsR.filter(l=>l.status==='Pendente'&&l.dataVenc
+    &&Math.floor((new Date(hoje)-new Date(l.dataVenc))/86400000)>30);
+  if(vencidos.length){
+    const tot=vencidos.reduce((s,l)=>s+(parseFloat(l.valorLiq)||0),0);
+    alertas.push({cls:'br',msg:`${vencidos.length} título(s) vencido(s) há mais de 30 dias — total ${fmt(tot)}`});
+  }
+  if(c.recorrente&&c.ativo!==false&&!lancsR.some(l=>(l.dataComp||'').slice(0,7)===compAtual))
+    alertas.push({cls:'by',msg:`Nenhum lançamento em ${_compShort(compAtual)} — verifique se o faturamento foi lançado`});
+  const h6=new Date(hoje);h6.setMonth(h6.getMonth()-6);
+  const ult6=lancsR.filter(l=>(l.dataComp||'').slice(0,7)>=h6.toISOString().slice(0,7)&&l.dataPgto&&l.dataVenc);
+  if(ult6.length&&ult6.every(l=>l.dataPgto<=l.dataVenc))
+    alertas.push({cls:'bg',msg:`Todos os títulos foram pagos no prazo nos últimos 6 meses`});
+  return alertas;
+}
+function _desenhaGraficoCliente(clienteId){
+  const canvas=document.getElementById('cli-detalhe-chart');
+  if(!canvas||typeof Chart==='undefined')return;
+  if(window._chartCliDetalhe){try{window._chartCliDetalhe.destroy();}catch(e){}window._chartCliDetalhe=null;}
+  const hoje=new Date();
+  const meses=[];
+  for(let i=11;i>=0;i--){
+    const d=new Date(hoje.getFullYear(),hoje.getMonth()-i,1);
+    meses.push(`${d.getFullYear()}-${String(d.getMonth()+1).padStart(2,'0')}`);
+  }
+  const lancs=DATA.filter(l=>l.clienteId===clienteId&&l.tipo==='R');
+  const recebido=meses.map(m=>lancs
+    .filter(l=>(l.status==='Recebido'||l.status==='Parcial')&&(l.dataPgto||'').slice(0,7)===m)
+    .reduce((s,l)=>s+(parseFloat(l.valorLiq)||0),0));
+  const esperado=meses.map(m=>lancs
+    .filter(l=>(l.dataVenc||l.dataComp||'').slice(0,7)===m)
+    .reduce((s,l)=>s+(parseFloat(l.valorLiq)||0),0));
+  const labels=meses.map(m=>{
+    const [,mo]=m.split('-').map(Number);
+    return (typeof MONTHS!=='undefined'&&MONTHS[mo-1])||String(mo).padStart(2,'0');
+  });
+  window._chartCliDetalhe=new Chart(canvas.getContext('2d'),{
+    data:{labels,datasets:[
+      {type:'bar',label:'Recebido',data:recebido,
+       backgroundColor:'rgba(19,124,60,.65)',borderRadius:5,order:2},
+      {type:'line',label:'Esperado',data:esperado,
+       borderColor:'#58a6ff',borderDash:[5,4],borderWidth:2,
+       pointRadius:3,pointBackgroundColor:'#58a6ff',tension:0,fill:false,order:1}
+    ]},
+    options:{
+      responsive:true,maintainAspectRatio:false,animation:false,
+      interaction:{mode:'index',intersect:false},
+      plugins:{
+        legend:{display:false},
+        tooltip:{callbacks:{label:ctx=>`${ctx.dataset.label}: ${fmt(ctx.raw)}`}}
+      },
+      scales:{
+        x:{grid:{color:'rgba(0,0,0,.04)'},ticks:{color:'#8a978f',font:{size:11}}},
+        y:{grid:{color:'rgba(0,0,0,.05)'},border:{dash:[3,3]},
+           ticks:{color:'#8a978f',font:{size:11},
+             callback:v=>v>=1000?`${(v/1000).toFixed(0)}k`:v===0?'0':String(v)}}
+      }
+    }
+  });
+}
+function renderClienteDetalhe(c,container){
+  const saude=calcSaudeCliente(c.id);
+  const kpis=_clienteDetalheKPIs(c.id);
+  const alertas=_alertasCliente(c);
+  const tipoDoc=clienteTipoFromDoc(c.cpfCnpj);
+  const hoje=new Date().toISOString().slice(0,10);
+
+  const lancsR=DATA.filter(l=>l.clienteId===c.id&&l.tipo==='R')
+    .sort((a,b)=>{
+      const da=a.dataComp||a.dataVenc||a.dataPgto||'';
+      const db=b.dataComp||b.dataVenc||b.dataPgto||'';
+      if(db!==da)return db.localeCompare(da);
+      return (b.dataVenc||'').localeCompare(a.dataVenc||'');
+    });
+
+  // Score de adimplência com barra
+  const scoreHtml=kpis.scoreAdim===null
+    ?`<div class="kpi-val" style="font-size:20px">—</div><div class="kpi-sub">sem dados suficientes</div>`
+    :(()=>{
+      const s=kpis.scoreAdim;
+      const cor=s>90?'var(--teal)':s>70?'#e3b341':'var(--red)';
+      return `<div class="kpi-val">${s}%</div>
+        <div class="kpi-sub">
+          <div style="height:5px;background:var(--s3);border-radius:3px;overflow:hidden;margin:6px 0 3px">
+            <div style="width:${s}%;height:100%;background:${cor};border-radius:3px"></div>
+          </div>
+          % pago no prazo
+        </div>`;
+    })();
+
+  // Seção de alertas
+  const alertasHtml=alertas.length?`
+    <div class="card" style="margin-bottom:14px">
+      <div class="card-ttl">${appIcon('activity')} Alertas</div>
+      <div style="display:flex;flex-direction:column;gap:8px">
+        ${alertas.map(a=>`<div class="badge ${a.cls}" style="display:flex;align-items:flex-start;gap:8px;padding:10px 14px;border-radius:10px;font-size:12px;font-weight:500;white-space:normal">${a.msg}</div>`).join('')}
+      </div>
+    </div>`:'';
+
+  // Linhas da tabela de lançamentos
+  const tabelaRows=lancsR.map(l=>{
+    const cor=_corStatusLanc(l);
+    const lbl=l.status==='Pendente'&&l.dataVenc&&l.dataVenc<hoje?'Vencido':l.status;
+    return `<tr class="lr" onclick="openEdit('${l.id}')" style="cursor:pointer">
+      <td>${compDisplay(l.dataComp)||'<span style="opacity:.3">—</span>'}</td>
+      <td>${l.dataVenc?dateBR(l.dataVenc):'<span style="opacity:.3">—</span>'}</td>
+      <td>${l.dataPgto?dateBR(l.dataPgto):'<span style="opacity:.3">—</span>'}</td>
+      <td title="${esc(l.desc||'')}" style="max-width:220px"><span class="ct">${esc(l.desc||'—')}</span></td>
+      <td class="vc r" style="text-align:right">${fmt(l.valorLiq)}</td>
+      <td><span style="font-size:12px;font-weight:700;color:${cor}">${lbl}</span></td>
+    </tr>`;
+  }).join('');
+
+  const metaInfo=[c.codigo?`Cód. ${esc(c.codigo)}`:'',c.cpfCnpj?esc(c.cpfCnpj):''].filter(Boolean).join(' · ');
+
+  container.innerHTML=`
+    <div style="display:flex;align-items:center;gap:10px;flex-wrap:wrap;margin-bottom:20px">
+      <button class="btn btn-ghost" style="gap:4px;flex-shrink:0" onclick="clienteDetalheId=null;render()">← Voltar</button>
+      <div style="flex:1;min-width:0">
+        <div style="display:flex;align-items:center;gap:8px;flex-wrap:wrap">
+          <span style="font-size:18px;font-weight:700;color:var(--tx);letter-spacing:-.01em">${esc(c.nome)}</span>
+          <span class="badge ${tipoDoc==='PJ'?'bg':'by'}">${tipoDoc}</span>
+          ${_clienteStatusBadge(c)}
+          ${_saudeBadge(saude)}
+        </div>
+        ${metaInfo?`<div style="font-size:12px;color:var(--tx3);margin-top:3px">${metaInfo}</div>`:''}
+      </div>
+      <button class="btn btn-ghost" style="flex-shrink:0" onclick="openEditCliente('${c.id}')" title="Editar cadastro do cliente">${appIcon('edit')} Editar</button>
+    </div>
+
+    <div class="kpi-grid" style="margin-bottom:14px">
+      <div class="kpi">
+        <div class="kpi-lbl">Recebido em ${new Date().getFullYear()}</div>
+        <div class="kpi-val">${fmt(kpis.totalAno)}</div>
+        <div class="kpi-sub">receitas recebidas no ano</div>
+      </div>
+      <div class="kpi">
+        <div class="kpi-lbl">Ticket médio mensal</div>
+        <div class="kpi-val">${fmt(kpis.ticketMedio)}</div>
+        <div class="kpi-sub">por mês com recebimento</div>
+      </div>
+      <div class="kpi">
+        <div class="kpi-lbl">Tempo de casa</div>
+        <div class="kpi-val">${kpis.tempoCasa||'—'}</div>
+        <div class="kpi-sub">${kpis.tempoCasa?'meses · '+kpis.inicioLabel:'sem histórico'}</div>
+      </div>
+      <div class="kpi">
+        <div class="kpi-lbl">Adimplência</div>
+        ${scoreHtml}
+      </div>
+    </div>
+
+    ${alertasHtml}
+
+    <div class="card" style="margin-bottom:14px">
+      <div class="card-ttl">${appIcon('chart')} Histórico mensal — últimos 12 meses</div>
+      <div style="position:relative;height:200px">
+        <canvas id="cli-detalhe-chart"></canvas>
+      </div>
+      <div style="display:flex;gap:20px;margin-top:10px;font-size:12px;color:var(--tx3)">
+        <span style="display:flex;align-items:center;gap:6px">
+          <span style="width:12px;height:12px;background:rgba(19,124,60,.65);border-radius:3px;flex-shrink:0;display:inline-block"></span>
+          Recebido
+        </span>
+        <span style="display:flex;align-items:center;gap:6px">
+          <span style="width:20px;border-top:2px dashed #58a6ff;display:inline-block;flex-shrink:0"></span>
+          Esperado (por vencimento)
+        </span>
+      </div>
+    </div>
+
+    <div class="card">
+      <div class="card-ttl">${appIcon('list')} Lançamentos (${lancsR.length})</div>
+      ${lancsR.length?`
+        <div class="lan-scroll">
+          <table class="lan-tbl" style="min-width:100%">
+            <thead><tr>
+              <th class="lan-th">Competência</th>
+              <th class="lan-th">Vencimento</th>
+              <th class="lan-th">Pagamento</th>
+              <th class="lan-th">Descrição</th>
+              <th class="lan-th" style="text-align:right">Valor</th>
+              <th class="lan-th">Status</th>
+            </tr></thead>
+            <tbody>${tabelaRows}</tbody>
+          </table>
+        </div>`
+      :`<div style="padding:28px 0;text-align:center;color:var(--tx3)">Nenhum lançamento vinculado a este cliente.</div>`}
+    </div>
+  `;
+
+  setTimeout(()=>_desenhaGraficoCliente(c.id),50);
 }
 

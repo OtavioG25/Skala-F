@@ -45,12 +45,15 @@ const APP_ICON_PATHS = {
   edit:'<path d="M12 20h9"/><path d="M16.5 3.5a2.1 2.1 0 0 1 3 3L7 19l-4 1 1-4Z"/>',
   copy:'<rect width="14" height="14" x="8" y="8" rx="2"/><path d="M4 16c-1.1 0-2-.9-2-2V4c0-1.1.9-2 2-2h10c1.1 0 2 .9 2 2"/>',
   trash:'<path d="M3 6h18"/><path d="M8 6V4h8v2"/><path d="M19 6l-1 14H6L5 6"/><path d="M10 11v6"/><path d="M14 11v6"/>',
+  check:'<path d="M20 6 9 17l-5-5"/>',
+  grip:'<circle cx="9" cy="5" r="1"/><circle cx="9" cy="12" r="1"/><circle cx="9" cy="19" r="1"/><circle cx="15" cy="5" r="1"/><circle cx="15" cy="12" r="1"/><circle cx="15" cy="19" r="1"/>',
   clipboard:'<rect width="16" height="18" x="4" y="4" rx="2"/><path d="M9 2h6v4H9z"/><path d="M8 12h8"/><path d="M8 16h6"/>',
   calendar:'<path d="M8 2v4"/><path d="M16 2v4"/><rect width="18" height="18" x="3" y="4" rx="2"/><path d="M3 10h18"/>',
   close:'<path d="M18 6 6 18"/><path d="m6 6 12 12"/>',
   trendingUp:'<polyline points="22 7 13.5 15.5 8.5 10.5 2 17"/><polyline points="16 7 22 7 22 13"/>',
   trendingDown:'<polyline points="22 17 13.5 8.5 8.5 13.5 2 7"/><polyline points="16 17 22 17 22 11"/>',
-  activity:'<polyline points="22 12 18 12 15 21 9 3 6 12 2 12"/>'
+  activity:'<polyline points="22 12 18 12 15 21 9 3 6 12 2 12"/>',
+  print:'<polyline points="6 9 6 2 18 2 18 9"/><path d="M6 18H4a2 2 0 0 1-2-2v-5a2 2 0 0 1 2-2h16a2 2 0 0 1 2 2v5a2 2 0 0 1-2 2h-2"/><rect width="12" height="8" x="6" y="14"/>'
 };
 function appIcon(name, className='app-icon'){
   const path=APP_ICON_PATHS[name]||APP_ICON_PATHS.file;
@@ -63,7 +66,33 @@ function hydrateAppIcons(root=document){
   });
 }
 
-const APP_VERSION = 'v2.5.151';
+let _cfmResolve=null;
+function _cfmClose(ok){
+  const ov=document.getElementById('confirm-overlay');
+  if(ov)ov.style.display='none';
+  if(_cfmResolve){_cfmResolve(ok);_cfmResolve=null;}
+}
+function openConfirmModal(msg,opts={}){
+  return new Promise(resolve=>{
+    _cfmResolve=resolve;
+    const ov=document.getElementById('confirm-overlay');
+    const body=document.getElementById('confirm-body');
+    const title=document.getElementById('confirm-title');
+    const okBtn=document.getElementById('confirm-ok-btn');
+    const cancelBtn=document.getElementById('confirm-cancel-btn');
+    if(body)body.innerHTML=String(msg||'').replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/\n/g,'<br>');
+    if(title)title.textContent=opts.title||'Confirmar';
+    if(okBtn){
+      okBtn.textContent=opts.confirmLabel||'Confirmar';
+      okBtn.className='btn';
+      okBtn.style.cssText=opts.danger?'background:var(--red);color:#fff;border:1px solid rgba(217,74,56,.4)':'background:var(--brand);color:#fff;border:1px solid var(--brand)';
+    }
+    if(cancelBtn)cancelBtn.textContent=opts.cancelLabel||'Cancelar';
+    if(ov)ov.style.display='flex';
+  });
+}
+
+const APP_VERSION = 'v2.5.162';
 const APP_DATE = '2026-05-29';
 
 // Preenche versão na tela
@@ -89,9 +118,9 @@ window.addEventListener('resize',()=>{
 
 // SUPABASE_URL, SUPABASE_KEY e TABLE são definidos em js/00-config.js
 
-const sbFetch=async(method,path,body=null)=>{
+const sbFetch=async(method,path,body=null,extraHeaders={})=>{
   const token=localStorage.getItem('sb_token')||SUPABASE_KEY;
-  const opts={method,headers:{'apikey':SUPABASE_KEY,'Authorization':`Bearer ${token}`,'Content-Type':'application/json','Prefer':'return=representation'}};
+  const opts={method,headers:{'apikey':SUPABASE_KEY,'Authorization':`Bearer ${token}`,'Content-Type':'application/json','Prefer':'return=representation',...extraHeaders}};
   if(body)opts.body=JSON.stringify(body);
   const r=await fetch(`${SUPABASE_URL}/rest/v1/${path}`,opts);
   if(!r.ok){const err=await r.json().catch(()=>({message:r.statusText}));throw new Error(err.message||r.statusText);}
@@ -129,11 +158,43 @@ async function dbInsertBaixa(item){
   return Array.isArray(res)?res[0]:res;
 }
 async function dbDeleteBaixa(id){await sbFetch('DELETE',`${BAIXAS_TABLE}?id=eq.${id}`);touchFinanceData();}
+async function dbUpdateBaixa(item){await sbFetch('PATCH',`${BAIXAS_TABLE}?id=eq.${item.id}`,toBaixaRow(item));touchFinanceData();}
 async function clearBaixasForLancamento(lancamentoId){
   const baixas=getBaixas(lancamentoId);
   for(const b of baixas)await dbDeleteBaixa(b.id);
   BAIXAS_DATA=BAIXAS_DATA.filter(b=>b.lancamentoId!==lancamentoId);
   return baixas.length;
+}
+
+function fromProjecao(r){
+  return{id:r.id,catSlug:r.cat_slug||'',tipo:r.tipo||'',comp:r.comp||'',valor:parseMoney(r.valor)};
+}
+function toProjecaoRow(p){
+  const existing=PROJECOES.find(x=>x.catSlug===p.catSlug&&x.tipo===p.tipo&&x.comp===p.comp);
+  return{
+    id:p.id||existing?.id||newId(),
+    cat_slug:p.catSlug,
+    tipo:p.tipo,
+    comp:p.comp,
+    valor:parseMoney(p.valor)
+  };
+}
+async function dbLoadProjecoes(){
+  const rows=await sbFetch('GET','projecoes_manuais?select=*');
+  PROJECOES=(rows||[]).map(fromProjecao);
+  return PROJECOES;
+}
+async function dbUpsertProjecao(p){
+  const row=toProjecaoRow(p);
+  const res=await sbFetch('POST','projecoes_manuais?on_conflict=cat_slug,tipo,comp',row,{'Prefer':'resolution=merge-duplicates,return=representation'});
+  const saved=fromProjecao(Array.isArray(res)?res[0]:res);
+  const idx=PROJECOES.findIndex(x=>x.catSlug===saved.catSlug&&x.tipo===saved.tipo&&x.comp===saved.comp);
+  if(idx>=0)PROJECOES[idx]=saved;else PROJECOES.push(saved);
+  return saved;
+}
+async function dbDeleteProjecao(catSlug,tipo,comp){
+  await sbFetch('DELETE',`projecoes_manuais?cat_slug=eq.${encodeURIComponent(catSlug)}&tipo=eq.${encodeURIComponent(tipo)}&comp=eq.${encodeURIComponent(comp)}`);
+  PROJECOES=PROJECOES.filter(p=>!(p.catSlug===catSlug&&p.tipo===tipo&&p.comp===comp));
 }
 
 function isPendingStatus(l){
@@ -341,9 +402,9 @@ function validateLancamentoCore(item,opts={}){
 function firstValidationError(result){
   return result?.errors?.[0]||'Verifique os dados informados.';
 }
-function confirmValidationWarnings(result){
+async function confirmValidationWarnings(result){
   if(!result?.warnings?.length)return true;
-  return confirm('Atencao:\n\n'+result.warnings.join('\n')+'\n\nDeseja continuar mesmo assim?');
+  return await openConfirmModal('Atenção:\n\n'+result.warnings.join('\n')+'\n\nDeseja continuar mesmo assim?',{title:'Atenção'});
 }
 function findProbableDuplicateLancamento(item){
   const val=parseMoney(item.valorLiq);
@@ -359,10 +420,10 @@ function findProbableDuplicateLancamento(item){
     normText(l.desc)===desc
   )||null;
 }
-function confirmProbableDuplicate(item){
+async function confirmProbableDuplicate(item){
   const dup=findProbableDuplicateLancamento(item);
   if(!dup)return true;
-  return confirm(`Possivel lancamento duplicado encontrado:\n\n${dup.desc||dup.cat}\n${compDisplay(dup.dataComp)||dup.dataComp} - ${fmt(dup.valorLiq)}\n\nDeseja salvar mesmo assim?`);
+  return await openConfirmModal(`Possível lançamento duplicado encontrado:\n\n${dup.desc||dup.cat}\n${compDisplay(dup.dataComp)||dup.dataComp} - ${fmt(dup.valorLiq)}\n\nDeseja salvar mesmo assim?`,{title:'Duplicata detectada'});
 }
 function validateTransferPair(doc){
   const rows=DATA.filter(l=>l.doc===doc);
@@ -401,6 +462,7 @@ function setSyncStatus(state,msg){const dot=document.getElementById('sync-dot'),
 
 let DATA=[];
 let BAIXAS_DATA=[];
+let PROJECOES=[];
 let DATA_VERSION=0;
 let _cashMovementsCache=null;
 function touchFinanceData(){
@@ -461,7 +523,12 @@ function getDespCats(){
     slug: c.slug || SLUG_FALLBACK[(c.nome||'').toLowerCase().trim()] || slugify(c.nome)
   }));
 }
-function getRecCats(){return (CATS_DATA.R||[]).sort((a,b)=>a.ordem-b.ordem);}
+function getRecCats(){
+  return (CATS_DATA.R||[]).sort((a,b)=>a.ordem-b.ordem).map(c=>({
+    ...c,
+    slug: c.slug || SLUG_FALLBACK[(c.nome||'').toLowerCase().trim()] || slugify(c.nome)
+  }));
+}
 
 // Categorias excluídas do DRE (aparecem apenas no Fluxo de Caixa)
 const EXCL_DRE_SLUGS = new Set(['reembolso','transferencia']);

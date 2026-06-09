@@ -27,7 +27,7 @@ function openForm(id=null){
     const _now=new Date();
     const _compDefault=String(_now.getMonth()+1).padStart(2,'0')+'/'+_now.getFullYear();
     const _lastConta=localStorage.getItem('skala_last_conta')||'Dominio Conta Digital';
-    formData={id:newId(),tipo:'R',dataComp:'',dataCompView:_compDefault,dataVenc:'',dataPgto:'',cat:'',sub:'',desc:'',cc:'',forma:'PIX',conta:_lastConta,doc:'',valorBruto:'',ded:'',valorLiq:'',valorJuros:'',valorMulta:'',valorDesconto:'',status:'Pendente',obs:''};
+    formData={id:newId(),tipo:'R',dataComp:'',dataCompView:_compDefault,dataVenc:'',dataPgto:'',cat:'',sub:'',desc:'',cc:'',clienteId:'',forma:'PIX',conta:_lastConta,doc:'',valorBruto:'',ded:'',valorLiq:'',valorJuros:'',valorMulta:'',valorDesconto:'',status:'Pendente',obs:''};
   }
   document.getElementById('modal-ttl').textContent=id?(formData.tipo==='R'?'Editar Recebimento':'Editar Despesa'):'Novo Lançamento';
   const seqEl=document.getElementById('modal-seq');if(seqEl){const s=l?.seq;seqEl.textContent=s?`#${s}`:'';seqEl.style.display=s?'inline-block':'none';}
@@ -164,8 +164,8 @@ async function removerConta(id){
   if(conta.nome==='Caixa'){toast('A conta Caixa é padrão e não pode ser removida.','err');return;}
   if(DATA.some(l=>l.conta===conta.nome)){toast(`A conta "${conta.nome}" possui lancamentos vinculados. Reclassifique antes de remover.`,'err');return;}
   if(DATA.some(l=>(l.obs||'').includes(`TRANSF_DEST:${conta.nome}`)||(l.obs||'').includes(`TRANSF_ORIG:${conta.nome}`))){toast(`A conta "${conta.nome}" possui transferencias vinculadas.`,'err');return;}
-  if(parseMoney(conta.saldo_inicial)!==0&&!confirm(`A conta "${conta.nome}" tem saldo inicial diferente de zero. Remover mesmo assim?`))return;
-  if(!confirm(`Remover conta "${conta.nome}"?`))return;
+  if(parseMoney(conta.saldo_inicial)!==0&&!await openConfirmModal(`A conta "${conta.nome}" tem saldo inicial diferente de zero. Remover mesmo assim?`,{danger:true,confirmLabel:'Remover mesmo assim'}))return;
+  if(!await openConfirmModal(`Remover conta "${conta.nome}"?`,{danger:true,confirmLabel:'Remover'}))return;
   try{
     await sbFetch('DELETE',`contas?id=eq.${id}`);
     await loadContasFromDB();
@@ -173,25 +173,49 @@ async function removerConta(id){
   }catch(e){toast('Erro ao remover conta: '+e.message,'err');}
 }
 
+async function deleteBaixaRow(baixaId){
+  const b=BAIXAS_DATA.find(x=>x.id===baixaId);
+  if(!b||!await openConfirmModal('Remover este pagamento registrado?',{danger:true,confirmLabel:'Remover'}))return;
+  setSyncStatus('loading','Removendo...');
+  try{
+    await dbDeleteBaixa(baixaId);
+    BAIXAS_DATA=BAIXAS_DATA.filter(x=>x.id!==baixaId);
+    const item=DATA.find(x=>x.id===b.lancamentoId);
+    if(item){item.status=computedStatus(item);item.dataPgto=paidAmount(item)>0?latestBaixaDate(item):'';await dbUpdate(item);}
+    setSyncStatus('ok',`${DATA.length} registros`);
+    buildNav();buildForm();
+    toast('Pagamento removido.','ok');
+  }catch(e){setSyncStatus('err','Erro');toast('Erro: '+e.message,'err');}
+}
 function renderBaixasSection(lancamentoId){
   if(!lancamentoId)return'';
   const l=DATA.find(x=>x.id===lancamentoId);
   if(!l)return'';
-  const baixas=getBaixas(lancamentoId);
-  if(!baixas.length)return'';
+  const baixas=getBaixas(lancamentoId).map(b=>({...b,_juros:false}));
+  // Inclui baixas dos filhos de juros/multa
+  const jurosFilhos=DATA.filter(x=>x.parentId===lancamentoId&&(x.adjType==='juros'||x.adjType==='multa'));
+  const jurosBaixas=jurosFilhos.flatMap(jf=>getBaixas(jf.id).map(b=>({...b,_juros:true})));
+  // Inclui filhos de juros com pagamento legacy (sem baixa formal mas já recebidos)
+  const jurosLegacy=jurosFilhos.filter(jf=>!getBaixas(jf.id).length&&paidAmount(jf)>0&&jf.dataPgto).map(jf=>({
+    id:`leg-${jf.id}`,dataPgto:jf.dataPgto,conta:jf.conta,forma:jf.forma,valor:titleAmount(jf),_juros:true,_legacy:true
+  }));
+  const allBaixas=[...baixas,...jurosBaixas,...jurosLegacy].sort((a,b)=>(a.dataPgto||'').localeCompare(b.dataPgto||''));
+  if(!allBaixas.length)return'';
   const label=l.tipo==='R'?'Recebimentos':'Pagamentos';
-  const total=baixas.reduce((s,b)=>s+parseMoney(b.valor),0);
+  const total=allBaixas.reduce((s,b)=>s+parseMoney(b.valor),0);
+  const cor=l.tipo==='R'?'var(--teal)':'var(--red)';
   return`<div style="grid-column:span 2;border:1px solid var(--bd);border-radius:10px;background:var(--s2);padding:10px 12px">
     <div style="display:flex;align-items:center;justify-content:space-between;gap:10px;margin-bottom:8px">
       <div style="font-size:12px;font-weight:700;color:var(--tx)">${label} <span style="color:var(--tx3);font-weight:500">(${fmt(total)})</span></div>
       ${openAmount(l)>0.005?`<button type="button" class="btn btn-ghost" style="font-size:11px;padding:3px 8px" onclick="openBaixaModal('${l.id}')">${appIcon('wallet')}${l.tipo==='R'?'Receber':'Pagar'}</button>`:''}
     </div>
     <div style="display:grid;gap:5px">
-      ${baixas.map(b=>`<div style="display:grid;grid-template-columns:86px 1fr 86px 94px;gap:8px;align-items:center;font-size:12px;color:var(--tx2)">
+      ${allBaixas.map(b=>`<div style="display:grid;grid-template-columns:86px 1fr 86px 94px 28px;gap:8px;align-items:center;font-size:12px;color:var(--tx2)">
         <span>${dateBR(b.dataPgto)||'-'}</span>
-        <span style="white-space:nowrap;overflow:hidden;text-overflow:ellipsis">${esc(b.conta||'-')}</span>
+        <span style="white-space:nowrap;overflow:hidden;text-overflow:ellipsis">${esc(b.conta||'-')}${b._juros?`<span style="margin-left:4px;font-size:10px;background:rgba(224,184,13,.18);color:#a07800;border-radius:4px;padding:1px 5px">Juros</span>`:''}</span>
         <span>${esc(b.forma||'-')}</span>
-        <strong style="text-align:right;color:${l.tipo==='R'?'var(--teal)':'var(--red)'}">${fmt(b.valor)}</strong>
+        <strong style="text-align:right;color:${cor}">${fmt(b.valor)}</strong>
+        ${!b._legacy?`<button type="button" title="Remover pagamento" onclick="deleteBaixaRow('${b.id}')" style="background:none;border:none;cursor:pointer;color:var(--tx3);padding:0;line-height:1;font-size:13px" onmouseenter="this.style.color='var(--red)'" onmouseleave="this.style.color='var(--tx3)'">${appIcon('trash')}</button>`:'<span></span>'}
       </div>`).join('')}
     </div>
   </div>`;
@@ -218,14 +242,15 @@ function buildForm(){
     <div><div class="fl">Vencimento *</div><input id="f-datavenc" type="date" tabindex="2" value="${esc(effectiveVenc(formData))}" min="1900-01-01" max="2100-12-31" onchange="formData.dataVenc=this.value" onblur="onDataVencBlur(this)" required/></div>
     <div><div class="fl">Categoria *</div><select id="f-cat" tabindex="3" onchange="formData.cat=this.value;formData.sub='';buildForm()"><option value="">Selecione...</option>${cats.map(c=>`<option value="${esc(c)}"${formData.cat===c?' selected':''}>${esc(c)}</option>`).join('')}</select></div>
     <div><div class="fl">Subcategoria</div><select tabindex="4" onchange="formData.sub=this.value"><option value="">Selecione...</option>${subs.map(s=>`<option value="${esc(s)}"${formData.sub===s?' selected':''}>${esc(s)}</option>`).join('')}</select></div>
-    <div style="grid-column:span 2"><div class="fl">${formData.tipo==='R'?'Cliente / Descrição':'Fornecedor / Descrição'}</div><div style="position:relative"><input id="f-desc" tabindex="5" type="text" autocomplete="off" value="${esc(formData.desc)}" oninput="formData.desc=this.value;showDescSugg(this)" onkeydown="onDescKeydown(event)" onblur="onDescBlur()" placeholder="Ex: Honorários - Empresa XYZ"/><div id="desc-sugg" class="desc-sugg" style="display:none"></div></div></div>
+    <div style="grid-column:span 2"><div class="fl">Descrição</div><div style="position:relative"><input id="f-desc" tabindex="5" type="text" autocomplete="off" value="${esc(formData.desc)}" oninput="formData.desc=this.value;showDescSugg(this)" onkeydown="onDescKeydown(event)" onblur="onDescBlur()" placeholder="Ex: Honorários - Empresa XYZ"/><div id="desc-sugg" class="desc-sugg" style="display:none"></div></div></div>
+    ${formData.tipo==='R'?`<div style="grid-column:span 2"><div class="fl">Vincular Cliente <span style="font-weight:400;opacity:.5">(opcional)</span></div><div style="position:relative"><input id="f-cliente" type="text" autocomplete="off" value="${esc(_clienteNomeFromId(formData.clienteId))}" oninput="onClienteInput(this)" onkeydown="onClienteSuggKeydown(event)" onblur="onClienteSuggBlur()" placeholder="Buscar por nome ou código Domínio..."/><div id="cliente-sugg" class="desc-sugg" style="display:none"></div></div></div>`:''}
     <div style="grid-column:span 2;border-top:1px solid var(--bd);margin:2px 0 1px"></div>
     <div><div class="fl">Valor bruto (R$) *</div><input id="f-vbruto" type="text" tabindex="6" inputmode="decimal" value="${esc(moneyInputValue(formData.valorBruto))}" oninput="formData.valorBruto=this.value;syncFormValorLiq()" onblur="formatMoneyField(this,'valorBruto');syncFormValorLiq()" placeholder="0,00" required/></div>
     <div><div class="fl">Desconto (R$)</div><input type="text" tabindex="7" inputmode="decimal" value="${esc(moneyInputValue(formData.valorDesconto))}" oninput="formData.valorDesconto=this.value;updateFormTotal()" onblur="formatMoneyField(this,'valorDesconto');updateFormTotal()" placeholder="0,00"/></div>
     <div><div class="fl">Juros / Multa (R$)</div><input type="text" tabindex="8" inputmode="decimal" value="${esc(moneyInputValue(formData.valorJuros))}" oninput="formData.valorJuros=this.value;updateFormTotal()" onblur="formatMoneyField(this,'valorJuros');updateFormTotal()" placeholder="0,00"/></div>
     <div><div class="fl">Total</div><input id="form-total" type="text" readonly tabindex="-1" value="${fmt(parseMoney(formData.valorLiq||0)+parseMoney(formData.valorJuros||0)-parseMoney(formData.valorDesconto||0))}" style="background:${formData.tipo==='R'?'rgba(19,124,60,.1)':'rgba(217,74,56,.08)'};border-color:${formData.tipo==='R'?'rgba(19,124,60,.25)':'rgba(217,74,56,.25)'};color:${formData.tipo==='R'?'var(--ok)':'var(--red)'};font-weight:700;text-align:right;cursor:default"/></div>
     <div style="grid-column:span 2;border-top:1px solid var(--bd);margin:2px 0 1px"></div>
-    <div><div class="fl">Status</div><div class="status-sw">${(formData.tipo==='R'?[['Pendente','ss-pend'],['Recebido','ss-ok']]:[['Pendente','ss-pend'],['Pago','ss-ok']]).map(([s,cls])=>`<button type="button" data-status="${s}" class="${statusView===s?cls:''}" onclick="setFormStatus('${s}')">${s}</button>`).join('')}</div>${statusView==='Parcial'?`<div style="font-size:11px;margin-top:5px;color:#ff8c00">Baixado: ${fmt(paidAmount(currentItem))} | Em aberto: ${fmt(openAmount(currentItem))}</div>`:''}${editingId&&formData.status!=='Cancelado'?`<button type="button" onclick="if(confirm('Cancelar este lan?amento?')){formData.status='Cancelado';buildForm();}" style="font-size:11px;color:var(--tx3);background:none;border:none;cursor:pointer;padding:3px 0 0;display:block">Cancelar lan?amento</button>`:''}</div>
+    <div><div class="fl">Status</div><div class="status-sw">${(formData.tipo==='R'?[['Pendente','ss-pend'],['Recebido','ss-ok']]:[['Pendente','ss-pend'],['Pago','ss-ok']]).map(([s,cls])=>`<button type="button" data-status="${s}" class="${statusView===s?cls:''}" onclick="setFormStatus('${s}')">${s}</button>`).join('')}</div>${statusView==='Parcial'?`<div style="font-size:11px;margin-top:5px;color:#ff8c00">Baixado: ${fmt(paidAmount(currentItem))} | Em aberto: ${fmt(openAmount(currentItem))}</div>`:''}${editingId&&formData.status!=='Cancelado'?`<button type="button" onclick="openConfirmModal('Cancelar este lançamento? O status será alterado para Cancelado.',{danger:true,confirmLabel:'Cancelar lançamento'}).then(ok=>{if(ok){formData.status='Cancelado';buildForm();}})" style="font-size:11px;color:var(--tx3);background:none;border:none;cursor:pointer;padding:3px 0 0;display:block">Cancelar lan?amento</button>`:''}</div>
     <div><div class="fl">Data Pagamento</div><input id="f-datapgto" type="date" tabindex="10" value="${esc(formData.dataPgto)}" min="1900-01-01" max="2100-12-31" onchange="formData.dataPgto=this.value" onblur="onDataPgtoBlur(this)"/></div>
     <div><div class="fl">Conta Bancária</div><select id="f-conta" tabindex="11" onchange="formData.conta=this.value">${CONTAS.map(c=>`<option value="${esc(c)}"${formData.conta===c?' selected':''}>${esc(c)}</option>`).join('')}</select></div>
     <div><div class="fl">Nº Doc / NF</div><input tabindex="12" type="text" value="${esc(formData.doc)}" oninput="formData.doc=this.value"/></div>
@@ -297,6 +322,41 @@ function onDescKeydown(e){
   else if(e.key==='Enter'&&cur){e.preventDefault();pickDescSugg(cur.dataset.val);}
 }
 function onDescBlur(){setTimeout(()=>{const el=document.getElementById('desc-sugg');if(el)el.style.display='none';},150);}
+
+function _clienteNomeFromId(id){if(!id)return'';const c=CLIENTES.find(x=>x.id===id);if(!c)return'';return c.codigo?`${c.nome} · ${c.codigo}`:c.nome;}
+function onClienteInput(inp){if(!inp.value.trim())formData.clienteId='';showClienteSugg(inp);}
+function showClienteSugg(inp){
+  const el=document.getElementById('cliente-sugg');if(!el)return;
+  const q=inp.value.trim();
+  if(!q){el.style.display='none';return;}
+  const qn=_norm(q);
+  const matches=CLIENTES.filter(c=>_norm(c.nome).includes(qn)||_norm(c.codigo||'').includes(qn)).slice(0,6);
+  if(!matches.length){el.style.display='none';return;}
+  el.style.display='block';
+  el.innerHTML=matches.map(c=>`<div class="desc-sugg-item" data-id="${c.id}" data-nome="${esc(c.nome)}" data-codigo="${esc(c.codigo||'')}" onmousedown="event.preventDefault()" onclick="pickClienteSugg('${c.id}','${esc(c.nome)}','${esc(c.codigo||'')}')">${esc(c.nome)}${c.codigo?` <span style="opacity:.45;font-size:11px">${esc(c.codigo)}</span>`:''}</div>`).join('');
+}
+function pickClienteSugg(id,nome,codigo){
+  formData.clienteId=id;
+  const inp=document.getElementById('f-cliente');if(inp)inp.value=codigo?`${nome} · ${codigo}`:nome;
+  const el=document.getElementById('cliente-sugg');if(el)el.style.display='none';
+}
+function onClienteSuggBlur(){
+  setTimeout(()=>{
+    const el=document.getElementById('cliente-sugg');if(el)el.style.display='none';
+    const inp=document.getElementById('f-cliente');
+    if(inp&&inp.value&&!formData.clienteId)inp.value='';
+  },150);
+}
+function onClienteSuggKeydown(e){
+  const el=document.getElementById('cliente-sugg');
+  if(!el||el.style.display==='none')return;
+  const items=[...el.querySelectorAll('.desc-sugg-item')];
+  const cur=el.querySelector('.desc-sugg-item.ac');
+  if(e.key==='Escape'){el.style.display='none';e.stopPropagation();}
+  else if(e.key==='ArrowDown'){e.preventDefault();const next=cur?items[items.indexOf(cur)+1]:items[0];if(cur)cur.classList.remove('ac');if(next)next.classList.add('ac');}
+  else if(e.key==='ArrowUp'){e.preventDefault();const prev=cur?items[items.indexOf(cur)-1]:items[items.length-1];if(cur)cur.classList.remove('ac');if(prev)prev.classList.add('ac');}
+  else if(e.key==='Enter'&&cur){e.preventDefault();pickClienteSugg(cur.dataset.id||'',cur.dataset.nome||'',cur.dataset.codigo||'');}
+}
 
 function syncFormValorLiq(){
   const bruto=parseMoney(formData.valorBruto);
@@ -479,7 +539,7 @@ async function confirmarParcialModal(){
     if(pgClosed){toast(pgClosed,'err');return;}
   }
   const histTotal=extractParcHist(original.obs||'').reduce((s,p)=>s+parseMoney(p.v),0);
-  if(original.status==='Parcial'&&Math.abs(histTotal-jaPago)>0.01&&!confirm(`Historico parcial (${fmt(histTotal)}) difere do valor pago (${fmt(jaPago)}). Continuar mesmo assim?`))return;
+  if(original.status==='Parcial'&&Math.abs(histTotal-jaPago)>0.01&&!await openConfirmModal(`Histórico parcial (${fmt(histTotal)}) difere do valor pago (${fmt(jaPago)}). Continuar mesmo assim?`,{title:'Atenção'}))return;
   const totalNovo=rows.reduce((s,r)=>s+parseMoney(r.valor),0);
   const novoTotalPago=+(jaPago+totalNovo).toFixed(2);
   const saldoApos=+(totalOriginal-novoTotalPago).toFixed(2);
@@ -566,8 +626,10 @@ function openBaixaModal(id){
   const saldo=openAmount(l);
   if(saldo<=0.005){toast('Este lancamento ja esta quitado.','ok');return;}
   const hoje=new Date().toISOString().slice(0,10);
-  _baixaCtx={lancamentoId:id,acao:l.tipo==='R'?'Receber':'Pagar',acaoFeita:l.tipo==='R'?'recebido':'pago'};
-  _baixaForm={valor:fmtMoneyInput(saldo),dataPgto:hoje,conta:normalizeConta(l.conta)||CONTAS[0]||'',forma:l.forma||'PIX',obs:''};
+  const jurosFilhos=DATA.filter(x=>x.parentId===id&&(x.adjType==='juros'||x.adjType==='multa')&&openAmount(x)>0.005);
+  const jurosTotal=+jurosFilhos.reduce((s,x)=>s+openAmount(x),0).toFixed(2);
+  _baixaCtx={lancamentoId:id,acao:l.tipo==='R'?'Receber':'Pagar',acaoFeita:l.tipo==='R'?'recebido':'pago',jurosFilhos,jurosTotal,saldo};
+  _baixaForm={valor:fmtMoneyInput(saldo),valorJuros:jurosTotal>0?fmtMoneyInput(jurosTotal):'',dataPgto:hoje,conta:normalizeConta(l.conta)||CONTAS[0]||'',forma:l.forma||'PIX',obs:''};
   renderBaixaModal();
   document.getElementById('parcial-overlay').style.display='flex';
   setTimeout(()=>document.getElementById('baixa-valor')?.focus(),50);
@@ -580,9 +642,14 @@ function renderBaixaModal(){
   const acao=_baixaCtx.acao,acaoLow=acao.toLowerCase();
   const title=document.getElementById('baixa-modal-title');
   if(title)title.innerHTML=`${appIcon('wallet')}${acao}`;
-  const valor=parseMoney(_baixaForm.valor);
-  const saldoApos=+(saldo-valor).toFixed(2);
-  const ok=valor>0&&valor<=saldo+0.005;
+  const valor=parseMoney(_baixaForm.valor||0);
+  const valorJuros=parseMoney(_baixaForm.valorJuros||0);
+  const totalBaixa=+(valor+valorJuros).toFixed(2);
+  const saldoAposMain=+(saldo-valor).toFixed(2);
+  const jurosExistente=_baixaCtx.jurosTotal||0;
+  const saldoAposJuros=+Math.max(0,jurosExistente-valorJuros).toFixed(2);
+  const saldoApos=+(saldoAposMain+saldoAposJuros).toFixed(2);
+  const ok=valor>0&&valor<=saldo+0.005&&valorJuros>=0;
   document.getElementById('parcial-body').innerHTML=`
     <div style="background:var(--s2);border:1px solid var(--bd);border-radius:10px;padding:12px 16px;margin-bottom:14px;font-size:13px">
       <div style="font-weight:700;margin-bottom:8px;color:var(--tx)">${esc(l.desc||l.cat||'Lancamento')}</div>
@@ -594,14 +661,16 @@ function renderBaixaModal(){
     </div>
     <div style="display:grid;grid-template-columns:1fr 1fr;gap:12px">
       <div><div class="fl">Valor ${acaoLow} agora *</div><input id="baixa-valor" type="text" inputmode="decimal" value="${esc(_baixaForm.valor)}" oninput="_baixaForm.valor=this.value;_baixaUpdateTotals()" onblur="this.value=fmtMoneyInput(parseMoney(this.value));_baixaForm.valor=this.value;_baixaUpdateTotals()"/></div>
+      <div><div class="fl">Juros / Multa (R$)</div><input id="baixa-juros" type="text" inputmode="decimal" value="${esc(_baixaForm.valorJuros||'')}" oninput="_baixaForm.valorJuros=this.value;_baixaUpdateTotals()" onblur="this.value=parseMoney(this.value)>0?fmtMoneyInput(parseMoney(this.value)):'';_baixaForm.valorJuros=this.value;_baixaUpdateTotals()" placeholder="0,00"/></div>
       <div><div class="fl">Data *</div><input id="baixa-data" type="date" value="${esc(_baixaForm.dataPgto)}" onchange="_baixaForm.dataPgto=this.value"/></div>
       <div><div class="fl">Conta *</div><select id="baixa-conta" onchange="_baixaForm.conta=this.value">${CONTAS.map(c=>`<option value="${esc(c)}"${_baixaForm.conta===c?' selected':''}>${esc(c)}</option>`).join('')}</select></div>
       <div><div class="fl">Forma</div><select id="baixa-forma" onchange="_baixaForm.forma=this.value">${FORMAS.map(f=>`<option value="${esc(f)}"${_baixaForm.forma===f?' selected':''}>${esc(f)}</option>`).join('')}</select></div>
       <div style="grid-column:span 2"><div class="fl">Observacao</div><textarea rows="2" oninput="_baixaForm.obs=this.value" placeholder="Opcional">${esc(_baixaForm.obs)}</textarea></div>
     </div>
     <div id="baixa-totals" style="margin-top:14px;padding:11px 14px;background:var(--s2);border:1px solid ${ok?'var(--bd)':'rgba(248,81,73,.3)'};border-radius:10px;font-size:13px">
+      ${totalBaixa>valor?`<div style="color:var(--tx2);margin-bottom:4px;font-size:12px">Total desta baixa: <strong style="color:var(--tx)">${fmt(totalBaixa)}</strong> <span style="color:var(--tx3)">(${fmt(valor)} + ${fmt(valorJuros)} juros)</span></div>`:''}
       <span style="color:var(--tx2)">Saldo apos esta baixa: </span><strong style="color:${saldoApos<=0.005?'var(--teal)':'#ff8c00'}">${saldoApos<=0.005?'Quitado':fmt(Math.max(0,saldoApos))}</strong>
-      ${valor>saldo+0.005?`<div style="color:var(--red);font-size:12px;margin-top:4px">Valor acima do saldo. Juros ou acrescimos serao tratados em uma etapa futura.</div>`:''}
+      ${valor>saldo+0.005?`<div style="color:var(--red);font-size:12px;margin-top:4px">Valor acima do saldo em aberto (max ${fmt(saldo)}).</div>`:''}
     </div>
     <div style="display:flex;justify-content:flex-end;gap:10px;margin-top:18px">
       <button class="btn btn-ghost" onclick="closeParcialModal()">Cancelar</button>
@@ -612,12 +681,19 @@ function renderBaixaModal(){
 function _baixaUpdateTotals(){
   const l=DATA.find(x=>x.id===_baixaCtx?.lancamentoId);
   if(!l)return;
-  const saldo=openAmount(l),valor=parseMoney(_baixaForm.valor),saldoApos=+(saldo-valor).toFixed(2);
-  const ok=valor>0&&valor<=saldo+0.005;
+  const saldo=openAmount(l);
+  const valor=parseMoney(_baixaForm.valor||0);
+  const valorJuros=parseMoney(_baixaForm.valorJuros||0);
+  const totalBaixa=+(valor+valorJuros).toFixed(2);
+  const jurosExistente=_baixaCtx.jurosTotal||0;
+  const saldoAposMain=+(saldo-valor).toFixed(2);
+  const saldoAposJuros=+Math.max(0,jurosExistente-valorJuros).toFixed(2);
+  const saldoApos=+(saldoAposMain+saldoAposJuros).toFixed(2);
+  const ok=valor>0&&valor<=saldo+0.005&&valorJuros>=0;
   const totals=document.getElementById('baixa-totals');
   if(totals){
     totals.style.borderColor=ok?'var(--bd)':'rgba(248,81,73,.3)';
-    totals.innerHTML=`<span style="color:var(--tx2)">Saldo apos esta baixa: </span><strong style="color:${saldoApos<=0.005?'var(--teal)':'#ff8c00'}">${saldoApos<=0.005?'Quitado':fmt(Math.max(0,saldoApos))}</strong>${valor>saldo+0.005?`<div style="color:var(--red);font-size:12px;margin-top:4px">Valor acima do saldo. Juros ou acrescimos serao tratados em uma etapa futura.</div>`:''}`;
+    totals.innerHTML=`${totalBaixa>valor?`<div style="color:var(--tx2);margin-bottom:4px;font-size:12px">Total desta baixa: <strong style="color:var(--tx)">${fmt(totalBaixa)}</strong> <span style="color:var(--tx3)">(${fmt(valor)} + ${fmt(valorJuros)} juros)</span></div>`:''}<span style="color:var(--tx2)">Saldo apos esta baixa: </span><strong style="color:${saldoApos<=0.005?'var(--teal)':'#ff8c00'}">${saldoApos<=0.005?'Quitado':fmt(Math.max(0,saldoApos))}</strong>${valor>saldo+0.005?`<div style="color:var(--red);font-size:12px;margin-top:4px">Valor acima do saldo em aberto (max ${fmt(saldo)}).</div>`:''}`;
   }
   const btn=document.getElementById('parcial-confirm-btn');
   if(btn){btn.disabled=!ok;btn.innerHTML=appIcon('wallet')+(saldoApos<=0.005?'Quitar':_baixaCtx.acao);}
@@ -626,24 +702,61 @@ function _baixaUpdateTotals(){
 async function confirmarParcialModal(){
   const l=DATA.find(x=>x.id===_baixaCtx?.lancamentoId);
   if(!l)return;
-  const valor=parseMoney(_baixaForm.valor);
+  const valor=parseMoney(_baixaForm.valor||0);
+  const valorJuros=parseMoney(_baixaForm.valorJuros||0);
   const saldo=openAmount(l);
   if(valor<=0){toast('Informe um valor maior que zero.','err');return;}
   if(valor>saldo+0.005){toast('Valor acima do saldo em aberto.','err');return;}
   const btn=document.getElementById('parcial-confirm-btn');
   if(btn){btn.disabled=true;btn.textContent='Salvando...';}
   setSyncStatus('loading','Salvando baixa...');
+  const baixaBase={dataPgto:_baixaForm.dataPgto,conta:_baixaForm.conta,forma:_baixaForm.forma,origem:'manual',obs:_baixaForm.obs};
   try{
-    const result=await registerBaixa(l,{valor,dataPgto:_baixaForm.dataPgto,conta:_baixaForm.conta,forma:_baixaForm.forma,origem:'manual',obs:_baixaForm.obs});
+    const result=await registerBaixa(l,{valor,... baixaBase});
     const updated=result.lancamento;
     if(editingId===updated.id){
       formData={...formData,...updated,dataCompView:compToView(updated.dataComp||'')};
       buildForm();
     }
+    // Processar juros/multa se o usuário informou valor
+    if(valorJuros>0.005){
+      let restanteJuros=valorJuros;
+      // Primeiro tenta baixar filhos existentes
+      for(const jf of (_baixaCtx.jurosFilhos||[])){
+        if(restanteJuros<=0.005)break;
+        const jfSaldo=openAmount(jf);
+        const jfValor=+Math.min(restanteJuros,jfSaldo).toFixed(2);
+        if(jfValor>0.005){await registerBaixa(jf,{valor:jfValor,...baixaBase});restanteJuros=+(restanteJuros-jfValor).toFixed(2);}
+      }
+      // Se sobrou valor de juros sem filho existente, cria novo filho e baixa
+      if(restanteJuros>0.005){
+        const adjCatNome=l.tipo==='R'?'Receitas Financeiras':'Despesas Financeiras';
+        const adjSubNome=l.tipo==='R'?'Juros/Multas':'Juros/Multas por Atrasos';
+        const adjCObj=CATS_DATA[l.tipo]?.find(x=>x.nome===adjCatNome);
+        const adjSObj=(adjCObj?.subs||[]).find(x=>x.nome===adjSubNome);
+        if(!adjCObj||!adjSObj){toast(`Categoria "${adjSubNome}" não encontrada. Cadastre-a antes de registrar juros.`,'err');}
+        else{
+          const ae={id:newId(),tipo:l.tipo,parentId:l.id,adjType:'juros',
+            dataComp:baixaBase.dataPgto?.slice(0,7)+'-01'||l.dataComp,
+            dataVenc:l.dataVenc||effectiveVenc(l)||baixaBase.dataPgto,
+            dataPgto:'',cat:adjCatNome,sub:adjSubNome,
+            desc:(l.desc?l.desc+' - Juros/Multa':'Juros/Multa'),
+            cc:l.cc||'',forma:baixaBase.forma||l.forma||'PIX',
+            conta:baixaBase.conta||l.conta,doc:l.doc||'',
+            valorBruto:restanteJuros,ded:0,valorLiq:restanteJuros,status:'Pendente',obs:''};
+          const savedAe=await dbInsert(ae);
+          const aeApp=savedAe?fromRow(savedAe):{...ae};
+          DATA.unshift(aeApp);
+          await registerBaixa(aeApp,{valor:restanteJuros,...baixaBase});
+        }
+      }
+    }
     setSyncStatus('ok',`${DATA.length} registros`);
     closeParcialModal();buildNav();renderKeepScroll();
-    const quitado=openAmount(updated)<=0.005;
-    toast(quitado?`Lancamento quitado (${fmt(paidAmount(updated))})`:`${fmt(valor)} ${_baixaCtx.acaoFeita}. Saldo: ${fmt(openAmount(updated))}.`,'ok');
+    const updatedMain=DATA.find(x=>x.id===updated.id)||updated;
+    const tudo=openAmount(updatedMain)<=0.005;
+    const total=+(valor+valorJuros).toFixed(2);
+    toast(tudo?`Lancamento quitado (${fmt(total)})`:`${fmt(total)} ${_baixaCtx.acaoFeita}. Saldo: ${fmt(Math.max(0,saldo-valor))}.`,'ok');
   }catch(e){
     setSyncStatus('err','Erro');
     toast('Erro ao registrar baixa: '+e.message,'err');
@@ -663,6 +776,11 @@ async function saveForm(){
   const reverseBaixasOnSave=!!(existingBefore&&formData.status==='Pendente'&&getBaixas(existingBefore.id).length);
   const baixasToReverse=reverseBaixasOnSave?getBaixas(existingBefore.id):[];
   const baixaOnSave=formData.status===expectedRealizedStatus(formData.tipo)&&(!existingBefore||openAmount(existingBefore)>0.005);
+  // Captura baixas existentes antes de qualquer alteração, para ajuste de valor
+  const _existingBaixas=existingBefore&&!reverseBaixasOnSave&&!baixaOnSave?getBaixas(existingBefore.id):[];
+  const _totalPago=+_existingBaixas.reduce((s,b)=>s+parseMoney(b.valor),0).toFixed(2);
+  const _oldTitle=existingBefore?titleAmount(existingBefore):0;
+  const _valorMudou=_existingBaixas.length>0&&Math.abs(valorLiq-_oldTitle)>0.005;
   const baixaOnSavePayload=baixaOnSave?{
     valor:existingBefore?openAmount(existingBefore):valorLiq,
     dataPgto:formData.dataPgto,
@@ -688,15 +806,15 @@ async function saveForm(){
     toast(msg,'err');
     return;
   }
-  if(!confirmValidationWarnings(validation))return;
-  if(!confirmProbableDuplicate(candidato))return;
+  if(!await confirmValidationWarnings(validation))return;
+  if(!await confirmProbableDuplicate(candidato))return;
   if(reverseBaixasOnSave){
     for(const b of baixasToReverse){
       const baixaClosed=assertOpenPeriod(b.dataPgto,'Data da baixa');
       if(baixaClosed){toast(baixaClosed,'err');return;}
     }
     const totalBaixas=baixasToReverse.reduce((s,b)=>s+parseMoney(b.valor),0);
-    if(!confirm(`Reverter para Pendente vai remover ${baixasToReverse.length} baixa(s) registrada(s), total ${fmt(totalBaixas)}. Continuar?`))return;
+    if(!await openConfirmModal(`Reverter para Pendente vai remover ${baixasToReverse.length} baixa(s) registrada(s), total ${fmt(totalBaixas)}. Continuar?`,{danger:true,confirmLabel:'Reverter'}))return;
   }
 
   // Resolve categoria/subcategoria financeira para ajustes (juros/multa/desconto)
@@ -717,7 +835,14 @@ async function saveForm(){
   }
 
   formData={...formData,...validation.item,dataComp:canonicalComp,dataVenc:validation.item.dataVenc||effectiveVenc(validation.item),valorBruto,ded,valorLiq};
+  const _adjStatus=formData.status;
+  const _adjDataPgto=formData.dataPgto;
   if(baixaOnSave){formData.status='Pendente';formData.dataPgto='';}
+  // Se valor aumentou além do que foi pago, rebaixar status para não ficar como "pago" incorretamente
+  if(_valorMudou&&_totalPago>0&&_totalPago<valorLiq-0.005){
+    formData.status=_totalPago>0.005?'Parcial':'Pendente';
+    if(formData.status==='Pendente')formData.dataPgto='';
+  }
   const btn=document.getElementById('save-btn');if(btn){btn.disabled=true;btn.textContent='Salvando...';}
   setSyncStatus('loading','Salvando...');
   try{
@@ -738,10 +863,10 @@ async function saveForm(){
     BAIXAS_DATA=BAIXAS_DATA.filter(b=>!existingAdjs.some(a=>a.id===b.lancamentoId));
     let adjCount=0;
     if(adjCat&&adjSub){
-      const adjDataComp=formData.dataPgto?(formData.dataPgto.slice(0,7)+'-01'):formData.dataComp;
+      const adjDataComp=_adjDataPgto?(_adjDataPgto.slice(0,7)+'-01'):formData.dataComp;
       for(const adj of [{v:valorJuros,t:'juros',lbl:'Juros/Multa'},{v:valorDesconto,t:'desconto',lbl:'Desconto'}]){
         if(adj.v<=0)continue;
-        const ae={id:newId(),tipo:formData.tipo,parentId:formData.id,adjType:adj.t,dataComp:adjDataComp,dataVenc:formData.dataVenc||effectiveVenc(formData),dataPgto:formData.dataPgto||'',cat:adjCat,sub:adjSub,desc:(formData.desc?formData.desc+' - '+adj.lbl:adj.lbl),cc:formData.cc||'',forma:formData.forma||'PIX',conta:formData.conta,doc:formData.doc||'',valorBruto:adj.v,ded:0,valorLiq:adj.v,status:formData.status,obs:''};
+        const ae={id:newId(),tipo:formData.tipo,parentId:formData.id,adjType:adj.t,dataComp:adjDataComp,dataVenc:formData.dataVenc||effectiveVenc(formData),dataPgto:_adjDataPgto||'',cat:adjCat,sub:adjSub,desc:(formData.desc?formData.desc+' - '+adj.lbl:adj.lbl),cc:formData.cc||'',forma:formData.forma||'PIX',conta:formData.conta,doc:formData.doc||'',valorBruto:adj.v,ded:0,valorLiq:adj.v,status:_adjStatus,obs:''};
         const savedAe=await dbInsert(ae);
         DATA.unshift(savedAe?fromRow(savedAe):{...ae});
         adjCount++;
@@ -751,6 +876,45 @@ async function saveForm(){
     if(baixaOnSavePayload){
       const target=DATA.find(x=>x.id===formData.id)||mainSaved;
       await registerBaixa(target,baixaOnSavePayload);
+    }
+
+    // Se valor foi reduzido, trimmar a(s) última(s) baixa(s) para não exceder o novo valor
+    if(_valorMudou&&_totalPago>valorLiq+0.005){
+      let excess=+(_totalPago-valorLiq).toFixed(2);
+      for(let i=_existingBaixas.length-1;i>=0&&excess>0.005;i--){
+        const bv=parseMoney(_existingBaixas[i].valor);
+        await dbDeleteBaixa(_existingBaixas[i].id);
+        BAIXAS_DATA=BAIXAS_DATA.filter(x=>x.id!==_existingBaixas[i].id);
+        const novoValor=+(bv-excess).toFixed(2);
+        if(novoValor>0.005){
+          const newRow={..._existingBaixas[i],id:newId(),valor:novoValor};
+          const savedB=await dbInsertBaixa(newRow);
+          BAIXAS_DATA.push(savedB?fromBaixaRow(savedB):newRow);
+          excess=0;
+        }else{excess=+(excess-bv).toFixed(2);}
+      }
+      const trimItem=DATA.find(x=>x.id===formData.id);
+      if(trimItem){trimItem.status=computedStatus(trimItem);trimItem.dataPgto=paidAmount(trimItem)>0?latestBaixaDate(trimItem):'';await dbUpdate(trimItem);formData.status=trimItem.status;}
+    }
+
+    // Sync baixa when editing a fully paid/received lancamento with a single baixa
+    if(!reverseBaixasOnSave&&!baixaOnSave&&existingBefore){
+      const syncBaixas=getBaixas(formData.id);
+      const syncLan=DATA.find(x=>x.id===formData.id);
+      if(syncBaixas.length===1&&syncLan&&openAmount(syncLan)<=0.005){
+        const b=syncBaixas[0];
+        const nc=normalizeConta(formData.conta)||formData.conta;
+        const nf=formData.forma||b.forma;
+        const nd=formData.dataPgto||b.dataPgto;
+        if(b.conta!==nc||b.forma!==nf||b.dataPgto!==nd){
+          const updated={...b,conta:nc,forma:nf,dataPgto:nd};
+          await dbUpdateBaixa(updated);
+          const bi=BAIXAS_DATA.findIndex(x=>x.id===b.id);
+          if(bi>=0)BAIXAS_DATA[bi]=updated;
+          const li=DATA.findIndex(x=>x.id===formData.id);
+          if(li>=0){DATA[li]=refreshLancamentoComputed(DATA[li]);await dbUpdate(DATA[li]);}
+        }
+      }
     }
 
     const _tipo=formData.tipo;
@@ -767,7 +931,7 @@ async function duplicarLancamento(id){
   const copia={...orig,id:newId(),status:'Pendente',dataPgto:''};
   const validation=validateLancamentoCore(copia);
   if(validation.errors.length){toast(firstValidationError(validation),'err');return;}
-  if(!confirmProbableDuplicate(copia))return;
+  if(!await confirmProbableDuplicate(copia))return;
   try{
     const res=await dbInsert(copia);
     DATA.unshift(res?fromRow(res):copia);
@@ -782,7 +946,7 @@ async function duplicarEEditar(id){
   const copia={...orig,id:newId(),status:'Pendente',dataPgto:''};
   const validation=validateLancamentoCore(copia);
   if(validation.errors.length){toast(firstValidationError(validation),'err');return;}
-  if(!confirmProbableDuplicate(copia))return;
+  if(!await confirmProbableDuplicate(copia))return;
   try{
     const res=await dbInsert(copia);
     const novo=res?fromRow(res):copia;
@@ -811,7 +975,7 @@ async function deleteItem(id){
   const isTransf=isTransfer(item);
   if(isTransf){
     const pairErr=validateTransferPair(item.doc);
-    if(pairErr&&!confirm(`${pairErr}\n\nExcluir todos os registros encontrados desta transferencia mesmo assim?`))return;
+    if(pairErr&&!await openConfirmModal(`${pairErr}\n\nExcluir todos os registros encontrados desta transferência mesmo assim?`,{danger:true,confirmLabel:'Excluir mesmo assim'}))return;
   }
   const idsToDelete=getRelatedDeleteIds(item);
   const itemsToDelete=DATA.filter(x=>idsToDelete.includes(x.id));
@@ -819,8 +983,8 @@ async function deleteItem(id){
   if(delErr){toast(delErr,'err');return;}
   const adjChildren=DATA.filter(x=>x.parentId===id);
   const hasAdj=adjChildren.length>0;
-  const msg=isTransf?'Excluir esta transfer?ncia (ambos os lan?amentos)?':hasAdj?`Excluir este lan?amento e ${adjChildren.length} ajuste(s) vinculado(s)?`:'Excluir este lan?amento?';
-  if(!confirm(msg))return;
+  const msg=isTransf?'Excluir esta transferência (ambos os lançamentos)?':hasAdj?`Excluir este lançamento e ${adjChildren.length} ajuste(s) vinculado(s)?`:'Excluir este lançamento?';
+  if(!await openConfirmModal(msg,{danger:true,confirmLabel:'Excluir'}))return;
   setSyncStatus('loading','Excluindo...');
   try{
     const pairIds=isTransf?DATA.filter(x=>x.doc===item.doc&&x.id!==id).map(x=>x.id):[];
@@ -966,7 +1130,7 @@ async function saveRecorrente(){
 }
 
 async function deleteRecorrente(id){
-  if(!confirm('Excluir este recorrente permanentemente?'))return;
+  if(!await openConfirmModal('Excluir esta despesa recorrente permanentemente?',{danger:true,confirmLabel:'Excluir'}))return;
   try{
     await sbFetch('DELETE',`recorrentes?id=eq.${id}`);
     for(const lista of [RECORRENTES_DESPESAS,RECORRENTES_RECEITAS]){
@@ -1044,7 +1208,7 @@ async function gerarRecorrentes(){
   const ano=parseInt(anoStr), mes=parseInt(mesStr);
 
   const semDia=RECORRENTES_DESPESAS.filter(r=>!r.diaVenc);
-  if(semDia.length>0&&!confirm(`${semDia.length} despesa(s) sem dia de vencimento serão ignoradas. Continuar?`))return;
+  if(semDia.length>0&&!await openConfirmModal(`${semDia.length} despesa(s) sem dia de vencimento serão ignoradas. Continuar?`,{title:'Atenção',confirmLabel:'Continuar'}))return;
 
   const comDia=RECORRENTES_DESPESAS.filter(r=>r.diaVenc);
   if(!comDia.length){toast('Nenhuma despesa com dia de vencimento definido','err');return;}
@@ -1062,7 +1226,7 @@ async function gerarRecorrentes(){
 
   const anoMes=`${anoStr}-${mesStr}`;
   const jaExiste=DATA.filter(l=>effectiveVenc(l).startsWith(anoMes)&&l.obs&&l.obs.includes('[recorrente]'));
-  if(jaExiste.length>0&&!confirm(`Já existem ${jaExiste.length} lançamentos recorrentes para ${mesStr}/${anoStr}. Gerar novamente mesmo assim?`))return;
+  if(jaExiste.length>0&&!await openConfirmModal(`Já existem ${jaExiste.length} lançamentos recorrentes para ${mesStr}/${anoStr}. Gerar novamente mesmo assim?`,{title:'Atenção',confirmLabel:'Gerar mesmo assim'}))return;
 
   const lista=comDia.map(r=>{
     const dataPgto=`${anoStr}-${mesStr}-${String(r.diaVenc).padStart(2,'0')}`;
@@ -1089,12 +1253,28 @@ let _catTipo = 'R';
 let _dragCat = null;
 let _dragSub = null;
 
+function projectionRuleSelect(cat){
+  const rule=cat.projection_rule||'media_3';
+  const opts=[
+    ['ultimo_mes','Projecao: Ultimo mes'],
+    ['media_3','Projecao: Media 3 meses'],
+    ['nao_projetar','Projecao: Nao projetar'],
+    ['manual','Projecao: Manual']
+  ];
+  return `<span style="display:inline-flex;align-items:center;gap:5px">
+    <select onchange="saveProjectionRule('${cat.id}', this.value, this)" style="font-size:10px;padding:2px 6px;border-radius:6px;border:1px solid var(--bd);background:var(--s2);color:var(--tx2);max-width:145px">
+      ${opts.map(([v,l])=>`<option value="${v}"${rule===v?' selected':''}>${l}</option>`).join('')}
+    </select>
+    <span id="proj-ok-${cat.id}" style="display:none;font-size:10px;color:var(--teal);font-weight:700">Salvo</span>
+  </span>`;
+}
+
 function renderCategorias(c){
   const recCats = CATS_DATA.R||[];
   const despCats = CATS_DATA.D||[];
   c.innerHTML=`
     <div style="display:flex;gap:8px;margin-bottom:16px;align-items:center">
-      <span style="font-size:11px;color:var(--tx3)">? Arraste para reordenar</span>
+      <span style="font-size:11px;color:var(--tx3);display:flex;align-items:center;gap:4px">${appIcon('grip')} Arraste para reordenar</span>
     </div>
     <div style="display:grid;grid-template-columns:1fr 1fr;gap:16px">
       <div>
@@ -1107,10 +1287,11 @@ function renderCategorias(c){
             const slugLocked=EXCL_DRE_SLUGS.has(cat.slug||slugify(cat.nome));
             const excluido=slugLocked||!!cat.excluir_dre;
             const dreBtn=slugLocked
-              ? `<span title="Exclu?do do DRE (sistema)" style="padding:2px 8px;font-size:10px;border-radius:99px;border:1px solid rgba(248,81,73,.3);background:rgba(248,81,73,.1);color:var(--red);opacity:.6;cursor:default">? DRE</span>`
-              : `<button onclick="toggleExcluirDRE('${cat.id}',${excluido})" title="${excluido?'Exclu?do do DRE ? clique para incluir':'Inclu?do no DRE ? clique para excluir'}" style="padding:2px 8px;font-size:10px;border-radius:99px;cursor:pointer;border:1px solid ${excluido?'rgba(248,81,73,.3);background:rgba(248,81,73,.1);color:var(--red)':'rgba(57,211,83,.3);background:rgba(57,211,83,.1);color:var(--teal)'}">${excluido?'? DRE':'? DRE'}</button>`;
+              ? `<span title="Excluido do DRE (sistema)" style="padding:2px 8px;font-size:10px;border-radius:99px;border:1px solid rgba(248,81,73,.3);background:rgba(248,81,73,.1);color:var(--red);opacity:.6;cursor:default">Fora DRE</span>`
+              : `<button onclick="toggleExcluirDRE('${cat.id}',${excluido})" title="${excluido?'Excluido do DRE - clique para incluir':'Incluido no DRE - clique para excluir'}" style="padding:2px 8px;font-size:10px;border-radius:99px;cursor:pointer;border:1px solid ${excluido?'rgba(248,81,73,.3);background:rgba(248,81,73,.1);color:var(--red)':'rgba(57,211,83,.3);background:rgba(57,211,83,.1);color:var(--teal)'}">${excluido?'Fora DRE':'DRE'}</button>`;
             const naoOp=(cat.fluxo||'operacional')==='nao_operacional';
-            const fluxoBtn=`<button onclick="toggleFluxoCat('${cat.id}','${cat.fluxo||'operacional'}')" title="${naoOp?'N?o-Operacional ? clique para marcar como Operacional':'Operacional ? clique para marcar como N?o-Operacional'}" style="padding:2px 8px;font-size:10px;border-radius:99px;cursor:pointer;border:1px solid ${naoOp?'rgba(240,136,62,.3);background:rgba(240,136,62,.1);color:var(--orange)':'rgba(88,166,255,.3);background:rgba(88,166,255,.1);color:var(--blue)'}"> ${naoOp?'N?o-Op.':'Op.'}</button>`;
+            const fluxoBtn=`<button onclick="toggleFluxoCat('${cat.id}','${cat.fluxo||'operacional'}')" title="${naoOp?'Nao-Operacional - clique para marcar como Operacional':'Operacional - clique para marcar como Nao-Operacional'}" style="padding:2px 8px;font-size:10px;border-radius:99px;cursor:pointer;border:1px solid ${naoOp?'rgba(240,136,62,.3);background:rgba(240,136,62,.1);color:var(--orange)':'rgba(88,166,255,.3);background:rgba(88,166,255,.1);color:var(--blue)'}"> ${naoOp?'Nao-Op.':'Op.'}</button>`;
+            const projSelect=projectionRuleSelect(cat);
             return `
             <div class="cat-card" id="cat-${cat.id}" draggable="true"
               ondragstart="onCatDragStart(event,'${cat.id}')"
@@ -1119,10 +1300,11 @@ function renderCategorias(c){
               ondrop="onCatDrop(event,'${cat.id}')">
               <div class="cat-hdr">
                 <div style="display:flex;align-items:center;gap:8px;flex:1">
-                  <span class="drag-handle">?</span>
+                  <span class="drag-handle">${appIcon('grip')}</span>
                   <span style="font-size:14px;font-weight:600;color:var(--tx)">${esc(cat.nome)}</span>
                   ${dreBtn}
                   ${fluxoBtn}
+                  ${projSelect}
                   <button class="btn btn-ghost" title="Editar" style="padding:2px 7px;font-size:11px" onclick="editarCategoria('${cat.id}','${esc(cat.nome)}')">${appIcon('edit')}</button>
                   <button class="btn" title="Excluir" style="padding:2px 7px;font-size:11px;background:rgba(248,81,73,.1);color:var(--red);border:1px solid rgba(248,81,73,.2)" onclick="excluirCategoria('${cat.id}','${esc(cat.nome)}')">${appIcon('trash')}</button>
                 </div>
@@ -1136,12 +1318,12 @@ function renderCategorias(c){
                     ondragleave="onSubDragLeave(event,'${sub.id}')"
                     ondrop="onSubDrop(event,'${sub.id}','${cat.id}')">
                     <div style="display:flex;align-items:center;gap:6px">
-                      <span style="color:var(--tx3);font-size:12px">?</span>
+                      <span style="color:var(--tx3);font-size:12px;display:flex">${appIcon('grip')}</span>
                       <span style="font-size:12.5px;color:var(--tx)">${esc(sub.nome)}</span>
                     </div>
                     <div>
                       <button onclick="editarSub('${sub.id}','${esc(sub.nome)}')" title="Editar" style="background:none;border:none;color:var(--tx3);font-size:11px;padding:0 2px;cursor:pointer;line-height:1">${appIcon('edit')}</button>
-                      <button onclick="excluirSub('${sub.id}','${esc(sub.nome)}','${cat.id}')" style="background:none;border:none;color:var(--red);font-size:11px;padding:0 2px;cursor:pointer;line-height:1">?</button>
+                      <button onclick="excluirSub('${sub.id}','${esc(sub.nome)}','${cat.id}')" title="Excluir" style="background:none;border:none;color:var(--red);font-size:11px;padding:0 2px;cursor:pointer;line-height:1">${appIcon('trash')}</button>
                     </div>
                   </div>`).join('')}
                 ${!(cat.subs||[]).length?`<div style="padding:12px 16px;color:var(--tx3);font-size:12px">Nenhuma subcategoria</div>`:''}
@@ -1160,10 +1342,11 @@ function renderCategorias(c){
             const slugLocked=EXCL_DRE_SLUGS.has(cat.slug||slugify(cat.nome));
             const excluido=slugLocked||!!cat.excluir_dre;
             const dreBtn=slugLocked
-              ? `<span title="Exclu?do do DRE (sistema)" style="padding:2px 8px;font-size:10px;border-radius:99px;border:1px solid rgba(248,81,73,.3);background:rgba(248,81,73,.1);color:var(--red);opacity:.6;cursor:default">? DRE</span>`
-              : `<button onclick="toggleExcluirDRE('${cat.id}',${excluido})" title="${excluido?'Exclu?do do DRE ? clique para incluir':'Inclu?do no DRE ? clique para excluir'}" style="padding:2px 8px;font-size:10px;border-radius:99px;cursor:pointer;border:1px solid ${excluido?'rgba(248,81,73,.3);background:rgba(248,81,73,.1);color:var(--red)':'rgba(57,211,83,.3);background:rgba(57,211,83,.1);color:var(--teal)'}">${excluido?'? DRE':'? DRE'}</button>`;
+              ? `<span title="Excluido do DRE (sistema)" style="padding:2px 8px;font-size:10px;border-radius:99px;border:1px solid rgba(248,81,73,.3);background:rgba(248,81,73,.1);color:var(--red);opacity:.6;cursor:default">Fora DRE</span>`
+              : `<button onclick="toggleExcluirDRE('${cat.id}',${excluido})" title="${excluido?'Excluido do DRE - clique para incluir':'Incluido no DRE - clique para excluir'}" style="padding:2px 8px;font-size:10px;border-radius:99px;cursor:pointer;border:1px solid ${excluido?'rgba(248,81,73,.3);background:rgba(248,81,73,.1);color:var(--red)':'rgba(57,211,83,.3);background:rgba(57,211,83,.1);color:var(--teal)'}">${excluido?'Fora DRE':'DRE'}</button>`;
             const naoOp=(cat.fluxo||'operacional')==='nao_operacional';
-            const fluxoBtn=`<button onclick="toggleFluxoCat('${cat.id}','${cat.fluxo||'operacional'}')" title="${naoOp?'N?o-Operacional ? clique para marcar como Operacional':'Operacional ? clique para marcar como N?o-Operacional'}" style="padding:2px 8px;font-size:10px;border-radius:99px;cursor:pointer;border:1px solid ${naoOp?'rgba(240,136,62,.3);background:rgba(240,136,62,.1);color:var(--orange)':'rgba(88,166,255,.3);background:rgba(88,166,255,.1);color:var(--blue)'}"> ${naoOp?'N?o-Op.':'Op.'}</button>`;
+            const fluxoBtn=`<button onclick="toggleFluxoCat('${cat.id}','${cat.fluxo||'operacional'}')" title="${naoOp?'Nao-Operacional - clique para marcar como Operacional':'Operacional - clique para marcar como Nao-Operacional'}" style="padding:2px 8px;font-size:10px;border-radius:99px;cursor:pointer;border:1px solid ${naoOp?'rgba(240,136,62,.3);background:rgba(240,136,62,.1);color:var(--orange)':'rgba(88,166,255,.3);background:rgba(88,166,255,.1);color:var(--blue)'}"> ${naoOp?'Nao-Op.':'Op.'}</button>`;
+            const projSelect=projectionRuleSelect(cat);
             return `
             <div class="cat-card" id="cat-${cat.id}" draggable="true"
               ondragstart="onCatDragStart(event,'${cat.id}')"
@@ -1172,10 +1355,11 @@ function renderCategorias(c){
               ondrop="onCatDrop(event,'${cat.id}')">
               <div class="cat-hdr">
                 <div style="display:flex;align-items:center;gap:8px;flex:1">
-                  <span class="drag-handle">?</span>
+                  <span class="drag-handle">${appIcon('grip')}</span>
                   <span style="font-size:14px;font-weight:600;color:var(--tx)">${esc(cat.nome)}</span>
                   ${dreBtn}
                   ${fluxoBtn}
+                  ${projSelect}
                   <button class="btn btn-ghost" title="Editar" style="padding:2px 7px;font-size:11px" onclick="editarCategoria('${cat.id}','${esc(cat.nome)}')">${appIcon('edit')}</button>
                   <button class="btn" title="Excluir" style="padding:2px 7px;font-size:11px;background:rgba(248,81,73,.1);color:var(--red);border:1px solid rgba(248,81,73,.2)" onclick="excluirCategoria('${cat.id}','${esc(cat.nome)}')">${appIcon('trash')}</button>
                 </div>
@@ -1189,12 +1373,12 @@ function renderCategorias(c){
                     ondragleave="onSubDragLeave(event,'${sub.id}')"
                     ondrop="onSubDrop(event,'${sub.id}','${cat.id}')">
                     <div style="display:flex;align-items:center;gap:6px">
-                      <span style="color:var(--tx3);font-size:12px">?</span>
+                      <span style="color:var(--tx3);font-size:12px;display:flex">${appIcon('grip')}</span>
                       <span style="font-size:12.5px;color:var(--tx)">${esc(sub.nome)}</span>
                     </div>
                     <div>
                       <button onclick="editarSub('${sub.id}','${esc(sub.nome)}')" title="Editar" style="background:none;border:none;color:var(--tx3);font-size:11px;padding:0 2px;cursor:pointer;line-height:1">${appIcon('edit')}</button>
-                      <button onclick="excluirSub('${sub.id}','${esc(sub.nome)}','${cat.id}')" style="background:none;border:none;color:var(--red);font-size:11px;padding:0 2px;cursor:pointer;line-height:1">?</button>
+                      <button onclick="excluirSub('${sub.id}','${esc(sub.nome)}','${cat.id}')" title="Excluir" style="background:none;border:none;color:var(--red);font-size:11px;padding:0 2px;cursor:pointer;line-height:1">${appIcon('trash')}</button>
                     </div>
                   </div>`).join('')}
                 ${!(cat.subs||[]).length?`<div style="padding:12px 16px;color:var(--tx3);font-size:12px">Nenhuma subcategoria</div>`:''}
@@ -1309,6 +1493,32 @@ async function toggleFluxoCat(id, current){
   }catch(e){setSyncStatus('err','Erro');toast('Erro ao salvar: '+e.message,'err');}
 }
 
+async function saveProjectionRule(catId, rule, el=null){
+  setSyncStatus('loading','Salvando...');
+  const okEl=document.getElementById('proj-ok-'+catId);
+  const oldBorder=el?.style.borderColor||'';
+  if(okEl)okEl.style.display='none';
+  try{
+    await sbFetch('PATCH',`categorias?id=eq.${catId}`,{projection_rule:rule});
+    for(const tipo of ['R','D']){
+      const cat=(CATS_DATA[tipo]||[]).find(c=>c.id===catId);
+      if(cat){cat.projection_rule=rule;break;}
+    }
+    if(typeof clearFinanceCalcCache==='function')clearFinanceCalcCache();
+    setSyncStatus('ok',`${DATA.length} registros`);
+    if(el)el.style.borderColor='var(--teal)';
+    if(okEl)okEl.style.display='inline';
+    if(typeof toast==='function')toast('Regra de projecao salva','ok');
+    setTimeout(()=>{
+      if(el)el.style.borderColor=oldBorder;
+      if(okEl)okEl.style.display='none';
+    },1600);
+  }catch(e){
+    setSyncStatus('err','Erro');
+    if(typeof toast==='function')toast('Erro ao salvar regra: '+e.message,'err');
+  }
+}
+
 async function editarCategoria(id, nomeAtual){
   const novo=prompt('Novo nome:',nomeAtual);
   if(!novo||!novo.trim()||novo.trim()===nomeAtual)return;
@@ -1329,7 +1539,7 @@ async function editarCategoria(id, nomeAtual){
 async function excluirCategoria(id, nome){
   if(DATA.some(l=>l.cat===nome)){toast(`A categoria "${nome}" possui lancamentos vinculados. Reclassifique antes de excluir.`,'err');return;}
   if(RECORRENTES_DESPESAS.some(r=>r.cat===nome)||RECORRENTES_RECEITAS.some(r=>r.cat===nome)){toast(`A categoria "${nome}" possui recorrentes vinculados.`,'err');return;}
-  if(!confirm(`Excluir "${nome}" e todas as subcategorias?`))return;
+  if(!await openConfirmModal(`Excluir a categoria "${nome}" e todas as suas subcategorias?`,{danger:true,confirmLabel:'Excluir'}))return;
   setSyncStatus('loading','Excluindo...');
   try{
     await sbFetch('DELETE',`categorias?id=eq.${id}`);
@@ -1396,7 +1606,7 @@ async function excluirSub(id, nome, catId){
   const cat=[...(CATS_DATA.R||[]),...(CATS_DATA.D||[])].find(c=>c.id===catId);
   if(DATA.some(l=>l.sub===nome&&(!cat||l.cat===cat.nome))){toast(`A subcategoria "${nome}" possui lancamentos vinculados. Reclassifique antes de excluir.`,'err');return;}
   if(RECORRENTES_DESPESAS.some(r=>r.sub===nome&&(!cat||r.cat===cat.nome))||RECORRENTES_RECEITAS.some(r=>r.sub===nome&&(!cat||r.cat===cat.nome))){toast(`A subcategoria "${nome}" possui recorrentes vinculados.`,'err');return;}
-  if(!confirm(`Excluir "${nome}"?`))return;
+  if(!await openConfirmModal(`Excluir a subcategoria "${nome}"?`,{danger:true,confirmLabel:'Excluir'}))return;
   setSyncStatus('loading','Excluindo...');
   try{
     await sbFetch('DELETE',`subcategorias?id=eq.${id}`);

@@ -96,7 +96,23 @@ nav{flex:1;padding:10px 8px;display:flex;flex-direction:column;gap:2px}
   padding:14px 24px;border-bottom:1px solid var(--bd);background:var(--s1);gap:12px}
 .page-ttl{font-size:18px;font-weight:700;color:var(--tx)}
 .topbar-r{display:flex;align-items:center;gap:10px}
-.yr-sel select{background:var(--s2);border:1px solid var(--bd2);color:var(--tx);border-radius:8px;padding:6px 10px;font-size:13px}
+.yr-sel{position:relative}
+.yr-sel-btn{background:var(--s2);border:1px solid var(--bd2);color:var(--tx);border-radius:8px;padding:6px 12px;font-size:13px;font-weight:600;cursor:pointer;font-family:inherit;display:flex;align-items:center;gap:6px;white-space:nowrap;transition:border-color .12s,background .12s}
+.yr-sel-btn:hover{background:var(--s3);border-color:var(--brand)}
+.yr-sel-panel{position:absolute;top:calc(100% + 6px);right:0;background:var(--s1);border:1px solid var(--bd2);border-radius:12px;padding:12px;box-shadow:var(--shadow);z-index:500;width:216px}
+.yr-sel-nav{display:flex;align-items:center;justify-content:space-between;margin-bottom:10px}
+.yr-sel-nav span{font-size:14px;font-weight:800;color:var(--tx)}
+.yr-sel-nav button{background:var(--s2);border:1px solid var(--bd);border-radius:6px;color:var(--tx2);padding:3px 9px;cursor:pointer;font-size:12px;font-weight:700;transition:background .1s}
+.yr-sel-nav button:hover{background:var(--s3);color:var(--tx)}
+.yr-sel-grid{display:grid;grid-template-columns:repeat(4,1fr);gap:4px}
+.yr-sel-m{background:transparent;border:1px solid transparent;border-radius:8px;padding:7px 2px;font-size:12px;font-weight:600;color:var(--tx2);cursor:pointer;font-family:inherit;text-align:center;transition:background .1s,color .1s}
+.yr-sel-m:hover{background:var(--s2);color:var(--tx)}
+.yr-sel-m.sel{background:var(--brand);color:#fff;border-color:transparent}
+.yr-sel-m.today{border-color:var(--brand);color:var(--brand)}
+.yr-sel-m.sel.today{background:var(--brand);color:#fff}
+.yr-sel-today{margin-top:10px;padding-top:8px;border-top:1px solid var(--bd);text-align:center}
+.yr-sel-today button{background:none;border:none;color:var(--brand);font-size:12px;font-weight:700;cursor:pointer;font-family:inherit}
+.yr-sel-today button:hover{text-decoration:underline}
 .content{flex:1;overflow-y:auto;padding:20px 24px;background:var(--bg)}
 .btn{display:inline-flex;align-items:center;gap:6px;padding:7px 14px;border-radius:8px;font-size:13px;font-weight:500;border:none;transition:all .12s}
 .btn-pri{background:linear-gradient(135deg,var(--teal2),var(--blue));color:#fff;font-weight:600}
@@ -145,6 +161,11 @@ canvas{display:block}
 .tbl-hdr{padding:18px 20px 14px;border-bottom:1px solid var(--bd)}
 .sec-ttl{font-size:15px;font-weight:700;display:flex;align-items:center;gap:10px}
 .tbl-scroll{overflow-x:auto}
+.dre-kpis{display:grid;grid-template-columns:repeat(4,1fr);gap:14px;padding:14px 20px 16px;flex-shrink:0}
+.kpi-info{display:inline-flex;align-items:center;justify-content:center;width:15px;height:15px;border-radius:50%;background:var(--s3);color:var(--tx3);font-size:9px;font-weight:800;cursor:default;position:relative;flex-shrink:0;vertical-align:middle;margin-left:5px;border:1px solid var(--bd);line-height:1}
+.kpi-info::after{content:attr(data-tip);position:absolute;bottom:calc(100% + 8px);left:50%;transform:translateX(-50%);background:var(--tx);color:var(--bg);font-size:11.5px;font-weight:500;line-height:1.5;padding:7px 11px;border-radius:8px;width:220px;white-space:normal;box-shadow:0 4px 16px rgba(0,0,0,.18);opacity:0;pointer-events:none;transition:opacity .15s;z-index:200;text-transform:none;letter-spacing:0}
+.kpi-info::before{content:'';position:absolute;bottom:calc(100% + 2px);left:50%;transform:translateX(-50%);border:5px solid transparent;border-top-color:var(--tx);opacity:0;pointer-events:none;transition:opacity .15s;z-index:200}
+.kpi-info:hover::after,.kpi-info:hover::before{opacity:1}
 .lan-scroll{max-height:calc(100vh - 255px);overflow:auto}
 table{width:100%;border-collapse:collapse}
 .fin-tbl{min-width:1050px}
@@ -154,25 +175,13 @@ table{width:100%;border-collapse:collapse}
 .dr td{padding:7px 11px;text-align:right;border-bottom:1px solid var(--bd);font-size:12px;color:var(--tx2)}
 .dr td:first-child{text-align:left}
 .dr.bold td{font-weight:600;color:var(--tx)!important}
-.dr.hl td{background:rgba(88,166,255,.04)}
-.dr.tot td{background:rgba(57,211,83,.07);font-weight:700!important;color:var(--teal)!important}
+.dr.hl td{background:rgba(88,166,255,.04)!important}
+.dr.tot td{background:rgba(57,211,83,.07)!important;font-weight:700!important;color:var(--teal)!important}
 .dr.tot-bal td{background:rgba(88,166,255,.07);font-weight:700!important;color:var(--blue)!important}
 .dr.proj-row td{background:rgba(88,166,255,.04);font-style:italic;color:var(--tx2)}
 .dr.proj-tot td{background:rgba(88,166,255,.12);font-weight:700!important;color:#58a6ff!important}
 .dr td{transition:background .1s}
 .dr.group-hdr td:first-child{cursor:pointer}
-/* ── Segmented control DRE/Fluxo ─────────────────────────────── */
-.dre-seg{display:flex;border:1px solid var(--bd);border-radius:8px;overflow:hidden}
-.dre-seg-btn{background:none;border:none;cursor:pointer;padding:6px 16px;font-size:12px;color:var(--tx2);font-weight:500;transition:background .15s,color .15s}
-.dre-seg-btn.on{background:var(--brand);color:#fff;font-weight:600}
-/* ── Navegador de mês (mensal) ────────────────────────────────── */
-.dre-mes-nav{display:flex;align-items:center;gap:10px;justify-content:center;padding:10px 0 12px;flex-shrink:0}
-.dre-mes-nav button{background:var(--s2);border:1px solid var(--bd);border-radius:6px;cursor:pointer;width:28px;height:28px;display:flex;align-items:center;justify-content:center;font-size:18px;color:var(--tx);line-height:1;transition:background .12s}
-.dre-mes-nav button:disabled{opacity:.35;cursor:default}
-.dre-mes-nav button:not(:disabled):hover{background:var(--s3)}
-.dre-mes-nav span{font-size:14px;font-weight:700;color:var(--tx);min-width:150px;text-align:center}
-/* ── KPI strip (Fluxo/DRE) ────────────────────────────────────── */
-.dre-kpis{display:grid;grid-template-columns:repeat(4,1fr);gap:12px;padding:12px 20px 0}
 .dr.group-hdr:hover td{background:rgba(255,255,255,.03)}
 .sep td{background:var(--s2);padding:6px 16px;font-size:10px;font-weight:700;color:var(--tx3);text-transform:uppercase;letter-spacing:1px;border-bottom:1px solid var(--bd)}
 .sep.proj-sep td{background:rgba(88,166,255,.08);color:#58a6ff}
@@ -410,8 +419,8 @@ select option:checked{background:var(--brand);color:#fff}
 .fin-tbl .tc{background:#eaf2e7}
 .dr td,.lr td{border-bottom-color:var(--bd);color:var(--tx2)}
 .dr.bold td{color:var(--tx)!important}
-.dr.hl td{background:rgba(19,124,60,.045)}
-.dr.tot td{background:rgba(19,124,60,.08);color:var(--brand-dark)!important}
+.dr.hl td{background:rgba(19,124,60,.045)!important}
+.dr.tot td{background:rgba(19,124,60,.08)!important;color:var(--brand-dark)!important}
 .dr.tot-bal td{background:rgba(26,157,77,.10);color:var(--brand)!important}
 .dr.proj-row td{background:rgba(19,124,60,.045)}
 .dr.proj-tot td{background:rgba(19,124,60,.10);color:var(--brand)!important}
@@ -514,8 +523,6 @@ button:focus-visible,input:focus-visible,select:focus-visible,textarea:focus-vis
 .nv,.btn,.btn-exp,.kpi,.card,.pend-row{transition-duration:.15s}
 
 .btn-ghost:active{transform:translateY(0.5px)}
-
-.yr-sel select{font-weight:600}
 
 @media (min-width:1280px){
   .kpi-grid{grid-template-columns:repeat(auto-fit,minmax(160px,1fr))}
@@ -650,9 +657,9 @@ nav::-webkit-scrollbar-track{background:transparent}
 tfoot .contas-foot-row td{position:sticky;bottom:0;z-index:4}
 
 /* Dashboard mensal ------------------------------------------------------- */
-.dashboard-kpis{grid-template-columns:repeat(4,minmax(190px,1fr));gap:18px;margin-bottom:26px}
+.dashboard-kpis{grid-template-columns:repeat(4,minmax(190px,1fr));gap:14px;margin-bottom:18px}
 .dashboard-kpis .kpi{
-  min-height:146px;padding:26px 26px 22px;border-radius:14px;
+  min-height:110px;padding:18px 20px 14px;border-radius:14px;
   box-shadow:0 1px 2px rgba(11,90,48,.05);border-color:rgba(11,90,48,.14)
 }
 .dashboard-kpis .kpi:hover{box-shadow:0 14px 32px rgba(20,54,35,.10)}
@@ -669,9 +676,9 @@ tfoot .contas-foot-row td{position:sticky;bottom:0;z-index:4}
   pointer-events:none
 }
 .dashboard-kpis .kpi>*{position:relative;z-index:1}
-.dashboard-kpis .kpi-lbl{font-size:11px;letter-spacing:.34em;margin-bottom:8px;color:#31473a;font-weight:600}
-.dashboard-kpis .kpi-val{font-size:30px;line-height:1.08;margin-bottom:8px;color:#020f08;letter-spacing:-.035em}
-.dashboard-kpis .kpi-sub{font-size:13.5px;font-weight:800;color:#0b5a30}
+.dashboard-kpis .kpi-lbl{font-size:10px;letter-spacing:.34em;margin-bottom:6px;color:#31473a;font-weight:600}
+.dashboard-kpis .kpi-val{font-size:22px;line-height:1.08;margin-bottom:6px;color:#020f08;letter-spacing:-.035em}
+.dashboard-kpis .kpi-sub{font-size:12px;font-weight:800;color:#0b5a30}
 .dashboard-kpis .kpi.k-feature .kpi-lbl,
 .dashboard-kpis .kpi:first-child .kpi-lbl{color:rgba(255,255,255,.86)!important}
 .dashboard-kpis .kpi.k-feature .kpi-sub,
@@ -679,10 +686,10 @@ tfoot .contas-foot-row td{position:sticky;bottom:0;z-index:4}
 .dashboard-kpis .kpi.k-feature .kpi-val,
 .dashboard-kpis .kpi:first-child .kpi-val{color:#fff!important}
 .dashboard-kpis .kpi-ico-wrap{
-  top:26px;right:26px;width:50px;height:50px;border-radius:10px;
+  top:18px;right:18px;width:36px;height:36px;border-radius:9px;
   background:rgba(19,124,60,.12);color:#0b5a30
 }
-.dashboard-kpis .kpi-ico-wrap .app-icon{width:24px;height:24px}
+.dashboard-kpis .kpi-ico-wrap .app-icon{width:17px;height:17px}
 .dashboard-kpis .kpi.k-feature .kpi-ico-wrap,
 .dashboard-kpis .kpi:first-child .kpi-ico-wrap{background:rgba(255,255,255,.18)!important;color:#fff!important}
 .dashboard-kpis .kpi.k-receber .kpi-sub{color:#0b5a30}
@@ -693,7 +700,7 @@ tfoot .contas-foot-row td{position:sticky;bottom:0;z-index:4}
   border-color:rgba(242,195,0,.44)!important
 }
 .dashboard-kpis .kpi.k-amber .kpi-ico-wrap{
-  width:50px;height:50px;background:rgba(242,195,0,.28)!important;color:#8a6a00!important
+  width:36px;height:36px;background:rgba(242,195,0,.28)!important;color:#8a6a00!important
 }
 .dashboard-kpis .kpi.k-margin-ok .kpi-sub{color:#0b5a30!important}
 @media (max-width:1120px){.dashboard-kpis{grid-template-columns:repeat(2,minmax(190px,1fr))}}
@@ -764,3 +771,132 @@ tfoot .contas-foot-row td{position:sticky;bottom:0;z-index:4}
 #sidebar.collapsed .pf-options{display:none}
 #sidebar.collapsed .pf-info,#sidebar.collapsed .pf-chevron{display:none}
 #sidebar.collapsed .profile-area{justify-content:center;padding:10px 0}
+
+/* ── DRE: segmented control Anual/Mensal ─────────────────── */
+.dre-seg{display:flex;border:1px solid var(--bd);border-radius:8px;overflow:hidden;flex-shrink:0}
+.dre-seg-btn{padding:5px 16px;font-size:12px;font-weight:600;border:none;background:transparent;color:var(--tx2);cursor:pointer;transition:background .15s,color .15s;line-height:1.4}
+.dre-seg-btn.on{background:var(--brand);color:#fff}
+.dre-seg-btn:hover:not(.on){background:var(--s3);color:var(--tx)}
+
+/* ── DRE: navegação de mês (visão mensal) ────────────────── */
+.dre-mes-nav{display:flex;align-items:center;justify-content:space-between;padding:10px 0;min-height:44px}
+.dre-mes-nav button{background:none;border:1px solid var(--bd);border-radius:6px;width:30px;height:30px;cursor:pointer;font-size:18px;color:var(--tx2);display:flex;align-items:center;justify-content:center;transition:background .12s}
+.dre-mes-nav button:hover:not([disabled]){background:var(--s3)}
+.dre-mes-nav button[disabled]{opacity:.3;cursor:default}
+.dre-mes-nav span{font-size:15px;font-weight:700;color:var(--tx)}
+
+/* ── Dashboard — Donut chart ────────────────────────────── */
+.donut-body{display:grid;grid-template-columns:210px 1fr;gap:18px;align-items:center}
+.donut-wrap{position:relative;width:210px;height:210px;flex-shrink:0}
+.donut-wrap svg{display:block;width:100%;height:100%}
+.donut-seg{fill:none;stroke-width:30;cursor:pointer;transition:stroke-width .15s,opacity .15s}
+.donut-seg.donut-dim{opacity:.3}
+.donut-seg.donut-hot{stroke-width:40}
+.donut-center{position:absolute;inset:0;display:flex;flex-direction:column;align-items:center;justify-content:center;text-align:center;pointer-events:none;padding:20px}
+.dc-lbl{font-size:9.5px;font-weight:700;letter-spacing:.1em;text-transform:uppercase;color:var(--tx2)}
+.dc-val{font-size:24px;font-weight:900;color:var(--tx);line-height:1.05;margin-top:3px;font-variant-numeric:tabular-nums}
+.dc-cur{font-size:12px;font-weight:700;color:var(--tx2);margin-right:2px;vertical-align:.3em}
+.dc-sub{font-size:11px;color:var(--tx3);margin-top:4px}
+.donut-legend{display:flex;flex-direction:column;gap:1px;min-width:0}
+.donut-leg-item{display:grid;grid-template-columns:12px 1fr auto auto;align-items:center;gap:8px;padding:7px 10px;border-radius:8px;cursor:pointer;transition:background .12s}
+.donut-leg-item:hover{background:var(--s2)}
+.donut-leg-item.donut-leg-dim{opacity:.35}
+.donut-leg-dot{width:12px;height:12px;border-radius:4px;flex-shrink:0}
+.donut-leg-name{font-size:12.5px;font-weight:600;color:var(--tx);white-space:nowrap;overflow:hidden;text-overflow:ellipsis;min-width:0}
+.donut-leg-val{font-size:11.5px;font-weight:700;color:var(--tx);font-variant-numeric:tabular-nums;text-align:right;white-space:nowrap}
+.donut-leg-pct{font-size:10.5px;font-weight:700;color:var(--tx2);font-variant-numeric:tabular-nums;text-align:right;min-width:34px;background:var(--s2);padding:2px 7px;border-radius:20px;flex-shrink:0}
+.donut-seg-ctrl{display:inline-flex;padding:3px;background:var(--s2);border-radius:20px;border:1px solid var(--bd);flex-shrink:0}
+.donut-seg-btn{padding:5px 13px;border:none;background:none;border-radius:20px;font-size:12px;font-weight:700;color:var(--tx2);cursor:pointer;transition:all .12s}
+.donut-seg-btn.on{background:var(--s1);color:var(--brand);box-shadow:0 1px 4px rgba(0,0,0,.12)}
+
+/* ── DRE Mensal — SVG chart ─────────────────────────────── */
+.dre-col{transition:opacity .12s}
+.dre-col-dim .dre-bar{opacity:.35}
+.dre-col-dim .dre-rdot{opacity:.35}
+.dre-col-dim .dre-rval{opacity:.35}
+.dre-col-dim .dre-xlbl{opacity:.45}
+.dre-rdot{fill:#fff;stroke:#00532c;stroke-width:2.5}
+.dre-rdot-neg{stroke:var(--red)}
+.dre-rval{font-size:10px;font-weight:700;fill:#00532c;font-variant-numeric:tabular-nums}
+.dre-rval-neg{fill:var(--red)}
+.dre-xlbl{font-size:10px;font-weight:700;fill:var(--tx2);text-transform:uppercase;letter-spacing:.03em}
+.dre-xlbl-on{fill:var(--tx)}
+
+/* ── Impressão / PDF (DRE) ──────────────────────────────── */
+.print-hdr{display:none}
+
+@media print{
+  @page{size:landscape;margin:10mm}
+  #sidebar,.sidebar,.topbar,.dre-kpis,.tbl-hdr .btn,.tbl-hdr .btn-ghost,.yr-sel,.kpi-info{display:none!important}
+  html,body,#app,#main,#content,.content,.tbl-wrap,.tbl-scroll{background:#fff!important;height:auto!important;overflow:visible!important;padding:0!important;margin:0!important}
+  .tbl-wrap{display:block!important}
+  *{-webkit-print-color-adjust:exact;print-color-adjust:exact}
+  .fin-tbl th,.fin-tbl td{background:#fff!important;color:#000!important;font-size:8.5pt!important;padding:4px 6px!important;border-bottom:1px solid #ccc!important;position:static!important}
+  .fin-tbl th{background:#f2f6ef!important;font-weight:700!important}
+  .fin-tbl .tc{background:#eaf2e7!important}
+  .sep td{background:#eaf2e7!important;color:#0b5a30!important}
+  .dr.hl td{background:#f0f7f2!important}
+  .dr.tot td{background:#e6f2ea!important;color:#0b5a30!important}
+  .neg{color:#d94a38!important}
+  .pos{color:#137c3c!important}
+  .pct-col{color:#555!important}
+  .tbl-hdr{display:flex!important;align-items:center!important;padding:0!important;border-bottom:none!important;margin-bottom:0!important}
+  .tbl-hdr .sec-ttl{display:none!important}
+  .print-hdr{display:flex!important;align-items:center;padding:0 0 10px;border-bottom:2px solid #137c3c;margin-bottom:12px}
+  .print-hdr-main{flex:1}
+  .print-hdr-name{font-size:8pt;font-weight:600;color:#0b5a30;letter-spacing:.04em;text-transform:uppercase}
+  .print-hdr-doc{font-size:12pt;font-weight:800;color:#000;margin-top:2px}
+  .print-hdr-date{font-size:8pt;color:#666;text-align:right;align-self:flex-end}
+}
+
+/* ── SVG Line Charts (Dashboard + DRE anual) ─────────────── */
+.lc-ylbl{font-size:10px;font-weight:600;fill:var(--tx3);font-variant-numeric:tabular-nums}
+.lc-xlbl{font-size:11px;font-weight:700;fill:var(--tx2);text-transform:uppercase;letter-spacing:.02em}
+.lc-xlbl.on{fill:var(--tx)}
+.lc-hover{stroke:var(--brand);stroke-width:1;stroke-dasharray:3 3;opacity:0;transition:opacity .12s}
+.lc-hover.show{opacity:.5}
+.lc-tip{position:absolute;pointer-events:none;background:var(--s1);color:var(--tx);border:1px solid var(--bd);border-radius:8px;padding:12px 15px;font-size:12.5px;box-shadow:var(--shadow);opacity:0;transform:translate(-50%,-10px);transition:opacity .12s;white-space:nowrap;z-index:5}
+.lc-tip.show{opacity:1}
+.lc-tt-mes{font-weight:900;font-size:11px;letter-spacing:.08em;text-transform:uppercase;color:var(--tx2);margin-bottom:8px}
+.lc-tt-row{display:flex;align-items:center;justify-content:space-between;gap:22px;line-height:1.9}
+.lc-tt-k{display:inline-flex;align-items:center;gap:7px;font-weight:600}
+.lc-tt-v{font-weight:700;font-variant-numeric:tabular-nums}
+.lc-ent-row .lc-tt-k,.lc-ent-row .lc-tt-v{color:#0F7A40}
+.lc-sai-row .lc-tt-k,.lc-sai-row .lc-tt-v{color:#C39A05}
+.lc-tt-dot{width:9px;height:9px;border-radius:3px;display:inline-block;flex-shrink:0}
+.lc-ent{background:#1A8A4F}
+.lc-sai{background:#E0B80D}
+.lc-res{background:#00532C}
+.lc-res-row{border-top:1px solid var(--bd);margin-top:5px;padding-top:7px}
+.lc-res-row .lc-tt-k{color:var(--tx2)}
+.lc-res-row .lc-tt-v{color:#00532C}
+.lc-res-row .lc-tt-v.lc-neg{color:var(--red)}
+
+/* ── Dashboard — KPI strip above line chart ──────────────── */
+.skala-kpi-strip{display:flex;gap:18px;margin:10px 0 12px;flex-wrap:wrap}
+.skala-ks{display:flex;flex-direction:column;gap:1px}
+.skala-ks-lbl{display:inline-flex;align-items:center;gap:6px;font-size:10.5px;font-weight:600;color:var(--tx2)}
+.skala-ks-dot{width:9px;height:9px;border-radius:3px;flex-shrink:0}
+.skala-ks-dot.ent{background:#1A9C5A}
+.skala-ks-dot.sai{background:#E0B80D}
+.skala-ks-dot.res{background:#00532C}
+.skala-ks-val{font-size:15px;font-weight:900;letter-spacing:-.02em;font-variant-numeric:tabular-nums;line-height:1.1;color:var(--tx)}
+.skala-ks-val.neg{color:var(--red)}
+
+/* ── SVG Bar Chart (Fluxo de Caixa — Saldo Mensal) ──────── */
+.bc-ylbl{font-size:10px;font-weight:600;fill:var(--tx3);font-variant-numeric:tabular-nums}
+.bc-ylbl-r{font-size:10px;font-weight:700;fill:#C39A05;font-variant-numeric:tabular-nums}
+.bc-axis-cap{font-size:9.5px;font-weight:700;letter-spacing:.08em;text-transform:uppercase}
+.bc-axis-cap.l{fill:var(--brand)}
+.bc-axis-cap.r{fill:#C39A05}
+.bc-xlbl{font-size:11px;font-weight:700;fill:var(--tx2);text-transform:uppercase;letter-spacing:.02em}
+.bc-xlbl.on{fill:var(--tx)}
+.bc-bar{transition:opacity .12s}
+.bc-pos{fill:url(#bcGrPos)}
+.bc-neg{fill:url(#bcGrNeg)}
+.bc-col.dim .bc-bar{opacity:.35}
+.bc-col.dim .bc-lbl{opacity:.3}
+.bc-col.dim .bc-xlbl{opacity:.4}
+.bc-lbl{font-size:10.5px;font-weight:900;font-variant-numeric:tabular-nums}
+.bc-lbl.pos{fill:var(--brand-dark)}
+.bc-lbl.neg{fill:var(--red)}

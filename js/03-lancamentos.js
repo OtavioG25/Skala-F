@@ -18,7 +18,7 @@ let _lanShowAll = false;
 let _contasVisCols = null;
 const LAN_COL_WIDTHS_KEY='financeiro_lancamentos_col_widths';
 const LAN_COLS=[
-  {id:'sel',w:42,min:38},
+  {id:'sel',w:42,min:42,fixed:true},
   {id:'seq',lbl:'Nº',sort:'seq',w:58,min:46},
   {id:'tipo',lbl:'Tipo',w:84,min:70},
   {id:'dataVenc',lbl:'Vencimento',sort:'dataVenc',w:112,min:92},
@@ -76,23 +76,25 @@ function fitLanColsToContainer(cols){
   const visCols=cols||(currentTipoFilter?LAN_COLS.filter(c=>c.id!=='tipo'):LAN_COLS);
   const container=document.querySelector('.lan-scroll');if(!container)return;
   const available=container.clientWidth;
-  const totalMin=visCols.reduce((s,c)=>s+c.min,0);
+  const fixedW=visCols.filter(c=>c.fixed).reduce((s,c)=>s+c.w,0);
+  const flexCols=visCols.filter(c=>!c.fixed);
+  const totalMin=flexCols.reduce((s,c)=>s+c.min,0)+fixedW;
   if(available<totalMin||available<10)return;
-  const currentTotal=visCols.reduce((s,c)=>s+(lanColWidths[c.id]||c.w),0);
+  const currentTotal=flexCols.reduce((s,c)=>s+(lanColWidths[c.id]||c.w),0)+fixedW;
   if(Math.abs(currentTotal-available)<5)return;
-  const ratio=available/currentTotal;
-  visCols.forEach(c=>{lanColWidths[c.id]=Math.max(c.min,Math.round((lanColWidths[c.id]||c.w)*ratio));});
+  const ratio=(available-fixedW)/(currentTotal-fixedW);
+  flexCols.forEach(c=>{lanColWidths[c.id]=Math.max(c.min,Math.round((lanColWidths[c.id]||c.w)*ratio));});
   applyLanColWidthsToDOM();
 }
 
 function renderLanColgroup(cols){
   const c=cols||LAN_COLS;
-  return `<colgroup>${c.map(col=>`<col data-col="${col.id}" style="width:${lanColWidths[col.id]||col.w}px">`).join('')}</colgroup>`;
+  return `<colgroup>${c.map(col=>`<col data-col="${col.id}" style="width:${col.fixed?col.w:(lanColWidths[col.id]||col.w)}px">`).join('')}</colgroup>`;
 }
 
 function renderLanHeadCell(col){
-  const width=lanColWidths[col.id]||col.w;
-  const resize=`<span class="col-resize" title="Arraste para ajustar a largura" onclick="event.stopPropagation()" onmousedown="startLanColResize(event,'${col.id}')"></span>`;
+  const width=col.fixed?col.w:(lanColWidths[col.id]||col.w);
+  const resize=col.fixed?'':`<span class="col-resize" title="Arraste para ajustar a largura" onclick="event.stopPropagation()" onmousedown="startLanColResize(event,'${col.id}')"></span>`;
   if(!col.sort)return `<th class="lan-th" data-col="${col.id}" style="width:${width}px">${col.lbl||''}${resize}</th>`;
   const cls = sortLan.col===col.sort ? sortLan.dir : '';
   return `<th class="lan-th th-sort ${cls}" data-col="${col.id}" style="width:${width}px" onclick="sortLancamentos('${col.sort}')">${col.lbl}<span class="sort-ico"></span>${resize}</th>`;
@@ -102,7 +104,8 @@ function startLanColResize(e,colId){
   e.preventDefault();e.stopPropagation();
   const visCols=_contasVisCols||(currentTipoFilter?LAN_COLS.filter(c=>c.id!=='tipo'):LAN_COLS);
   const ci=visCols.findIndex(c=>c.id===colId);if(ci<0)return;
-  const col=visCols[ci],nextCol=visCols[ci+1]||null;
+  const col=visCols[ci];if(col.fixed)return;
+  const nextCol=visCols[ci+1]||null;
   const startX=e.clientX,startW=lanColWidths[colId]||col.w,startNextW=nextCol?(lanColWidths[nextCol.id]||nextCol.w):null;
   document.body.classList.add('resizing-col');
   const onMove=ev=>{
@@ -118,7 +121,7 @@ function startLanColResize(e,colId){
 // ── Pendentes cols ────────────────────────────────────────────────
 const PEND_COL_WIDTHS_KEY='financeiro_pend_col_widths';
 const PEND_COLS=[
-  {id:'sel',w:40,min:36},
+  {id:'sel',w:40,min:40,fixed:true},
   {id:'dataVenc',lbl:'Vencimento',sort:'dataVenc',w:112,min:92},
   {id:'dataComp',lbl:'Competência',sort:'dataComp',w:112,min:92},
   {id:'tipo',lbl:'Tipo',w:80,min:66},
@@ -132,10 +135,10 @@ const PEND_COLS=[
 let pendColWidths=loadPendColWidths();
 function loadPendColWidths(){try{const s=localStorage.getItem(PEND_COL_WIDTHS_KEY);const p=s?JSON.parse(s):{};return Object.fromEntries(PEND_COLS.map(c=>{const v=parseInt(p[c.id],10);return[c.id,Math.max(c.min,Number.isFinite(v)?v:c.w)];}));}catch(e){return Object.fromEntries(PEND_COLS.map(c=>[c.id,c.w]));}}
 function savePendColWidths(){try{localStorage.setItem(PEND_COL_WIDTHS_KEY,JSON.stringify(pendColWidths));}catch(e){}}
-function renderPendColgroup(){return`<colgroup>${PEND_COLS.map(c=>`<col data-col="${c.id}" style="width:${pendColWidths[c.id]}px">`).join('')}</colgroup>`;}
+function renderPendColgroup(){return`<colgroup>${PEND_COLS.map(c=>`<col data-col="${c.id}" style="width:${c.fixed?c.w:pendColWidths[c.id]}px">`).join('')}</colgroup>`;}
 function renderPendHeadCell(col){
-  const w=pendColWidths[col.id];
-  const resize=`<span class="col-resize" onclick="event.stopPropagation()" onmousedown="startPendColResize(event,'${col.id}')"></span>`;
+  const w=col.fixed?col.w:pendColWidths[col.id];
+  const resize=col.fixed?'':`<span class="col-resize" onclick="event.stopPropagation()" onmousedown="startPendColResize(event,'${col.id}')"></span>`;
   if(!col.sort)return`<th class="lan-th" data-col="${col.id}" style="width:${w}px">${col.lbl||''}${resize}</th>`;
   const cls=sortPend.col===col.sort?sortPend.dir:'';
   return`<th class="lan-th th-sort ${cls}" data-col="${col.id}" style="width:${w}px" onclick="sortPendentes('${col.sort}')">${col.lbl}<span class="sort-ico"></span>${resize}</th>`;
@@ -143,7 +146,8 @@ function renderPendHeadCell(col){
 function startPendColResize(e,colId){
   e.preventDefault();e.stopPropagation();
   const ci=PEND_COLS.findIndex(c=>c.id===colId);if(ci<0)return;
-  const col=PEND_COLS[ci],nextCol=PEND_COLS[ci+1]||null;
+  const col=PEND_COLS[ci];if(col.fixed)return;
+  const nextCol=PEND_COLS[ci+1]||null;
   const startX=e.clientX,startW=pendColWidths[colId],startNextW=nextCol?pendColWidths[nextCol.id]:null;
   document.body.classList.add('resizing-col');
   const onMove=ev=>{const n=Math.max(col.min,startW+(ev.clientX-startX));pendColWidths[colId]=n;document.querySelectorAll(`.pend-tbl col[data-col="${colId}"],.pend-tbl th[data-col="${colId}"]`).forEach(el=>el.style.width=n+'px');if(nextCol){const nn=Math.max(nextCol.min,startNextW-(n-startW));pendColWidths[nextCol.id]=nn;document.querySelectorAll(`.pend-tbl col[data-col="${nextCol.id}"],.pend-tbl th[data-col="${nextCol.id}"]`).forEach(el=>el.style.width=nn+'px');}};
@@ -197,10 +201,12 @@ const FIN_COLS=[{id:'desc',min:120,w:200},...MONTHS.map((_,i)=>({id:`mon-${i}`,m
 let finColWidths=loadFinColWidths();
 function loadFinColWidths(){try{const s=localStorage.getItem(FIN_COL_WIDTHS_KEY);const p=s?JSON.parse(s):{};const o={};FIN_COLS.forEach(c=>{const v=parseInt(p[c.id],10);o[c.id]=Math.max(c.min,Number.isFinite(v)?v:(p.mon&&c.id.startsWith('mon-')?Math.max(c.min,parseInt(p.mon,10)||c.w):c.w));});return o;}catch(e){return Object.fromEntries(FIN_COLS.map(c=>[c.id,c.w]));}}
 function saveFinColWidths(){try{localStorage.setItem(FIN_COL_WIDTHS_KEY,JSON.stringify(finColWidths));}catch(e){}}
-function renderFinColgroup(){return`<colgroup>${FIN_COLS.map(c=>`<col data-col="${c.id}" style="width:${finColWidths[c.id]}px">`).join('')}</colgroup>`;}
-function renderFinHead(){
-  const mHdr=MONTHS.map((m,i)=>{const cid=`mon-${i}`;return`<th class="lan-th" data-col="${cid}" style="width:${finColWidths[cid]}px;text-align:right">${m}<span class="col-resize" onclick="event.stopPropagation()" onmousedown="startFinColResize(event,'${cid}')"></span></th>`;}).join('');
-  return`<tr><th class="lan-th" data-col="desc" style="width:${finColWidths.desc}px">Descrição<span class="col-resize" onclick="event.stopPropagation()" onmousedown="startFinColResize(event,'desc')"></span></th>${mHdr}<th class="lan-th tc" data-col="tot" style="width:${finColWidths.tot}px">Total<span class="col-resize" onclick="event.stopPropagation()" onmousedown="startFinColResize(event,'tot')"></span></th></tr>`;
+function renderFinColgroup(showPct=false){const pctCol=showPct?`<col data-col="pct" style="width:68px">`:'';return`<colgroup>${FIN_COLS.map(c=>`<col data-col="${c.id}" style="width:${finColWidths[c.id]}px">`).join('')}${pctCol}</colgroup>`;}
+function renderFinHead(hlMonth=-1,stickyDesc=false,showPct=false){
+  const mHdr=MONTHS.map((m,i)=>{const cid=`mon-${i}`;const hlSt=i===hlMonth?';background-image:linear-gradient(rgba(242,195,0,.28),rgba(242,195,0,.28));color:#7a6200;font-weight:700':'';return`<th class="lan-th" data-col="${cid}" style="width:${finColWidths[cid]}px;text-align:right${hlSt}">${m}<span class="col-resize" onclick="event.stopPropagation()" onmousedown="startFinColResize(event,'${cid}')"></span></th>`;}).join('');
+  const dStSt=stickyDesc?';position:sticky;left:0;z-index:3;background:var(--s2)':'';
+  const pctTh=showPct?`<th class="lan-th tc pct-col" style="width:68px;text-align:right;font-size:10px">% Rec.</th>`:'';
+  return`<tr><th class="lan-th" data-col="desc" style="width:${finColWidths.desc}px${dStSt}">Descrição<span class="col-resize" onclick="event.stopPropagation()" onmousedown="startFinColResize(event,'desc')"></span></th>${mHdr}<th class="lan-th tc" data-col="tot" style="width:${finColWidths.tot}px">Total<span class="col-resize" onclick="event.stopPropagation()" onmousedown="startFinColResize(event,'tot')"></span></th>${pctTh}</tr>`;
 }
 function startFinColResize(e,colId){
   e.preventDefault();e.stopPropagation();
@@ -271,7 +277,11 @@ document.addEventListener('click',e=>{
   if(currentTipoFilter){filterLanTbody();_refreshFiltrosBar();}
 });
 document.addEventListener('keydown',e=>{
-  if(e.key==='Escape'){const drop=document.getElementById('filtros-drop');if(drop&&drop.style.display==='block')drop.style.display='none';}
+  if(e.key==='Escape'){
+    const cfm=document.getElementById('confirm-overlay');if(cfm&&cfm.style.display!=='none'){_cfmClose(false);return;}
+    const drop=document.getElementById('filtros-drop');if(drop&&drop.style.display==='block')drop.style.display='none';
+    const overlay=document.getElementById('overlay');if(overlay&&overlay.style.display!=='none')closeForm();
+  }
 });
 function _refreshMsdBtn(id,selected){
   const menu=document.getElementById('msd-'+id);if(!menu)return;
@@ -968,7 +978,7 @@ function updateContasCardValues(){
   const atrasadas=pendentes.filter(l=>effectiveVenc(l)&&effectiveVenc(l)<hoje);
   const totalAtras=atrasadas.reduce((s,l)=>s+openAmount(l),0);
   const doMes=cashMovements().filter(m=>{
-    if(m.tipo!==tipo||isTransfer(m)||m.adjType)return false;
+    if(m.tipo!==tipo||isTransfer(m))return false;
     const p=m.dataPgto||'';
     if(contasRangeMode&&(contasRangeIni||contasRangeFim)){
       if(contasRangeIni&&p<contasRangeIni)return false;
@@ -1184,7 +1194,9 @@ function onLanCheck(){
   if(countEl)countEl.textContent=selectedLanIds.size>0?`${selectedLanIds.size} selecionado(s)`:'';
   if(totalEl){
     const total=selectedItems.reduce((s,item)=>{
-      const valor=titleAmount(item);
+      const adjs=DATA.filter(x=>x.parentId===item.id);
+      const adjTotal=adjs.reduce((a,x)=>a+(x.adjType==='desconto'?-x.valorLiq:x.valorLiq),0);
+      const valor=titleAmount(item)+adjTotal;
       return s+(item.tipo==='D'?-valor:valor);
     },0);
     totalEl.style.display=selectedLanIds.size>0?'inline-block':'none';
@@ -1244,7 +1256,7 @@ async function deleteSelectedLancamentos(){
     ids.splice(0,ids.length,...expandedIds);
   }
   if(!ids.length){toast('Selecione pelo menos um lançamento','err');return;}
-  if(!confirm(`Excluir ${ids.length} lançamento(s) selecionados? Esta ação não pode ser desfeita.`))return;
+  if(!await openConfirmModal(`Excluir ${ids.length} lançamento(s) selecionados? Esta ação não pode ser desfeita.`,{danger:true,confirmLabel:'Excluir'}))return;
   setSyncStatus('loading',`Excluindo ${ids.length} lançamento(s)...`);
   let ok=0,err=0;
   for(const id of ids){
@@ -1287,7 +1299,7 @@ async function applyBulkEditSelectedLancamentos(){
     if(statusRaw)next.status=statusRaw==='__QUITAR__'?expectedRealizedStatus(item.tipo):statusRaw;
     const validation=validateLancamentoCore(next);
     if(validation.errors.length){toast(firstValidationError(validation),'err');return;}
-    if(!confirmValidationWarnings(validation))return;
+    if(!await confirmValidationWarnings(validation))return;
   }
 
   const resumo=[];
@@ -1296,7 +1308,7 @@ async function applyBulkEditSelectedLancamentos(){
   if(dataComp)resumo.push(`competência ${compToView(dataComp)}`);
   if(conta)resumo.push(`conta ${conta}`);
   if(statusRaw)resumo.push(`status ${statusRaw==='__QUITAR__'?'Recebido/Pago conforme tipo':statusRaw}`);
-  if(!confirm(`Aplicar em ${items.length} lançamento(s)?\n${resumo.join('\n')}`))return;
+  if(!await openConfirmModal(`Aplicar em ${items.length} lançamento(s)?\n${resumo.join('\n')}`,{confirmLabel:'Aplicar'}))return;
 
   const btn=document.getElementById('lan-bulk-apply');
   if(btn){btn.disabled=true;btn.textContent='Aplicando...';}
@@ -1319,6 +1331,20 @@ async function applyBulkEditSelectedLancamentos(){
         if(conta)DATA[idx].conta=conta;
         if(patch.status)DATA[idx].status=patch.status;
         if(statusRaw==='__QUITAR__')await registerBaixa(DATA[idx],{valor:openAmount(DATA[idx]),dataPgto,conta:conta||DATA[idx].conta,forma:DATA[idx].forma,origem:'manual',obs:'Baixa em lote'});
+        else if((dataPgto||conta)&&statusRaw!=='Pendente'){
+          const syncBaixas=getBaixas(DATA[idx].id);
+          if(syncBaixas.length===1&&openAmount(DATA[idx])<=0.005){
+            const b=syncBaixas[0];
+            const nc=conta||b.conta;
+            const nd=dataPgto||b.dataPgto;
+            if(b.conta!==nc||b.dataPgto!==nd){
+              const updated={...b,conta:nc,dataPgto:nd};
+              await dbUpdateBaixa(updated);
+              const bi=BAIXAS_DATA.findIndex(x=>x.id===b.id);
+              if(bi>=0)BAIXAS_DATA[bi]=updated;
+            }
+          }
+        }
       }
       ok++;
     }catch(e){err++;console.error(e);}
@@ -1449,7 +1475,7 @@ async function baixarEmLote(){
     if(validation.errors.length){toast(firstValidationError(validation),'err');return;}
   }
   const tot=items.reduce((s,l)=>s+openAmount(l),0);
-  if(!confirm(`Baixar ${items.length} lançamento(s) totalizando ${fmt(tot)}?\nData: ${data}`))return;
+  if(!await openConfirmModal(`Baixar ${items.length} lançamento(s) totalizando ${fmt(tot)}?\nData: ${data}`,{confirmLabel:'Confirmar Baixa'}))return;
 
   setSyncStatus('loading',`Baixando ${items.length}...`);
   let ok=0,err=0;
@@ -1470,7 +1496,7 @@ async function deletarEmLote(){
   const ids=chks.map(c=>c.value);
   const items=DATA.filter(l=>ids.includes(l.id));
   const tot=items.reduce((s,l)=>s+titleAmount(l),0);
-  if(!confirm(`Excluir ${items.length} lançamento(s) pendente(s) totalizando ${fmt(tot)}?`))return;
+  if(!await openConfirmModal(`Excluir ${items.length} lançamento(s) pendente(s) totalizando ${fmt(tot)}?`,{danger:true,confirmLabel:'Excluir'}))return;
 
   setSyncStatus('loading',`Excluindo ${items.length}...`);
   let ok=0,err=0;
