@@ -290,6 +290,7 @@ let dreViewMes=new Date().getMonth();
 let fluxoViewMes=new Date().getMonth();
 let fluxoDrillDown=null;
 let dreDrillDown=null;
+let showFluxoProj=false;
 const TABS=[
   {id:'dashboard',lbl:'Dashboard',ico:appIcon('dashboard'),sub:()=>`Visão consolidada do mês · ${MONTHS_FULL[getDashboardMonthIndex()]}/${YEAR}`},
   {id:'receber',lbl:'Contas a Receber',ico:appIcon('arrowDown'),sub:'Honorários, mensalidades e recebíveis em aberto'},
