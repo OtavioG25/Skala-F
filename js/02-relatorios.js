@@ -133,7 +133,7 @@ function calcFluxo(year){
 }
 
 function _projTooltip(src){
-  const t={manual:'Valor manual',pendentes:'Pendentes do mês',pendentes_cur:'Realizado + pendentes',media_3:'Projeção automática (média 3 meses)',media_6:'Projeção automática (média 6 meses)',ultimo_mes:'Projeção automática (último mês)'};
+  const t={manual:'Valor manual',pendentes:'Pendentes do mês',pendentes_cur:'Realizado + pendentes',media_3:'Projeção automática (média 3 meses)',media_6:'Projeção automática (média 6 meses)',ultimo_mes:'Projeção automática (último mês)',parent_manual:'Override manual na categoria-pai — subs ocultados',nao_projetar:'Categoria não projetada'};
   return t[src]||'';
 }
 
@@ -146,13 +146,35 @@ function calcFluxoProj(year){
   const recCats=getRecCats(),despCats=getDespCats();
   const real=calcFluxo(year);
 
-  // openAmount de cada lançamento pendente indexado por (prefixo+slug|mesIdx)
+  // Itens projetáveis: categorias-pai + subcategorias (subs herdam projection_rule do pai)
+  // parentKey nas subs permite checar override manual do pai durante a projeção
+  const projItems=[];
+  recCats.forEach(c=>{
+    const cslug=c.slug||slugify(c.nome);
+    const rule=c.projection_rule||'media_3';
+    projItems.push({key:'r_'+cslug,slug:cslug,tipo:'R',isSub:false,rule,parentKey:null});
+    (c.subs||[]).forEach(s=>{
+      const sslug=s.slug||slugify(s.nome);
+      projItems.push({key:'rs_'+sslug,slug:sslug,tipo:'R',isSub:true,rule,parentKey:'r_'+cslug});
+    });
+  });
+  despCats.forEach(c=>{
+    const cslug=c.slug||slugify(c.nome);
+    const rule=c.projection_rule||'media_3';
+    projItems.push({key:'d_'+cslug,slug:cslug,tipo:'D',isSub:false,rule,parentKey:null});
+    (c.subs||[]).forEach(s=>{
+      const sslug=s.slug||slugify(s.nome);
+      projItems.push({key:'ds_'+sslug,slug:sslug,tipo:'D',isSub:true,rule,parentKey:'d_'+cslug});
+    });
+  });
+
+  // pendMap: indexado por (catKey|mi) para cat E sub (lançamento com sub conta nos dois)
   const pendMap={};
   DATA.forEach(l=>{
     if(l.status==='Cancelado')return;
     const open=openAmount(l);
     if(open<=0.005)return;
-    const d=effectiveVenc(l);
+    const d=effectiveVenc(l)||l.dataComp||'';
     if(!d||getY(d)!==year)return;
     const mi=getM(d);
     if(mi==null||mi<0||mi>11)return;
@@ -160,14 +182,22 @@ function calcFluxoProj(year){
     const cat=cats.find(c=>c.nome===l.cat);
     if(!cat)return;
     const slug=cat.slug||slugify(cat.nome);
-    const k=(l.tipo==='R'?'r_':'d_')+slug+'|'+mi;
-    pendMap[k]=(pendMap[k]||0)+open;
+    const kCat=(l.tipo==='R'?'r_':'d_')+slug+'|'+mi;
+    pendMap[kCat]=(pendMap[kCat]||0)+open;
+    if(l.sub){
+      const sub=(cat.subs||[]).find(s=>s.nome===l.sub);
+      if(sub){
+        const sslug=sub.slug||slugify(sub.nome);
+        const kSub=(l.tipo==='R'?'rs_':'ds_')+sslug+'|'+mi;
+        pendMap[kSub]=(pendMap[kSub]||0)+open;
+      }
+    }
   });
 
-  // últimos N valores realizados não-nulos de uma chave, retrocedendo do mês atual
+  // últimos N valores realizados não-nulos — APENAS meses já FECHADOS (exclui mês atual)
   function lastNVals(catKey,n){
     const vals=[];
-    const topM=year===curY?curM:year<curY?11:-1;
+    const topM=year===curY?curM-1:year<curY?11:-1;
     for(let m=topM;m>=0&&vals.length<n;m--){
       const v=real[m]?.[catKey]||0;
       if(v>0.005)vals.push(v);
@@ -200,42 +230,44 @@ function calcFluxoProj(year){
     const isCur=year===curY&&mi===curM;
 
     if(isPast){
-      [...recCats,...despCats].forEach(c=>{
-        const p=recCats.includes(c)?'r_':'d_';
-        base._sources[p+(c.slug||slugify(c.nome))]='realizado';
-      });
+      projItems.forEach(it=>{base._sources[it.key]='realizado';});
     } else if(isCur){
-      // mês atual: realizados + pendentes de cada categoria
-      [...recCats.map(c=>({c,p:'r_'})),...despCats.map(c=>({c,p:'d_'}))].forEach(({c,p})=>{
-        const slug=c.slug||slugify(c.nome);
-        const catKey=p+slug;
-        const pend=pendMap[catKey+'|'+mi]||0;
-        if(pend>0.005){base[catKey]=(base[catKey]||0)+pend;base._sources[catKey]='pendentes_cur';}
-        else base._sources[catKey]='realizado';
+      // mês atual: realizados + pendentes (cat e sub)
+      projItems.forEach(it=>{
+        const pend=pendMap[it.key+'|'+mi]||0;
+        if(pend>0.005){base[it.key]=(base[it.key]||0)+pend;base._sources[it.key]='pendentes_cur';}
+        else base._sources[it.key]='realizado';
       });
       recomputeTotals(base);
     } else {
-      // meses futuros: prioridade manual > pendentes > regra da categoria
+      // meses futuros: prioridade manual > pendentes > regra (cat e sub)
+      // Loop processa pais antes das subs (graças à ordem em projItems)
       const comp=`${year}-${String(mi+1).padStart(2,'0')}-01`;
-      [...recCats.map(c=>({c,tipo:'R',p:'r_'})),...despCats.map(c=>({c,tipo:'D',p:'d_'}))].forEach(({c,tipo,p})=>{
-        const slug=c.slug||slugify(c.nome);
-        const catKey=p+slug;
-        const pend=pendMap[catKey+'|'+mi]||0;
-        const override=(PROJECOES||[]).find(x=>x.catSlug===slug&&x.tipo===tipo&&x.comp===comp);
+      projItems.forEach(it=>{
+        // Sub com pai em override manual → zera para manter pai como fonte única de verdade
+        if(it.isSub&&base._isManual[it.parentKey]){
+          base[it.key]=0;
+          base._sources[it.key]='parent_manual';
+          base._isManual[it.key]=false;
+          return;
+        }
+        const pend=pendMap[it.key+'|'+mi]||0;
+        // Override manual: apenas em categoria-pai (não em sub)
+        const override=it.isSub?null:(PROJECOES||[]).find(x=>x.catSlug===it.slug&&x.tipo===it.tipo&&x.comp===comp);
         let value=0,source='nao_projetar',isManual=false;
         if(override){
           value=override.valor;source='manual';isManual=true;
         } else if(pend>0.005){
           value=pend;source='pendentes';
         } else {
-          const rule=c.projection_rule||'media_3';
+          const rule=it.rule;
           if(rule==='nao_projetar'||rule==='manual'){value=0;source=rule;}
-          else if(rule==='ultimo_mes'){const vs=lastNVals(catKey,1);value=vs[0]||0;source='ultimo_mes';}
-          else{const n=rule==='media_6'?6:3;const vs=lastNVals(catKey,n);value=vs.length?vs.reduce((s,v)=>s+v,0)/vs.length:0;source=rule;}
+          else if(rule==='ultimo_mes'){const vs=lastNVals(it.key,1);value=vs[0]||0;source='ultimo_mes';}
+          else{const n=rule==='media_6'?6:3;const vs=lastNVals(it.key,n);value=vs.length?vs.reduce((s,v)=>s+v,0)/vs.length:0;source=rule;}
         }
-        base[catKey]=value;
-        base._sources[catKey]=source;
-        base._isManual[catKey]=isManual;
+        base[it.key]=value;
+        base._sources[it.key]=source;
+        base._isManual[it.key]=isManual;
       });
       recomputeTotals(base);
     }
@@ -2132,7 +2164,8 @@ function renderFluxo(c){
   const recCats=getRecCats();
   const despCats=getDespCats();
   const tot=k=>f.reduce((s,m)=>s+(m[k]||0),0);
-  const curMonthIdx=YEAR===new Date().getFullYear()?new Date().getMonth():-1;
+  const thisYear=new Date().getFullYear();
+  const curMonthIdx=YEAR===thisYear?new Date().getMonth():-1;
   const proj=showFluxoProj&&fluxoView==='anual'?calcFluxoProj(YEAR):null;
   if(!window._fluxoExpanded)window._fluxoExpanded={};
   window._fluxoDrillCells=[];
@@ -2145,16 +2178,25 @@ function renderFluxo(c){
     let style='';
     if(parentId&&window._fluxoExpanded[parentId]!==true)style='display:none';
     const cells=f.map((m,i)=>{
-      const isFuture=!!proj&&i>curMonthIdx;
-      const isCurPend=!!proj&&i===curMonthIdx&&proj[i]._sources?.[k]==='pendentes_cur';
+      const isFuture=!!proj&&i>curMonthIdx&&YEAR>=thisYear;
+      const isCurPend=!!proj&&i===curMonthIdx&&(!proj[i]._sources?.[k]||proj[i]._sources[k]==='pendentes_cur');
       const data=(isFuture||isCurPend)?proj[i]:m;
       const v=(neg?-1:1)*(data[k]||0);
       const hlSt=i===curMonthIdx?';background:rgba(19,124,60,.06)':'';
+      const projColor=v<0?'var(--proj-out)':'var(--proj-in)';
       if(isFuture||isCurPend){
         const src=proj[i]._sources?.[k]||'';
         const manual=proj[i]._isManual?.[k];
-        const tip=_projTooltip(src);
-        return`<td class="${v<0?'neg':v>0?'pos':''}" style="font-style:italic;color:var(--blue);font-size:11.5px${hlSt}"${tip?` title="${tip}"`:''}>${v!==0?`~${fmt(v)}${manual?' ✏':''}` :'—'}</td>`;
+        const tip=manual?'Valor editado manualmente — clique para editar':_projTooltip(src);
+        const editable=isGroup&&isFuture;
+        if(editable){
+          const kTipo=k.startsWith('r_')?'R':'D';
+          const kSlug=k.slice(2);
+          const comp=`${YEAR}-${String(i+1).padStart(2,'0')}-01`;
+          const rawVal=proj[i][k]||0;
+          return`<td style="cursor:pointer;font-style:italic;color:${projColor};font-size:11.5px${hlSt}" data-proj="${esc(kSlug)}|${kTipo}|${comp}" data-proj-val="${rawVal}" data-proj-manual="${manual?'1':'0'}" onclick="openProjEdit(this)"${tip?` title="${tip}"`:''}>${v!==0?`${manual?'✏ ':'~'}${fmt(v)}`:'—'}</td>`;
+        }
+        return`<td style="font-style:italic;color:${projColor};font-size:11.5px${hlSt}"${tip?` title="${tip}"`:''}>${v!==0?`~${fmt(v)}`:'—'}</td>`;
       }
       if(drillInfo&&v!==0){
         const di=window._fluxoDrillCells.length;
@@ -2165,8 +2207,8 @@ function renderFluxo(c){
     }).join('');
     const tv=(neg?-1:1)*(proj
       ?f.reduce((s,m2,i)=>{
-        if(i>curMonthIdx)return s+(proj[i][k]||0);
-        if(i===curMonthIdx&&proj[i]._sources?.[k]==='pendentes_cur')return s+(proj[i][k]||0);
+        if(i>curMonthIdx&&YEAR>=thisYear)return s+(proj[i][k]||0);
+        if(i===curMonthIdx&&(!proj[i]._sources?.[k]||proj[i]._sources[k]==='pendentes_cur'))return s+(proj[i][k]||0);
         return s+(m2[k]||0);
       },0)
       :tot(k));
@@ -2180,7 +2222,7 @@ function renderFluxo(c){
       ?`<span onclick="toggleFluxo('${groupId}')" style="cursor:pointer;margin-right:6px;font-size:10px;display:inline-block;width:12px">${expanded?'▼':'▶'}</span>`
       :`<span style="display:inline-block;width:18px"></span>`;
     const tvHasProj=!!proj&&curMonthIdx>=0&&curMonthIdx<11;
-    const tcSt=`font-weight:${bold?700:400}${tvHasProj?';font-style:italic;color:var(--blue)':''}`;
+    const tcSt=`font-weight:${bold?700:400}${tvHasProj?`;font-style:italic;color:${tv<0?'var(--proj-out)':'var(--proj-in)'}`:''}`;
     return`<tr class="${cls}" style="${style}"><td style="${tdSt}">${toggleBtn}${lbl}</td>${cells}<td class="${tv<0?'neg':tv>0?'pos':''} tc" style="${tcSt}">${tv!==0?fmt(tv):'—'}</td></tr>`;
   }
   function groupRows(cat,tipo){
@@ -2446,12 +2488,12 @@ function renderFluxo(c){
     const cells=vals.map((v,i)=>{
       const isFut=projFromIdx>=0&&i>projFromIdx;
       const bg=i===curMonthIdx?'background:rgba(19,124,60,.06)':'';
-      if(isFut)return`<td class="${v<0?'neg':v>0?'pos':''}" style="font-style:italic;color:var(--blue)${bg?';'+bg:''}">${v!==0?`~${fmt(v)}`:'—'}</td>`;
+      if(isFut)return`<td style="font-style:italic;color:${v<0?'var(--proj-out)':'var(--proj-in)'}${bg?';'+bg:''}">${v!==0?`~${fmt(v)}`:'—'}</td>`;
       return`<td class="${v<0?'neg':'pos'}"${bg?` style="${bg}"`:''}>${fmt(v)}</td>`;
     }).join('');
     const tv=vals[vals.length-1];
     const tvFut=projFromIdx>=0&&11>projFromIdx;
-    const tcSt=`font-weight:${bold?700:400}${tvFut?';font-style:italic;color:var(--blue)':''}`;
+    const tcSt=`font-weight:${bold?700:400}${tvFut?`;font-style:italic;color:${tv<0?'var(--proj-out)':'var(--proj-in)'}`:''}`;
     return`<tr class="dr${bold?' bold':''} ${cls}"><td style="padding-left:${indent?28:12}px;position:sticky;left:0;z-index:2;background:var(--s1)">${lbl}</td>${cells}<td class="${tv<0?'neg':tv>0?'pos':''} tc" style="${tcSt}">${tv!==0?fmt(tv):'—'}</td></tr>`;
   };
   const contaSaldoFinRows=contaSet.map(conta=>mkBalRow(esc(conta),contaSaldoFin[conta],false,true)).join('');
@@ -2587,6 +2629,71 @@ function closeFluxoDrill(){
   fluxoDrillDown=null;
   const panel=document.getElementById('fluxo-drill');if(panel)panel.remove();
   renderFluxo(document.getElementById('content'));
+}
+
+function openProjEdit(td){
+  const attr=td.dataset.proj;if(!attr)return;
+  const[slug,tipo,comp]=attr.split('|');
+  const cur=parseFloat(td.dataset.projVal)||0;
+  const manual=td.dataset.projManual==='1';
+  const orig=td.innerHTML;
+  const input=document.createElement('input');
+  input.type='number';input.min='0';input.step='0.01';
+  input.value=cur?cur.toFixed(2):'';
+  input.placeholder='0,00';
+  input.style.cssText='width:80px;font-size:11.5px;padding:2px 4px;border:1px solid var(--blue);border-radius:3px;color:var(--blue);background:var(--s1);font-style:italic;text-align:right;outline:none';
+  td.innerHTML='';td.onclick=null;
+  td.appendChild(input);
+  if(manual){
+    const btn=document.createElement('button');
+    btn.className='proj-reset-btn';btn.title='Remover override manual';btn.textContent='↺';
+    btn.onclick=e=>{e.stopPropagation();resetProjOverride(slug,tipo,comp);};
+    td.appendChild(btn);
+  }
+  function doSave(){
+    const raw=input.value.replace(',','.');
+    const val=parseFloat(raw);
+    if(isNaN(val)||val<0){doCancel();return;}
+    _saveProjOverride(slug,tipo,comp,val);
+  }
+  function doCancel(){td.innerHTML=orig;td.onclick=()=>openProjEdit(td);}
+  input.addEventListener('keydown',e=>{
+    if(e.key==='Enter'){e.preventDefault();doSave();}
+    if(e.key==='Escape'){e.preventDefault();doCancel();}
+  });
+  input.addEventListener('blur',()=>setTimeout(()=>{
+    if(document.activeElement&&document.activeElement.closest('td')===td)return;
+    doSave();
+  },150));
+  input.focus();input.select();
+}
+
+async function _saveProjOverride(slug,tipo,comp,val){
+  try{
+    if(val===0){
+      await dbDeleteProjecao(slug,tipo,comp);
+    }else{
+      await dbUpsertProjecao({cat_slug:slug,tipo,comp,valor:val});
+    }
+    clearFinanceCalcCache();
+    _reRenderFluxo();
+  }catch(e){toast('Erro ao salvar projeção','err');console.error(e);}
+}
+
+async function resetProjOverride(slug,tipo,comp){
+  if(!confirm('Remover override manual e voltar à projeção automática?'))return;
+  try{
+    await dbDeleteProjecao(slug,tipo,comp);
+    clearFinanceCalcCache();
+    _reRenderFluxo();
+  }catch(e){toast('Erro ao remover override','err');console.error(e);}
+}
+
+function _reRenderFluxo(){
+  const wrap=document.querySelector('.tbl-scroll');
+  const scrollLeft=wrap?wrap.scrollLeft:0;
+  renderKeepScroll();
+  requestAnimationFrame(()=>{const w=document.querySelector('.tbl-scroll');if(w)w.scrollLeft=scrollLeft;});
 }
 
 function openDREDrillByIdx(idx){

@@ -278,6 +278,15 @@ async function startApp(){
   }
   _hideLogin();
   init();
+  // Renova o token automaticamente enquanto a aba estiver aberta.
+  // Verifica a cada 4 min e renova se faltar menos de 5 min para vencer.
+  setInterval(async()=>{
+    const exp=parseInt(localStorage.getItem('sb_expires')||'0');
+    if(Date.now()>exp-300000){
+      const ok=await _refreshToken();
+      if(!ok){doLogout();}
+    }
+  },240000);
 }
 
 // ─── IMPORTAR FATURAMENTO ──────────────────────────────────────────────────
@@ -1494,19 +1503,20 @@ async function confirmarBaixarRel(){
       }
       await registerBaixa(match,{valor:valorBase,dataPgto:rel.dataRec,conta,forma:match.forma||'PIX',origem:'importacao',obs:`Relatorio Dominio - ${rel.clientName||match.desc||''}`});
       if(rel.juros>0){
-        const jEntry={
-          tipo:'R',dataComp:rel.competencia||rel.dataRec,dataVenc:rel.vencimento||rel.dataRec,dataPgto:rel.dataRec,
-          desc:`Juros/Multa - ${match.desc||rel.clientName}`,
+        const jAdj={
+          id:newId(),tipo:'R',parentId:match.id,adjType:'juros',
+          dataComp:rel.dataRec.slice(0,7)+'-01',
+          dataVenc:rel.vencimento||rel.dataRec,dataPgto:rel.dataRec,
+          desc:`${match.desc||rel.clientName} - Juros/Multa`,
           cat:jCat,sub:jSub,
-          clienteId:match.clienteId||'',
+          cc:match.cc||'',clienteId:match.clienteId||'',
+          forma:match.forma||'PIX',conta,doc:match.doc||'',
           valorBruto:rel.juros,ded:0,valorLiq:rel.juros,
-          forma:match.forma||'PIX',conta,status:'Pendente',
+          status:'Recebido',
           obs:`Ref.: ${match.desc||rel.clientName} - venc. ${rel.vencimento||''}`
         };
-        const saved=await dbInsert(jEntry);
-        const jurosLanc=saved?fromRow(saved):{...jEntry,id:jEntry.id||newId()};
-        DATA.unshift(jurosLanc);
-        await registerBaixa(jurosLanc,{valor:rel.juros,dataPgto:rel.dataRec,conta,forma:match.forma||'PIX',origem:'importacao',obs:'Juros do relatorio de recebimentos'});
+        const savedAdj=await dbInsert(jAdj);
+        DATA.unshift(savedAdj?fromRow(savedAdj):{...jAdj});
       }
       ok++;
     }catch(e){err++;console.error('Erro ao baixar:',e);}

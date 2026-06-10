@@ -323,7 +323,7 @@ function applyLanFilter(){
   else if(currentTipoFilter==='D')renderPagar(document.getElementById('content'));
   else renderLancamentos(document.getElementById('content'));
 }
-function showAllLanRows(){_lanShowAll=true;filterLanTbody();}
+function showAllLanRows(){_lanShowAll=true;if(currentTipoFilter)filterContasTbody();else filterLanTbody();}
 function dateSearchText(d){
   if(!d)return '';
   const raw=String(d);
@@ -375,7 +375,8 @@ function filterLanTbody(){
   const LAN_PAGE=250;
   const hasMore=!_lanShowAll&&filtered.length>LAN_PAGE;
   const visible=hasMore?filtered.slice(0,LAN_PAGE):filtered;
-  tb.innerHTML=visible.map(l=>renderLanRow(l,!!currentTipoFilter)).join('')+
+  const _adjsMap=new Map();DATA.forEach(l=>{if(l.parentId){let a=_adjsMap.get(l.parentId);if(!a){a=[];_adjsMap.set(l.parentId,a);}a.push(l);}});
+  tb.innerHTML=visible.map(l=>renderLanRow(l,!!currentTipoFilter,_adjsMap.get(l.id)||[])).join('')+
     (hasMore?`<tr><td colspan="${visCols.length}" style="text-align:center;padding:14px;border-top:1px solid var(--bd)"><span style="color:var(--tx2);font-size:13px">Exibindo ${LAN_PAGE} de ${filtered.length} lançamentos</span><button class="btn btn-ghost" style="margin-left:12px;font-size:12px" onclick="showAllLanRows()">Mostrar todos (${filtered.length})</button></td></tr>`:'');
   onLanCheck();
   renderSaldoCards();
@@ -391,13 +392,13 @@ function renderValorLancamento(l,adjTotal=0){
   return fmt(total);
 }
 
-function renderLanRow(l,skipTipo){
+function renderLanRow(l,skipTipo,adjs){
   const checked=selectedLanIds.has(l.id)?'checked':'';
   const isTransf=isTransfer(l);
   const tipoCls=isTransf?'t':l.tipo==='R'?'r':'d';
   const tipoLbl=isTransf?`${appIcon('transfer','app-icon tp-icon')} Transf`:l.tipo==='R'?`${appIcon('arrowDown','app-icon tp-icon')} Rec`:`${appIcon('arrowUp','app-icon tp-icon')} Desp`;
   const tipoTd=skipTipo?'':` <td onclick="openEdit('${l.id}')"><span class="tp ${tipoCls}">${tipoLbl}</span></td>`;
-  const adjs=DATA.filter(x=>x.parentId===l.id);
+  if(adjs===undefined)adjs=DATA.filter(x=>x.parentId===l.id);
   const adjTotal=adjs.reduce((s,x)=>s+(x.adjType==='desconto'?-x.valorLiq:x.valorLiq),0);
   const adjHtml=adjs.length?`<div style="font-size:10px;color:var(--tx3);line-height:1.3;margin-top:1px">${adjs.map(x=>`(${x.adjType[0].toUpperCase()+x.adjType.slice(1)} ${fmt(x.valorLiq)})`).join('<br>')}</div>`:'';
   return `<tr class="lr" id="lan-row-${l.id}">
@@ -433,9 +434,9 @@ function _vencInfo(l){
   if(diff===1)return{color:'var(--orange)',tip:'Vence amanhã'};
   return{color:'var(--tx2)',tip:`Vence em ${diff} dia${diff===1?'':'s'}`};
 }
-function renderContasRow(l,groupId){
+function renderContasRow(l,groupId,adjs){
   const checked=selectedLanIds.has(l.id)?'checked':'';
-  const adjs=DATA.filter(x=>x.parentId===l.id);
+  if(adjs===undefined)adjs=DATA.filter(x=>x.parentId===l.id);
   const adjTotal=adjs.reduce((s,x)=>s+(x.adjType==='desconto'?-x.valorLiq:x.valorLiq),0);
   const adjHtml=adjs.length?`<div style="font-size:10px;color:var(--tx3);line-height:1.3;margin-top:1px">${adjs.map(x=>`(${x.adjType[0].toUpperCase()+x.adjType.slice(1)} ${fmt(x.valorLiq)})`).join('<br>')}</div>`:'';
   const vi=_vencInfo(l);
@@ -1066,7 +1067,12 @@ function filterContasTbody(){
     tb.innerHTML=`<tr><td colspan="${ncols}" class="empty-row"><div style="display:flex;flex-direction:column;align-items:center;gap:10px;padding:32px 0"><span style="opacity:.3;color:var(--tx3)">${appIcon('clipboard','app-icon')}</span><span style="font-size:14px;color:var(--tx2);text-align:center">${hasExtraFiltros?'Nenhum lançamento corresponde aos filtros selecionados.':`Nenhum lançamento encontrado para <strong>${_periodoNome}</strong>.`}</span>${hasExtraFiltros?`<button type="button" style="font-size:12px;color:var(--brand-dark);background:none;border:none;cursor:pointer;text-decoration:underline" onclick="clearAllContasFiltros()">Limpar filtros</button>`:''}</div></td></tr>`;
     renderContasFooter([],tipo);onLanCheck();return;
   }
-  tb.innerHTML=filtered.map(l=>renderContasRow(l,'')).join('');
+  const CONTAS_PAGE=100;
+  const hasMore=!_lanShowAll&&filtered.length>CONTAS_PAGE;
+  const visible=hasMore?filtered.slice(0,CONTAS_PAGE):filtered;
+  const _adjsMapC=new Map();DATA.forEach(l=>{if(l.parentId){let a=_adjsMapC.get(l.parentId);if(!a){a=[];_adjsMapC.set(l.parentId,a);}a.push(l);}});
+  tb.innerHTML=visible.map(l=>renderContasRow(l,'',_adjsMapC.get(l.id)||[])).join('')+
+    (hasMore?`<tr><td colspan="${ncols}" style="text-align:center;padding:14px;border-top:1px solid var(--bd)"><span style="color:var(--tx2);font-size:13px">Exibindo ${CONTAS_PAGE} de ${filtered.length} lançamentos</span><button class="btn btn-ghost" style="margin-left:12px;font-size:12px" onclick="showAllLanRows()">Mostrar todos (${filtered.length})</button></td></tr>`:'');
   renderContasFooter(filtered,tipo);
   onLanCheck();
   renderSaldoCards();
@@ -1094,7 +1100,7 @@ function renderSaldoCards(){
 }
 
 function renderLancamentos(c){
-  currentTipoFilter='';_contasVisCols=null;
+  currentTipoFilter='';_contasVisCols=null;_lanShowAll=false;
   const compsDisp=[...new Set(DATA.map(l=>l.dataComp?.slice(0,7)).filter(Boolean))].sort().reverse();
   const contasDisp=[...CONTAS].filter(Boolean).sort();
   const selectedTypesForCat=[...filterTipos].filter(t=>t!=='T');
@@ -1154,7 +1160,7 @@ function renderLancamentos(c){
       </div>
       <div style="min-width:150px">
         <div class="fl">Status</div>
-        <select id="lan-bulk-status" style="width:100%"><option value="">Manter status</option><option value="__QUITAR__">Recebido/Pago conforme tipo</option>${STATUS.map(s=>`<option value="${s}">${s}</option>`).join('')}</select>
+        <select id="lan-bulk-status" style="width:100%"><option value="">Manter status</option><option value="__QUITAR__">Marcar como Recebido/Pago</option><option value="Pendente">Reverter para Pendente</option><option value="Cancelado">Cancelar</option></select>
       </div>
       <button class="btn btn-pri" id="lan-bulk-apply" onclick="applyBulkEditSelectedLancamentos()" style="font-size:12px">✓ Aplicar alterações</button>
     </div>
@@ -1260,7 +1266,7 @@ async function deleteSelectedLancamentos(){
   setSyncStatus('loading',`Excluindo ${ids.length} lançamento(s)...`);
   let ok=0,err=0;
   for(const id of ids){
-    try{await dbDelete(id);DATA=DATA.filter(l=>l.id!==id);BAIXAS_DATA=BAIXAS_DATA.filter(b=>b.lancamentoId!==id);ok++;}
+    try{await dbDelete(id);DATA=DATA.filter(l=>l.id!==id);BAIXAS_DATA=BAIXAS_DATA.filter(b=>b.lancamentoId!==id);_invalidateBaixasCache();ok++;}
     catch(e){err++;console.error(e);}
   }
   selectedLanIds.clear();
@@ -1284,16 +1290,17 @@ async function applyBulkEditSelectedLancamentos(){
 
   if(compRaw&&!dataComp){toast('Competência inválida. Use MM/AAAA.','err');return;}
   if(contaRaw&&(!conta||!CONTAS.includes(conta))){toast('Selecione uma conta cadastrada.','err');return;}
-  if(statusRaw&&statusRaw!=='__QUITAR__'&&!STATUS.includes(statusRaw)){toast('Status inválido.','err');return;}
-  if(statusRaw==='Recebido'&&items.some(l=>l.tipo==='D')){toast('Use "Recebido/Pago conforme tipo" para seleções com despesas.','err');return;}
-  if(statusRaw==='Pago'&&items.some(l=>l.tipo==='R')){toast('Use "Recebido/Pago conforme tipo" para seleções com receitas.','err');return;}
+  if(statusRaw&&!['__QUITAR__','Pendente','Cancelado'].includes(statusRaw)){toast('Status inválido para edição em lote.','err');return;}
+  if(statusRaw==='__QUITAR__'&&!dataPgto){toast('Informe a data de pagamento/recebimento para marcar como pago.','err');return;}
+  if(statusRaw==='__QUITAR__'&&!conta&&items.some(l=>!l.conta)){toast('Selecione uma conta — alguns lançamentos não têm conta definida.','err');return;}
   if(!dataVenc&&!dataPgto&&!dataComp&&!conta&&!statusRaw){toast('Informe pelo menos uma alteração para aplicar.','err');return;}
 
   for(const item of items){
     if(isTransfer(item)){toast('Transferencias nao podem ser editadas em lote. Exclua e recrie a transferencia para corrigir.','err');return;}
     const next={...item};
     if(dataVenc)next.dataVenc=dataVenc;
-    if(dataPgto)next.dataPgto=dataPgto;
+    if(dataPgto&&statusRaw!=='Pendente')next.dataPgto=dataPgto;
+    if(statusRaw==='Pendente')next.dataPgto='';
     if(dataComp)next.dataComp=dataComp;
     if(conta)next.conta=conta;
     if(statusRaw)next.status=statusRaw==='__QUITAR__'?expectedRealizedStatus(item.tipo):statusRaw;
@@ -1302,13 +1309,22 @@ async function applyBulkEditSelectedLancamentos(){
     if(!await confirmValidationWarnings(validation))return;
   }
 
+  // Conta baixas que serão revertidas (status Pendente ou Cancelado em itens já baixados)
+  let baixasParaReverter=0;
+  if(statusRaw==='Pendente'||statusRaw==='Cancelado'){
+    for(const item of items)baixasParaReverter+=getBaixas(item.id).length;
+  }
+
   const resumo=[];
   if(dataVenc)resumo.push(`vencimento ${dataVenc}`);
-  if(dataPgto)resumo.push(`data ${dataPgto}`);
+  if(dataPgto&&statusRaw!=='Pendente')resumo.push(`data ${dataPgto}`);
   if(dataComp)resumo.push(`competência ${compToView(dataComp)}`);
   if(conta)resumo.push(`conta ${conta}`);
-  if(statusRaw)resumo.push(`status ${statusRaw==='__QUITAR__'?'Recebido/Pago conforme tipo':statusRaw}`);
-  if(!await openConfirmModal(`Aplicar em ${items.length} lançamento(s)?\n${resumo.join('\n')}`,{confirmLabel:'Aplicar'}))return;
+  if(statusRaw==='__QUITAR__')resumo.push(`marcar como Recebido/Pago (cria baixa)`);
+  if(statusRaw==='Pendente')resumo.push(`reverter para Pendente${baixasParaReverter?` — remove ${baixasParaReverter} baixa(s)`:''}`);
+  if(statusRaw==='Cancelado')resumo.push(`cancelar${baixasParaReverter?` — remove ${baixasParaReverter} baixa(s)`:''}`);
+  const isDestructive=baixasParaReverter>0;
+  if(!await openConfirmModal(`Aplicar em ${items.length} lançamento(s)?\n${resumo.join('\n')}`,{confirmLabel:'Aplicar',danger:isDestructive}))return;
 
   const btn=document.getElementById('lan-bulk-apply');
   if(btn){btn.disabled=true;btn.textContent='Aplicando...';}
@@ -1317,7 +1333,8 @@ async function applyBulkEditSelectedLancamentos(){
   for(const item of items){
     const patch={};
     if(dataVenc)patch.data_venc=dataVenc;
-    if(dataPgto)patch.data_pgto=dataPgto;
+    if(dataPgto&&statusRaw!=='Pendente')patch.data_pgto=dataPgto;
+    if(statusRaw==='Pendente')patch.data_pgto=null;
     if(dataComp)patch.data_comp=dataComp;
     if(conta)patch.conta=conta;
     if(statusRaw&&statusRaw!=='__QUITAR__')patch.status=statusRaw;
@@ -1326,12 +1343,33 @@ async function applyBulkEditSelectedLancamentos(){
       const idx=DATA.findIndex(l=>l.id===item.id);
       if(idx>=0){
         if(dataVenc)DATA[idx].dataVenc=dataVenc;
-        if(dataPgto)DATA[idx].dataPgto=dataPgto;
+        if(dataPgto&&statusRaw!=='Pendente')DATA[idx].dataPgto=dataPgto;
+        if(statusRaw==='Pendente')DATA[idx].dataPgto='';
         if(dataComp)DATA[idx].dataComp=dataComp;
         if(conta)DATA[idx].conta=conta;
         if(patch.status)DATA[idx].status=patch.status;
-        if(statusRaw==='__QUITAR__')await registerBaixa(DATA[idx],{valor:openAmount(DATA[idx]),dataPgto,conta:conta||DATA[idx].conta,forma:DATA[idx].forma,origem:'manual',obs:'Baixa em lote'});
-        else if((dataPgto||conta)&&statusRaw!=='Pendente'){
+        if(statusRaw==='__QUITAR__'){
+          const opn=openAmount(DATA[idx]);
+          if(opn>0.005){
+            await registerBaixa(DATA[idx],{valor:opn,dataPgto,conta:conta||DATA[idx].conta,forma:DATA[idx].forma,origem:'manual',obs:'Baixa em lote'});
+          } else if(dataPgto||conta){
+            // Já quitado: sincroniza baixa existente (se for única) com novos dataPgto/conta
+            const syncBaixas=getBaixas(DATA[idx].id);
+            if(syncBaixas.length===1){
+              const b=syncBaixas[0];
+              const nc=conta||b.conta;
+              const nd=dataPgto||b.dataPgto;
+              if(b.conta!==nc||b.dataPgto!==nd){
+                const updated={...b,conta:nc,dataPgto:nd};
+                await dbUpdateBaixa(updated);
+                const bi=BAIXAS_DATA.findIndex(x=>x.id===b.id);
+                if(bi>=0){BAIXAS_DATA[bi]=updated;_invalidateBaixasCache();}
+              }
+            }
+          }
+        } else if(statusRaw==='Pendente'||statusRaw==='Cancelado'){
+          await clearBaixasForLancamento(DATA[idx].id);
+        } else if(dataPgto||conta){
           const syncBaixas=getBaixas(DATA[idx].id);
           if(syncBaixas.length===1&&openAmount(DATA[idx])<=0.005){
             const b=syncBaixas[0];
@@ -1341,7 +1379,7 @@ async function applyBulkEditSelectedLancamentos(){
               const updated={...b,conta:nc,dataPgto:nd};
               await dbUpdateBaixa(updated);
               const bi=BAIXAS_DATA.findIndex(x=>x.id===b.id);
-              if(bi>=0)BAIXAS_DATA[bi]=updated;
+              if(bi>=0){BAIXAS_DATA[bi]=updated;_invalidateBaixasCache();}
             }
           }
         }
@@ -1508,6 +1546,7 @@ async function deletarEmLote(){
   }
   DATA=DATA.filter(l=>!ids.includes(l.id));
   BAIXAS_DATA=BAIXAS_DATA.filter(b=>!ids.includes(b.lancamentoId));
+  _invalidateBaixasCache();
   setSyncStatus('ok',`${DATA.length} registros`);
   buildNav();renderKeepScroll();
   toast(`✓ ${ok} excluído(s)${err?` — ${err} erro(s)`:''}!`,'err');
@@ -1524,7 +1563,7 @@ function _resetContasFilters(){
 }
 function renderReceber(c){
   const _switching=currentTipoFilter!=='R';
-  currentTipoFilter='R';filterTipos=new Set();contasCardFilter=null;
+  currentTipoFilter='R';filterTipos=new Set();contasCardFilter=null;_lanShowAll=false;
   if(_switching){contasRangeMode=false;contasRangeIni='';contasRangeFim='';_resetContasFilters();}
   try{const s=localStorage.getItem('skala_receber_mes');contasMesSel=s!==null?s:'';}catch(e){contasMesSel='';}
   try{
@@ -1535,7 +1574,7 @@ function renderReceber(c){
 }
 function renderPagar(c){
   const _switching=currentTipoFilter!=='D';
-  currentTipoFilter='D';filterTipos=new Set();contasCardFilter=null;
+  currentTipoFilter='D';filterTipos=new Set();contasCardFilter=null;_lanShowAll=false;
   if(_switching){contasRangeMode=false;contasRangeIni='';contasRangeFim='';_resetContasFilters();}
   try{
     const _pf=JSON.parse(localStorage.getItem('skala_pagar_filtro')||'null');
@@ -1619,7 +1658,7 @@ function renderContasTipo(c,tipo){
       <div style="min-width:150px"><div class="fl">${isR?'Recebimento':'Pagamento'}</div><input type="date" id="lan-bulk-data" style="width:100%;background:var(--s1);border:1px solid var(--bd2);border-radius:8px;color:var(--tx);padding:7px 10px;font-size:12px;outline:none;color-scheme:dark"/></div>
       <div style="min-width:120px"><div class="fl">Competência</div><input type="text" id="lan-bulk-comp" placeholder="MM/AAAA" maxlength="7" oninput="this.value=formatCompInput(this.value)" style="width:100%;background:var(--s1);border:1px solid var(--bd2);border-radius:8px;color:var(--tx);padding:7px 10px;font-size:12px;outline:none"/></div>
       <div style="min-width:180px"><div class="fl">Conta</div><select id="lan-bulk-conta" style="width:100%"><option value="">Manter conta</option>${CONTAS.map(ct=>`<option value="${esc(ct)}">${esc(ct)}</option>`).join('')}</select></div>
-      <div style="min-width:150px"><div class="fl">Status</div><select id="lan-bulk-status" style="width:100%"><option value="">Manter status</option><option value="__QUITAR__">${isR?'Marcar como Recebido':'Marcar como Pago'}</option>${STATUS.map(s=>`<option value="${s}">${s}</option>`).join('')}</select></div>
+      <div style="min-width:150px"><div class="fl">Status</div><select id="lan-bulk-status" style="width:100%"><option value="">Manter status</option><option value="__QUITAR__">${isR?'Marcar como Recebido':'Marcar como Pago'}</option><option value="Pendente">Reverter para Pendente</option><option value="Cancelado">Cancelar</option></select></div>
       <button class="btn btn-pri" id="lan-bulk-apply" onclick="applyBulkEditSelectedLancamentos()" style="font-size:12px">✓ Aplicar alterações</button>
     </div>
   </div></div>

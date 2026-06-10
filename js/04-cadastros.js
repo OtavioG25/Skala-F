@@ -180,6 +180,7 @@ async function deleteBaixaRow(baixaId){
   try{
     await dbDeleteBaixa(baixaId);
     BAIXAS_DATA=BAIXAS_DATA.filter(x=>x.id!==baixaId);
+    _invalidateBaixasCache();
     const item=DATA.find(x=>x.id===b.lancamentoId);
     if(item){item.status=computedStatus(item);item.dataPgto=paidAmount(item)>0?latestBaixaDate(item):'';await dbUpdate(item);}
     setSyncStatus('ok',`${DATA.length} registros`);
@@ -782,7 +783,7 @@ async function saveForm(){
   const _oldTitle=existingBefore?titleAmount(existingBefore):0;
   const _valorMudou=_existingBaixas.length>0&&Math.abs(valorLiq-_oldTitle)>0.005;
   const baixaOnSavePayload=baixaOnSave?{
-    valor:existingBefore?openAmount(existingBefore):valorLiq,
+    valor:existingBefore?openAmount({...existingBefore,valorBruto,ded,valorLiq}):valorLiq,
     dataPgto:formData.dataPgto,
     conta:formData.conta,
     forma:formData.forma||'PIX',
@@ -861,6 +862,7 @@ async function saveForm(){
     for(const a of existingAdjs)await dbDelete(a.id);
     DATA=DATA.filter(x=>x.parentId!==formData.id);
     BAIXAS_DATA=BAIXAS_DATA.filter(b=>!existingAdjs.some(a=>a.id===b.lancamentoId));
+    _invalidateBaixasCache();
     let adjCount=0;
     if(adjCat&&adjSub){
       const adjDataComp=_adjDataPgto?(_adjDataPgto.slice(0,7)+'-01'):formData.dataComp;
@@ -885,11 +887,13 @@ async function saveForm(){
         const bv=parseMoney(_existingBaixas[i].valor);
         await dbDeleteBaixa(_existingBaixas[i].id);
         BAIXAS_DATA=BAIXAS_DATA.filter(x=>x.id!==_existingBaixas[i].id);
+        _invalidateBaixasCache();
         const novoValor=+(bv-excess).toFixed(2);
         if(novoValor>0.005){
           const newRow={..._existingBaixas[i],id:newId(),valor:novoValor};
           const savedB=await dbInsertBaixa(newRow);
           BAIXAS_DATA.push(savedB?fromBaixaRow(savedB):newRow);
+          _invalidateBaixasCache();
           excess=0;
         }else{excess=+(excess-bv).toFixed(2);}
       }
@@ -910,7 +914,7 @@ async function saveForm(){
           const updated={...b,conta:nc,forma:nf,dataPgto:nd};
           await dbUpdateBaixa(updated);
           const bi=BAIXAS_DATA.findIndex(x=>x.id===b.id);
-          if(bi>=0)BAIXAS_DATA[bi]=updated;
+          if(bi>=0){BAIXAS_DATA[bi]=updated;_invalidateBaixasCache();}
           const li=DATA.findIndex(x=>x.id===formData.id);
           if(li>=0){DATA[li]=refreshLancamentoComputed(DATA[li]);await dbUpdate(DATA[li]);}
         }
@@ -994,6 +998,7 @@ async function deleteItem(id){
     for(const aid of adjIds)await dbDelete(aid);
     DATA=DATA.filter(x=>x.id!==id&&!pairIds.includes(x.id)&&!adjIds.includes(x.id));
     BAIXAS_DATA=BAIXAS_DATA.filter(b=>![id,...pairIds,...adjIds].includes(b.lancamentoId));
+    _invalidateBaixasCache();
     setSyncStatus('ok',`${DATA.length} registros`);
     buildNav();renderKeepScroll();
     toast(isTransf?'Transferência excluída.':'Lançamento excluído.','err');

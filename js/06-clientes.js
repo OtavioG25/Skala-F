@@ -501,13 +501,13 @@ function _renderClienteForm(){
         </div>
         <div>
           <label style="${lblSty}">Data de inativação</label>
-          <input type="date" value="${esc(f.inativadoEm||'')}"
-            onchange="formCliente.inativadoEm=this.value;formCliente.ativo=!this.value;document.getElementById('cliente-body').innerHTML=_renderClienteForm()" style="${inpSty}"/>
+          <input type="date" id="cli-inativado-em" value="${esc(f.inativadoEm||'')}"
+            onchange="formCliente.inativadoEm=this.value;formCliente.ativo=!this.value;const _c=document.getElementById('cli-ativo-chk');if(_c)_c.checked=formCliente.ativo!==false" style="${inpSty}"/>
         </div>
       </div>`:''}
       <label style="display:flex;align-items:center;gap:10px;cursor:pointer;padding:10px 12px;background:var(--s2);border:1px solid var(--bd);border-radius:8px">
-        <input type="checkbox" ${f.ativo!==false?'checked':''}
-          onchange="formCliente.ativo=this.checked;formCliente.inativadoEm=this.checked?'':(formCliente.inativadoEm||new Date().toISOString().slice(0,10));document.getElementById('cliente-body').innerHTML=_renderClienteForm()"
+        <input type="checkbox" id="cli-ativo-chk" ${f.ativo!==false?'checked':''}
+          onchange="formCliente.ativo=this.checked;formCliente.inativadoEm=this.checked?'':(formCliente.inativadoEm||new Date().toISOString().slice(0,10));const _d=document.getElementById('cli-inativado-em');if(_d)_d.value=formCliente.inativadoEm||''"
           style="width:18px;height:18px;cursor:pointer;margin:0">
         <div style="flex:1">
           <div style="font-size:13px;font-weight:600;color:var(--tx)">Cliente ativo</div>

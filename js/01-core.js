@@ -163,6 +163,7 @@ async function clearBaixasForLancamento(lancamentoId){
   const baixas=getBaixas(lancamentoId);
   for(const b of baixas)await dbDeleteBaixa(b.id);
   BAIXAS_DATA=BAIXAS_DATA.filter(b=>b.lancamentoId!==lancamentoId);
+  _invalidateBaixasCache();
   return baixas.length;
 }
 
@@ -217,7 +218,16 @@ function toBaixaRow(b){
   return{id:b.id,lancamento_id:b.lancamentoId||b.lancamento_id,data_pgto:b.dataPgto||b.data_pgto||null,conta:normalizeConta(b.conta)||b.conta||null,valor:parseMoney(b.valor),forma:b.forma||null,tipo:b.tipo||null,origem:b.origem||'manual',obs:b.obs||null};
 }
 function getBaixas(lancamentoId){
-  return (BAIXAS_DATA||[]).filter(b=>b.lancamentoId===lancamentoId).sort((a,b)=>(a.dataPgto||'').localeCompare(b.dataPgto||'')||(a.createdAt||'').localeCompare(b.createdAt||''));
+  if(!_baixasMap){
+    _baixasMap=new Map();
+    for(const b of (BAIXAS_DATA||[])){
+      let arr=_baixasMap.get(b.lancamentoId);
+      if(!arr){arr=[];_baixasMap.set(b.lancamentoId,arr);}
+      arr.push(b);
+    }
+    _baixasMap.forEach(arr=>arr.sort((a,b)=>(a.dataPgto||'').localeCompare(b.dataPgto||'')||(a.createdAt||'').localeCompare(b.createdAt||'')));
+  }
+  return _baixasMap.get(lancamentoId)||[];
 }
 function titleAmount(l){
   const bruto=parseMoney(l?.valorBruto),liq=parseMoney(l?.valorLiq);
@@ -303,6 +313,7 @@ async function registerBaixa(lancamento,baixa){
   const saved=await dbInsertBaixa(row);
   const baixaApp=saved?fromBaixaRow(saved):row;
   BAIXAS_DATA.push(baixaApp);
+  _invalidateBaixasCache();
   const next={...original,status:computedStatus(original),dataPgto:latestBaixaDate(original)};
   if(original.status==='Parcial'&&parseMoney(original.valorBruto)>parseMoney(original.valorLiq)+0.005){
     next.valorLiq=titleAmount(original);
@@ -462,6 +473,8 @@ function setSyncStatus(state,msg){const dot=document.getElementById('sync-dot'),
 
 let DATA=[];
 let BAIXAS_DATA=[];
+let _baixasMap=null;
+function _invalidateBaixasCache(){_baixasMap=null;}
 let PROJECOES=[];
 let DATA_VERSION=0;
 let _cashMovementsCache=null;

@@ -11,8 +11,8 @@
 (function loadAppCss(){
   const isLocalServer = ['localhost', '127.0.0.1'].includes(location.hostname);
   const cssPath = location.protocol === 'file:' || isLocalServer
-    ? 'financeiro.css?v=2.5.161'
-    : '/Skala-F/financeiro.css?v=2.5.161';
+    ? 'financeiro.css?v=2.5.165'
+    : '/Skala-F/financeiro.css?v=2.5.165';
   document.write('<link rel="stylesheet" href="' + cssPath + '"/>');
 })();
 </script>
@@ -176,7 +176,7 @@
     '05-importacoes.js',
     '06-clientes.js'
   ].forEach(function(file){
-    document.write('<script src="' + basePath + file + '?v=2.5.162"><\/script>');
+    document.write('<script src="' + basePath + file + '?v=2.5.168"><\/script>');
   });
 })();
 </script>
