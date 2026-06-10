@@ -275,7 +275,8 @@ function parseMoney(v){
   s=s.replace(/[^0-9.-]/g,'');
   return parseFloat(s)||0;
 }
-const fmt=v=>new Intl.NumberFormat('pt-BR',{style:'currency',currency:'BRL'}).format(parseMoney(v));
+const _fmtBRL=v=>new Intl.NumberFormat('pt-BR',{style:'currency',currency:'BRL'}).format(parseMoney(v));
+const fmt=v=>_getSaldoOcult()?'••••••':_fmtBRL(v);
 const fmtMoneyInput=v=>parseMoney(v).toLocaleString('pt-BR',{minimumFractionDigits:2,maximumFractionDigits:2});
 function moneyInputValue(v){return fmtMoneyInput(v);}
 function formatMoneyField(el,key,obj=formData){
@@ -466,6 +467,7 @@ async function init(){
   }
   document.getElementById('app').style.display='flex';
   TAB=tabFromPath();
+  _updateGlobalEyeBtn();
   buildNav();render();renderProfileArea();
 }
 
@@ -986,9 +988,16 @@ function toggleSaldoExpand(){
   if(open){list.style.maxHeight='0';list.style.opacity='0';}
   else{list.style.maxHeight=list.scrollHeight+'px';list.style.opacity='1';}
 }
+function _updateGlobalEyeBtn(){
+  const ocultar=_getSaldoOcult();
+  const btn=document.getElementById('global-eye');
+  if(btn){btn.title=ocultar?'Mostrar valores':'Ocultar valores';btn.innerHTML=ocultar?_EYE_SHUT:_EYE_OPEN;btn.style.opacity=ocultar?'1':'.5';}
+  document.body.classList.toggle('valores-ocultos',ocultar);
+}
 function toggleOcultarValores(){
   localStorage.setItem('skala_ocultar_valores',_getSaldoOcult()?'0':'1');
-  _updateSaldoCard();
+  _updateGlobalEyeBtn();
+  render();
 }
 function _updateSaldoCard(){
   const modo=_getSaldoModo(),ocultar=_getSaldoOcult();
