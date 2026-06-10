@@ -440,6 +440,7 @@ async function init(){
     ]);
     DATA=rows.map(fromRow);
     BAIXAS_DATA=(baixaRows||[]).map(fromBaixaRow);
+    _invalidateBaixasCache();
     DATA.forEach(refreshLancamentoComputed);
     touchFinanceData();
 
@@ -2136,10 +2137,11 @@ function renderFluxo(c){
     if(parentId&&window._fluxoExpanded[parentId]!==true)style='display:none';
     const cells=f.map((m,i)=>{
       const isFuture=!!proj&&i>curMonthIdx;
-      const data=isFuture?proj[i]:m;
+      const isCurPend=!!proj&&i===curMonthIdx&&proj[i]._sources?.[k]==='pendentes_cur';
+      const data=(isFuture||isCurPend)?proj[i]:m;
       const v=(neg?-1:1)*(data[k]||0);
       const hlSt=i===curMonthIdx?';background:rgba(19,124,60,.06)':'';
-      if(isFuture){
+      if(isFuture||isCurPend){
         const src=proj[i]._sources?.[k]||'';
         const manual=proj[i]._isManual?.[k];
         const tip=_projTooltip(src);
@@ -2153,7 +2155,11 @@ function renderFluxo(c){
       return`<td class="${v<0?'neg':v>0?'pos':''}" style="font-size:11.5px${hlSt}">${v!==0?fmt(v):'—'}</td>`;
     }).join('');
     const tv=(neg?-1:1)*(proj
-      ?f.reduce((s,m2,i)=>s+((i>curMonthIdx?proj[i]:m2)[k]||0),0)
+      ?f.reduce((s,m2,i)=>{
+        if(i>curMonthIdx)return s+(proj[i][k]||0);
+        if(i===curMonthIdx&&proj[i]._sources?.[k]==='pendentes_cur')return s+(proj[i][k]||0);
+        return s+(m2[k]||0);
+      },0)
       :tot(k));
     let cls='dr';
     if(bold)cls+=' bold';
