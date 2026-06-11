@@ -2018,7 +2018,7 @@ function renderDRE(c){
           <span>${MONTHS_FULL[dreViewMes]} ${YEAR}</span>
           <button onclick="navDREMes(1)" ${dreViewMes===11?'disabled':''}>›</button>
         </div>
-        <div style="flex:1;overflow-y:auto">
+        <div class="tbl-scroll" style="flex:1;overflow-y:auto">
           <table class="fin-tbl" style="width:100%;table-layout:fixed;min-width:0">
             <colgroup><col><col style="width:120px"><col style="width:70px"></colgroup>
             <thead><tr>
@@ -2124,8 +2124,16 @@ function renderDRE(c){
 function _saveScroll(renderFn){
   const sc=document.querySelector('.tbl-scroll');
   const st=sc?sc.scrollTop:0,sl=sc?sc.scrollLeft:0;
+  const mainEl=document.getElementById('main');
+  const mainTop=mainEl?mainEl.scrollTop:0;
+  const winY=window.scrollY||window.pageYOffset||0;
   renderFn(document.getElementById('content'));
-  requestAnimationFrame(()=>{const s=document.querySelector('.tbl-scroll');if(s){s.scrollTop=st;s.scrollLeft=sl;}});
+  requestAnimationFrame(()=>{
+    const s=document.querySelector('.tbl-scroll');
+    if(s){s.scrollTop=st;s.scrollLeft=sl;}
+    if(mainEl)mainEl.scrollTop=mainTop;
+    if(winY)window.scrollTo(0,winY);
+  });
 }
 
 function toggleDREMes(groupId){
@@ -2370,7 +2378,7 @@ function renderFluxo(c){
           <span>${MONTHS_FULL[fluxoViewMes]} ${YEAR}</span>
           <button onclick="navFluxoMes(1)" ${fluxoViewMes===11?'disabled':''}>›</button>
         </div>
-        <div style="flex:1;overflow-y:auto">
+        <div class="tbl-scroll" style="flex:1;overflow-y:auto">
           <table class="fin-tbl" style="width:100%;table-layout:fixed;min-width:0">
             <colgroup><col><col style="width:140px"></colgroup>
             <thead><tr>
@@ -2606,7 +2614,7 @@ function toggleAllFluxo(){
 function toggleFluxoMes(groupId){
   if(!window._fluxoExpandedMes)window._fluxoExpandedMes={};
   window._fluxoExpandedMes[groupId]=window._fluxoExpandedMes[groupId]!==true;
-  renderFluxo(document.getElementById('content'));
+  _saveScroll(renderFluxo);
 }
 
 function toggleAllFluxoMes(){
@@ -2615,7 +2623,7 @@ function toggleAllFluxoMes(){
   const allKeys=[...recCats,...despCats].map(c=>(c.tipo==='R'?'r_':'d_')+(c.slug||slugify(c.nome)));
   const allExpanded=allKeys.length>0&&allKeys.every(k=>window._fluxoExpandedMes[k]===true);
   allKeys.forEach(k=>{window._fluxoExpandedMes[k]=!allExpanded;});
-  renderFluxo(document.getElementById('content'));
+  _saveScroll(renderFluxo);
 }
 
 function openFluxoDrillByIdx(idx){

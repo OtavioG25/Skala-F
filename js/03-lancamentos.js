@@ -974,27 +974,32 @@ function updateContasCardValues(){
   const hoje=new Date().toISOString().split('T')[0];
   const mesRef=contasMesSel||hoje.slice(0,7);
   const tipoData=DATA.filter(l=>l.tipo===tipo&&!isTransfer(l)&&!l.adjType);
-  const pendentes=tipoData.filter(l=>openAmount(l)>0.005);
-  const totalPend=pendentes.reduce((s,l)=>s+openAmount(l),0);
-  const atrasadas=pendentes.filter(l=>effectiveVenc(l)&&effectiveVenc(l)<hoje);
-  const totalAtras=atrasadas.reduce((s,l)=>s+openAmount(l),0);
-  const doMes=cashMovements().filter(m=>{
-    if(m.tipo!==tipo||isTransfer(m))return false;
-    const p=m.dataPgto||'';
+  const periodMatch=(date)=>{
+    if(!date)return false;
     if(contasRangeMode&&(contasRangeIni||contasRangeFim)){
-      if(contasRangeIni&&p<contasRangeIni)return false;
-      if(contasRangeFim&&p>contasRangeFim)return false;
+      if(contasRangeIni&&date<contasRangeIni)return false;
+      if(contasRangeFim&&date>contasRangeFim)return false;
       return true;
     }
-    return p.startsWith(mesRef);
-  });
+    return date.startsWith(mesRef);
+  };
+  const pendentes=tipoData.filter(l=>openAmount(l)>0.005&&periodMatch(effectiveVenc(l)));
+  const totalPend=pendentes.reduce((s,l)=>s+openAmount(l),0);
+  const atrasadas=pendentes.filter(l=>effectiveVenc(l)<hoje);
+  const totalAtras=atrasadas.reduce((s,l)=>s+openAmount(l),0);
+  const doMes=cashMovements().filter(m=>m.tipo===tipo&&!isTransfer(m)&&periodMatch(m.dataPgto));
   const totalMes=doMes.reduce((s,l)=>s+parseMoney(l.valorLiq),0);
   const set=(id,val,sub)=>{const el=document.getElementById(id);if(!el)return;const v=el.querySelector('.kpi-val');const s=el.querySelector('.kpi-sub');if(v)v.textContent=val;if(s)s.textContent=sub;};
   set('kpi-card-receber',fmt(totalPend),pendentes.length+' lançamento(s)');
   set('kpi-card-atrasados',fmt(totalAtras),atrasadas.length+' lançamento(s)');
   set('kpi-card-mes',fmt(totalMes),doMes.length+' lançamento(s)');
+  const _periodSuf=(contasRangeMode&&(contasRangeIni||contasRangeFim))?' no período':' em '+compDisplay(mesRef+'-01');
+  const lblR=document.getElementById('kpi-lbl-receber');
+  if(lblR)lblR.textContent=(isR?'A Receber':'A Pagar')+_periodSuf;
+  const lblA=document.getElementById('kpi-lbl-atrasados');
+  if(lblA)lblA.textContent='Atrasados'+_periodSuf;
   const lbl=document.getElementById('kpi-lbl-mes');
-  if(lbl)lbl.textContent=(isR?'Recebidos':'Pagos')+(contasRangeMode&&(contasRangeIni||contasRangeFim)?' no período':' em '+compDisplay(mesRef+'-01'));
+  if(lbl)lbl.textContent=(isR?'Recebidos':'Pagos')+_periodSuf;
   filterLanTbody();
 }
 
@@ -1590,11 +1595,20 @@ function renderContasTipo(c,tipo){
   const mesRef=contasMesSel||mesAtual;
   const tipoData=DATA.filter(l=>l.tipo===tipo&&!(l.doc||'').startsWith('TRANSF#'));
 
-  const pendentes=tipoData.filter(l=>openAmount(l)>0.005);
+  const periodMatch=(date)=>{
+    if(!date)return false;
+    if(contasRangeMode&&(contasRangeIni||contasRangeFim)){
+      if(contasRangeIni&&date<contasRangeIni)return false;
+      if(contasRangeFim&&date>contasRangeFim)return false;
+      return true;
+    }
+    return date.startsWith(mesRef);
+  };
+  const pendentes=tipoData.filter(l=>openAmount(l)>0.005&&periodMatch(effectiveVenc(l)));
   const totalPend=pendentes.reduce((s,l)=>s+openAmount(l),0);
-  const atrasadas=pendentes.filter(l=>effectiveVenc(l)&&effectiveVenc(l)<hoje);
+  const atrasadas=pendentes.filter(l=>effectiveVenc(l)<hoje);
   const totalAtras=atrasadas.reduce((s,l)=>s+openAmount(l),0);
-  const doMes=cashMovements().filter(m=>m.tipo===tipo&&!isTransfer(m)&&(m.dataPgto||'').startsWith(mesRef));
+  const doMes=cashMovements().filter(m=>m.tipo===tipo&&!isTransfer(m)&&periodMatch(m.dataPgto));
   const totalMes=doMes.reduce((s,l)=>s+parseMoney(l.valorLiq),0);
 
   const visCols=LAN_COLS.filter(col=>!['tipo','sub'].includes(col.id));
@@ -1606,21 +1620,26 @@ function renderContasTipo(c,tipo){
   const subsDisp=catObj?(catObj.subs||[]):[];
   const anyAdv=filterStatuses.size||filterComps.size||filterContas.size||filterCats.size||filterSub||filterVencIni||filterVencFim||filterPgtoIni||filterPgtoFim;
 
+  const _isRange=contasRangeMode&&(contasRangeIni||contasRangeFim);
+  const _periodSuf=_isRange?' no período':' em '+compDisplay(mesRef+'-01');
+  const _tipReceber=`Lançamentos com saldo em aberto cujo vencimento está dentro do período filtrado.`;
+  const _tipAtrasados=`Lançamentos com saldo em aberto cujo vencimento está dentro do período filtrado E já passaram da data de hoje.`;
+  const _tipMes=`Total efetivamente ${isR?'recebido':'pago'} no período filtrado, pela data de pagamento (independente da competência ou vencimento).`;
   c.innerHTML=`
   <div id="contas-period-wrap" style="margin-bottom:12px"></div>
   <div style="display:flex;gap:12px;margin-bottom:16px;flex-wrap:wrap" id="contas-kpi-row">
-    <div id="kpi-card-receber" class="kpi ${isR?'k-teal':'k-red'}${contasCardFilter==='receber'?' k-card-active':''}" style="flex:1;min-width:160px;cursor:pointer" onclick="toggleContasCardFilter('receber')">
-      <div class="kpi-lbl">${isR?'A Receber':'A Pagar'}</div>
+    <div id="kpi-card-receber" class="kpi ${isR?'k-teal':'k-red'}${contasCardFilter==='receber'?' k-card-active':''}" style="flex:1;min-width:160px;cursor:pointer" onclick="toggleContasCardFilter('receber')" title="${_tipReceber}">
+      <div class="kpi-lbl" id="kpi-lbl-receber">${(isR?'A Receber':'A Pagar')+_periodSuf}</div>
       <div class="kpi-val">${fmt(totalPend)}</div>
       <div class="kpi-sub">${pendentes.length} lançamento(s)</div>
     </div>
-    <div id="kpi-card-atrasados" class="kpi k-red${contasCardFilter==='atrasados'?' k-card-active':''}" style="flex:1;min-width:160px;cursor:pointer" onclick="toggleContasCardFilter('atrasados')">
-      <div class="kpi-lbl">Atrasados</div>
+    <div id="kpi-card-atrasados" class="kpi k-red${contasCardFilter==='atrasados'?' k-card-active':''}" style="flex:1;min-width:160px;cursor:pointer" onclick="toggleContasCardFilter('atrasados')" title="${_tipAtrasados}">
+      <div class="kpi-lbl" id="kpi-lbl-atrasados">${'Atrasados'+_periodSuf}</div>
       <div class="kpi-val">${fmt(totalAtras)}</div>
       <div class="kpi-sub">${atrasadas.length} lançamento(s)</div>
     </div>
-    <div id="kpi-card-mes" class="kpi k-feature${contasCardFilter==='mes'?' k-card-active':''}" style="flex:1;min-width:160px;cursor:pointer" onclick="toggleContasCardFilter('mes')">
-      <div class="kpi-lbl" id="kpi-lbl-mes">${isR?'Recebidos':'Pagos'} em ${compDisplay(mesRef+'-01')}</div>
+    <div id="kpi-card-mes" class="kpi k-feature${contasCardFilter==='mes'?' k-card-active':''}" style="flex:1;min-width:160px;cursor:pointer" onclick="toggleContasCardFilter('mes')" title="${_tipMes}">
+      <div class="kpi-lbl" id="kpi-lbl-mes">${(isR?'Recebidos':'Pagos')+_periodSuf}</div>
       <div class="kpi-val">${fmt(totalMes)}</div>
       <div class="kpi-sub">${doMes.length} lançamento(s)</div>
     </div>
