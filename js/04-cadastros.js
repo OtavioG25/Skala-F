@@ -527,8 +527,6 @@ function _parcialRemRow(i){
 async function confirmarParcialModal(){
   const{original,totalOriginal,jaPago,canonicalComp,acaoTxt}=_parcialCtx;
   if(original.status!=='Pendente'&&original.status!=='Parcial'){toast('Este lancamento ja esta quitado ou cancelado.','err');return;}
-  const compClosed=assertOpenPeriod(canonicalComp,'Competencia');
-  if(compClosed){toast(compClosed,'err');return;}
   const rows=_parcialRows.filter(r=>parseMoney(r.valor)>0);
   if(!rows.length){toast('Informe ao menos um valor.','err');return;}
   for(const r of rows){

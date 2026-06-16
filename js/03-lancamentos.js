@@ -3,7 +3,7 @@ let filterTipos=new Set(),filterStatuses=new Set(),filterBusca='',filterComps=ne
 let filterPendBusca='',filterPendTipo='';
 let filterRecBusca='';
 let showFluxoProj=localStorage.getItem('financeiro_fluxo_proj')==='1';
-let filterExtratoConta='',filterExtratoInicio='',filterExtratoFim='',filterExtratoInclPend=false;
+let filterExtratoConta='',filterExtratoInicio='',filterExtratoFim='',filterExtratoInclPend=false,filterExtratoApenasTransf=false;
 let selectedExtratoIds = new Set();
 function toggleFluxoProj(){
   showFluxoProj=!showFluxoProj;

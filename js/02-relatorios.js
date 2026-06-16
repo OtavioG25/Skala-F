@@ -772,6 +772,7 @@ function calcExtrato(){
   let items=[...movements.map(l=>({...l,dataExtrato:l.dataPgto,isPend:false})),...pendingItems].filter(l=>{
     if(filterExtratoInicio&&l.dataExtrato<filterExtratoInicio)return false;
     if(filterExtratoFim&&l.dataExtrato>filterExtratoFim)return false;
+    if(filterExtratoApenasTransf&&!(l.doc||'').startsWith('TRANSF#'))return false;
     return true;
   });
   items.sort((a,b)=>{
@@ -881,6 +882,10 @@ function renderExtrato(c){
     <label style="display:flex;align-items:center;gap:6px;font-size:12px;color:var(--tx2);cursor:pointer;white-space:nowrap">
       <input type="checkbox" ${filterExtratoInclPend?'checked':''} onchange="clearExtratoSelectionState();filterExtratoInclPend=this.checked;renderExtrato(document.getElementById('content'))" style="width:14px;height:14px"/>
       Incluir pendentes
+    </label>
+    <label style="display:flex;align-items:center;gap:6px;font-size:12px;color:var(--tx2);cursor:pointer;white-space:nowrap">
+      <input type="checkbox" ${filterExtratoApenasTransf?'checked':''} onchange="clearExtratoSelectionState();filterExtratoApenasTransf=this.checked;renderExtrato(document.getElementById('content'))" style="width:14px;height:14px"/>
+      Transferências
     </label>
     <div id="extrato-selection-info" style="visibility:hidden;display:flex;align-items:center;gap:8px;flex-wrap:nowrap;margin-left:8px;min-width:0">
       <span id="extrato-selection-count" class="cbadge" style="white-space:nowrap"></span>
