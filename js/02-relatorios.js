@@ -1136,10 +1136,7 @@ function renderDashboard(c){
   setTimeout(()=>{
     drawLineChart('chart-main-plot',chartWindow);
     const pieMode=window._pieMode||'D';
-    const pieSrc=pieMode==='D'?getDespCats():getRecCats();
-    const piePfx=pieMode==='D'?'d_':'r_';
-    const pieCategs=pieSrc.map(cat=>({lbl:cat.nome,val:monthDre[piePfx+(cat.slug||slugify(cat.nome))]||0})).filter(d=>d.val>0);
-    drawPieChart('chart-pie',pieCategs,pieMode);
+    drawPieChart('chart-pie',_buildPieCategs(pieMode,monthIndex),pieMode);
     drawFluxoBarChart('chart-fluxo-plot',fluxoWindow);
   },0);
 }
@@ -1530,13 +1527,21 @@ function drawPieChart(id,data,mode){
   items.forEach((it,i)=>{it.addEventListener('mouseenter',()=>enter(i));it.addEventListener('mouseleave',leave);});
 }
 
+function _buildPieCategs(pieMode,monthIdx){
+  const tipo=pieMode==='D'?'D':'R';
+  return (pieMode==='D'?getDespCats():getRecCats()).map(cat=>{
+    const val=DATA.filter(l=>
+      l.tipo===tipo&&l.dataComp&&
+      getY(l.dataComp)===YEAR&&getM(l.dataComp)===monthIdx&&
+      l.status!=='Cancelado'&&l.cat===cat.nome&&!isTransfer(l)
+    ).reduce((s,l)=>s+titleAmount(l),0);
+    return{lbl:cat.nome,val};
+  }).filter(d=>d.val>0);
+}
 function setPieMode(m){
   window._pieMode=m;
   const monthIndex=getDashboardMonthIndex();
-  const monthLabel=`${MONTHS_FULL[monthIndex]}/${YEAR}`;
-  const monthDre=calcDRE(YEAR)[monthIndex];
-  const src=m==='D'?getDespCats():getRecCats(),pfx=m==='D'?'d_':'r_';
-  const cats=src.map(cat=>({lbl:cat.nome,val:monthDre[pfx+(cat.slug||slugify(cat.nome))]||0})).filter(d=>d.val>0);
+  const cats=_buildPieCategs(m,monthIndex);
   const ttl=document.getElementById('pie-ttl');if(ttl)ttl.textContent='Composição das '+(m==='D'?'Despesas':'Receitas');
   document.querySelectorAll('.donut-seg-btn').forEach(btn=>btn.classList.toggle('on',(btn.textContent.trim()==='Despesas'&&m==='D')||(btn.textContent.trim()==='Receitas'&&m==='R')));
   drawPieChart('chart-pie',cats,m);
