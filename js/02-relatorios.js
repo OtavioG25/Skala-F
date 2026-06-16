@@ -1784,6 +1784,7 @@ function renderDRE(c){
   const tot=k=>dre.reduce((s,m)=>s+(m[k]||0),0);
 
   const dreView=localStorage.getItem('skala_dre_view')||'anual';
+  const dreM=dre[dreViewMes]||{};
 
   // #59 — Variação mês a mês (∆ Mensal)
   const showPct=localStorage.getItem('skala_dre_show_pct')==='1';
@@ -1911,7 +1912,6 @@ function renderDRE(c){
   const _emitido=`${String(_today.getDate()).padStart(2,'0')}/${String(_today.getMonth()+1).padStart(2,'0')}/${_today.getFullYear()}`;
 
   // ── Visão Mensal: DRE expandível do mês selecionado ─────────────
-  const dreM=dre[dreViewMes]||{};
   const mBase=dreM.recOpBruta||0;
   const mPct=v=>mBase?`${(v/mBase*100).toFixed(1)}%`:'—';
 
