@@ -1792,22 +1792,33 @@ function renderDRE(c){
   const _now=new Date();
   const curMonthIdx=YEAR===_now.getFullYear()?_now.getMonth():-1;
 
-  // #56 — Cards KPI do mês de referência
-  const kpiMi=getDashboardMonthIndex();
-  const kpiMd=dre[kpiMi]||{};
-  const kpiRecLiq=kpiMd.recOpLiq||0;
-  const kpiDesp=kpiMd.totDesp||0;
-  const kpiLl=kpiMd.ll||0;
+  // Cards KPI anuais (visão anual) e mensais (visão mensal)
+  const kpiRecLiq=tot('recOpLiq');
+  const kpiDesp=tot('totDesp');
+  const kpiLl=tot('ll');
   const kpiMargin=kpiRecLiq!==0?(kpiLl/kpiRecLiq*100):0;
-  const kpiMon=MONTHS_FULL[kpiMi];
   const llCol=kpiLl>=0?'var(--teal)':'var(--red)';
   const mCol=kpiMargin>=0?'var(--teal)':'var(--red)';
   const kpiCard=(lbl,val,sub,col,tip)=>`<div class="kpi" style="align-self:start"><div class="kpi-lbl" style="display:flex;align-items:center">${lbl}${tip?`<span class="kpi-info" data-tip="${tip}">?</span>`:''}</div><div class="kpi-val" style="color:${col}">${val}</div><div class="kpi-sub">${sub}</div></div>`;
   const dreKpis=`<div class="dre-kpis">
-    ${kpiCard('Receita Líquida',fmtCard(kpiRecLiq),kpiMon,'var(--tx)','Receita Operacional Bruta menos Impostos e Taxas do mês.')}
-    ${kpiCard('Total Despesas',fmtCard(kpiDesp),kpiMon,'var(--tx)','Soma de todas as categorias de despesa lançadas no mês (regime de competência).')}
-    ${kpiCard('Lucro Líquido',fmtCard(kpiLl),kpiMon,llCol,'Resultado Operacional mais Receitas Não Operacionais menos Despesas Não Operacionais.')}
-    ${kpiCard('Margem Líquida',kpiRecLiq!==0?kpiMargin.toFixed(1)+'%':'—',kpiMon,mCol,'Lucro Líquido ÷ Receita Líquida × 100. Indica quanto de cada real de receita líquida vira lucro.')}
+    ${kpiCard('Receita Líquida',fmtCard(kpiRecLiq),`Acumulado ${YEAR}`,'var(--tx)','Receita Operacional Bruta menos Impostos e Taxas no ano.')}
+    ${kpiCard('Total Despesas',fmtCard(kpiDesp),`Acumulado ${YEAR}`,'var(--tx)','Soma de todas as categorias de despesa lançadas no ano (regime de competência).')}
+    ${kpiCard('Lucro Líquido',fmtCard(kpiLl),`Acumulado ${YEAR}`,llCol,'Resultado Operacional mais Receitas Não Operacionais menos Despesas Não Operacionais no ano.')}
+    ${kpiCard('Margem Líquida',kpiRecLiq!==0?kpiMargin.toFixed(1)+'%':'—',`Acumulado ${YEAR}`,mCol,'Lucro Líquido ÷ Receita Líquida × 100.')}
+  </div>`;
+  // Cards KPI do mês selecionado (visão mensal)
+  const mesKpiRecLiq=dreM.recOpLiq||0;
+  const mesKpiDesp=dreM.totDesp||0;
+  const mesKpiLl=dreM.ll||0;
+  const mesKpiMargin=mesKpiRecLiq!==0?(mesKpiLl/mesKpiRecLiq*100):0;
+  const mesLlCol=mesKpiLl>=0?'var(--teal)':'var(--red)';
+  const mesMCol=mesKpiMargin>=0?'var(--teal)':'var(--red)';
+  const mesMon=MONTHS_FULL[dreViewMes];
+  const dreKpisMes=`<div class="dre-kpis">
+    ${kpiCard('Receita Líquida',fmtCard(mesKpiRecLiq),mesMon,'var(--tx)','Receita Operacional Bruta menos Impostos e Taxas do mês.')}
+    ${kpiCard('Total Despesas',fmtCard(mesKpiDesp),mesMon,'var(--tx)','Soma de todas as categorias de despesa lançadas no mês (regime de competência).')}
+    ${kpiCard('Lucro Líquido',fmtCard(mesKpiLl),mesMon,mesLlCol,'Resultado Operacional mais Receitas Não Operacionais menos Despesas Não Operacionais.')}
+    ${kpiCard('Margem Líquida',mesKpiRecLiq!==0?mesKpiMargin.toFixed(1)+'%':'—',mesMon,mesMCol,'Lucro Líquido ÷ Receita Líquida × 100.')}
   </div>`;
 
   // Estado de expansão
@@ -2022,6 +2033,7 @@ function renderDRE(c){
     </div>
     </div>
     `:`
+    ${dreKpisMes}
     <div style="flex:1;overflow:hidden;padding:0 20px 16px;display:flex;gap:20px;min-height:0">
       <div style="flex:0 0 52%;display:flex;flex-direction:column;min-height:0">
         <div class="dre-mes-nav">
