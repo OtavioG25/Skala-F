@@ -308,7 +308,8 @@ function parseMoney(v){
   return parseFloat(s)||0;
 }
 const _fmtBRL=v=>new Intl.NumberFormat('pt-BR',{style:'currency',currency:'BRL'}).format(parseMoney(v));
-const fmt=v=>_getSaldoOcult()?'••••••':_fmtBRL(v);
+const fmt=v=>_fmtBRL(v);
+const fmtCard=v=>_getSaldoOcult()?'••••••':_fmtBRL(v);
 const fmtMoneyInput=v=>parseMoney(v).toLocaleString('pt-BR',{minimumFractionDigits:2,maximumFractionDigits:2});
 function moneyInputValue(v){return fmtMoneyInput(v);}
 function formatMoneyField(el,key,obj=formData){
@@ -980,9 +981,9 @@ function renderDashboardSaldoCards(){
           ${c.tipo==='investimento'?`<span class="cbadge" style="font-size:10px;padding:1px 6px">Invest.</span>`:''}
         </div>
         <div style="font-size:11px;color:var(--tx3);margin-bottom:2px">Atual</div>
-        <div style="font-size:18px;font-weight:800;color:${c.atual>=0?'var(--teal)':'var(--red)'};white-space:nowrap">${fmt(c.atual)}</div>
+        <div style="font-size:18px;font-weight:800;color:${c.atual>=0?'var(--teal)':'var(--red)'};white-space:nowrap">${fmtCard(c.atual)}</div>
         <div style="display:flex;align-items:center;justify-content:space-between;gap:8px;margin-top:8px;font-size:11px;color:var(--tx2)">
-          <span>Projetado</span><strong style="color:${c.projetado>=0?'var(--tx2)':'var(--red)'};white-space:nowrap">${fmt(c.projetado)}</strong>
+          <span>Projetado</span><strong style="color:${c.projetado>=0?'var(--tx2)':'var(--red)'};white-space:nowrap">${fmtCard(c.projetado)}</strong>
         </div>
       </div>`).join('')}
     </div>
@@ -1110,9 +1111,9 @@ function renderDashboard(c){
     ?`<span style="cursor:pointer;text-decoration:underline dotted;text-underline-offset:2px" onclick="event.stopPropagation();navPagar(true)">${vencidosD} título${vencidosD===1?'':'s'} vencido${vencidosD===1?'':'s'}</span>`
     :`0 títulos vencidos`;
   const kpis=[
-    {lbl:'A Receber',val:fmt(aReceber),sub:`${fmt(monthFluxo.entradas)} recebidos`,cls:'k-clean k-receber kpi-clickable',ico:'arrowDown',onclick:'navReceber()'},
-    {lbl:'A Pagar',val:fmt(aPagar),sub:vencidosSub,cls:`k-clean k-pagar kpi-clickable${vencidosD>0?' kpi-venc-pulse':''}`,ico:'arrowUp',onclick:'navPagar(false)'},
-    {lbl:'Variação de Caixa',val:`<span style="color:var(${varCaixa>=0?'--teal':'--red'})">${varCaixa>=0?'+':''}${fmt(varCaixa)}</span>`,sub:`Projeção: ${varProj>=0?'+':''}${fmt(varProj)}`,cls:'k-clean k-amber',ico:'chart'},
+    {lbl:'A Receber',val:fmtCard(aReceber),sub:`${fmtCard(monthFluxo.entradas)} recebidos`,cls:'k-clean k-receber kpi-clickable',ico:'arrowDown',onclick:'navReceber()'},
+    {lbl:'A Pagar',val:fmtCard(aPagar),sub:vencidosSub,cls:`k-clean k-pagar kpi-clickable${vencidosD>0?' kpi-venc-pulse':''}`,ico:'arrowUp',onclick:'navPagar(false)'},
+    {lbl:'Variação de Caixa',val:`<span style="color:var(${varCaixa>=0?'--teal':'--red'})">${varCaixa>=0?'+':''}${fmtCard(varCaixa)}</span>`,sub:`Projeção: ${varProj>=0?'+':''}${fmtCard(varProj)}`,cls:'k-clean k-amber',ico:'chart'},
   ];
   let html='<div class="kpi-grid dashboard-kpis">'+saldoCardHtml;
   kpis.forEach(k=>{html+=`<div class="kpi ${k.cls}" style="align-self:start"${k.onclick?` onclick="${k.onclick}"`:''}>` +`${k.ico?`<div class="kpi-ico-wrap">${appIcon(k.ico)}</div>`:''}`+`<div class="kpi-lbl">${k.lbl}</div><div class="kpi-val">${k.val}</div><div class="kpi-sub">${k.sub}</div></div>`;});
@@ -1120,16 +1121,16 @@ function renderDashboard(c){
   html+=`<div class="charts-row"><div class="card" style="margin-bottom:0"><div class="card-ttl" style="margin-bottom:4px"><div style="font-size:10px;font-weight:700;letter-spacing:.1em;text-transform:uppercase;color:var(--brand);margin-bottom:3px">Fluxo de Caixa</div><div style="font-size:15px;font-weight:700;color:var(--tx)">Saldo Mensal <span class="yr-pill">Últimos 6 meses</span></div></div><div id="chart-fluxo-plot" style="position:relative;margin-top:6px"></div></div>`;
   if(pend.length>0){
     html+=`<div class="pend-card" style="margin-bottom:0"><div class="card-ttl">Contas Pendentes · ${monthLabel}</div><div class="pend-list">`;
-    pend.slice(0,8).forEach(l=>{const isR=l.tipo==='R';html+=`<div class="pend-row"><span class="pt ${isR?'r':'d'}">${isR?appIcon('arrowDown','app-icon tp-icon'):appIcon('arrowUp','app-icon tp-icon')}</span><span class="pdesc">${esc(l.desc||l.sub||l.cat)}</span><span class="pcat">${esc(l.cat)}</span><span class="pdata">${effectiveVenc(l)||'—'}</span><span class="pval ${isR?'r':'d'}">${fmt(openAmount(l))}</span></div>`;});
+    pend.slice(0,8).forEach(l=>{const isR=l.tipo==='R';html+=`<div class="pend-row"><span class="pt ${isR?'r':'d'}">${isR?appIcon('arrowDown','app-icon tp-icon'):appIcon('arrowUp','app-icon tp-icon')}</span><span class="pdesc">${esc(l.desc||l.sub||l.cat)}</span><span class="pcat">${esc(l.cat)}</span><span class="pdata">${effectiveVenc(l)||'—'}</span><span class="pval ${isR?'r':'d'}">${fmtCard(openAmount(l))}</span></div>`;});
     html+='</div></div>';
   }else{html+='<div></div>';}
   html+='</div>';
   const vPR=pendR.reduce((s,l)=>s+openAmount(l),0),vPD=pendD.reduce((s,l)=>s+openAmount(l),0);
   const ipts=[];
-  if(totLL>0)ipts.push(`Resultado positivo de <strong>${fmt(totLL)}</strong> com margem de <strong>${fmtPct(margem)}</strong> em ${monthLabel}.`);
-  else if(totLL<0)ipts.push(`Atenção: resultado negativo de <strong>${fmt(Math.abs(totLL))}</strong> no mês.`);
-  if(pendR.length>0)ipts.push(`${pendR.length} recebível${pendR.length>1?'is':''} em aberto: <strong>${fmt(vPR)}</strong>.`);
-  if(pendD.length>0)ipts.push(`${pendD.length} conta${pendD.length>1?'s':''} a pagar pendente${pendD.length>1?'s':''}: <strong>${fmt(vPD)}</strong>.`);
+  if(totLL>0)ipts.push(`Resultado positivo de <strong>${fmtCard(totLL)}</strong> com margem de <strong>${fmtPct(margem)}</strong> em ${monthLabel}.`);
+  else if(totLL<0)ipts.push(`Atenção: resultado negativo de <strong>${fmtCard(Math.abs(totLL))}</strong> no mês.`);
+  if(pendR.length>0)ipts.push(`${pendR.length} recebível${pendR.length>1?'is':''} em aberto: <strong>${fmtCard(vPR)}</strong>.`);
+  if(pendD.length>0)ipts.push(`${pendD.length} conta${pendD.length>1?'s':''} a pagar pendente${pendD.length>1?'s':''}: <strong>${fmtCard(vPD)}</strong>.`);
   if(ipts.length)html+=`<div class="insight-block"><div class="insight-lbl">${appIcon('chart')} Insight do Mês</div><p class="insight-txt${totLL<0?' neg':''}">${ipts.join(' ')}</p></div>`;
   c.innerHTML=html;
   setTimeout(()=>{
@@ -1266,10 +1267,10 @@ function drawFluxoBarChart(id,fluxoWindow){
       const py=yBar(Math.max(d.saldo,0))*scaleY+(svgRect.top-plotRect.top);
       const lbl=hasMultiYear?`${d.mes}/${String(d.year).slice(2)}`:d.mes;
       tipEl.innerHTML=`<div class="lc-tt-mes">${lbl}</div>`+
-        `<div class="lc-tt-row"><span class="lc-tt-k"><span class="lc-tt-dot lc-ent"></span>Entradas</span><span class="lc-tt-v" style="color:var(--tx)">${fmt(d.entradas)}</span></div>`+
-        `<div class="lc-tt-row"><span class="lc-tt-k"><span class="lc-tt-dot lc-sai"></span>Saídas</span><span class="lc-tt-v" style="color:var(--tx)">${fmt(d.saidas)}</span></div>`+
-        `<div class="lc-tt-row" style="border-top:1px solid var(--bd);margin-top:5px;padding-top:7px"><span class="lc-tt-k" style="font-weight:700;color:var(--tx)">Saldo do mês</span><span class="lc-tt-v" style="color:${d.saldo>=0?'#1A9C5A':'var(--red)'}">${fmt(d.saldo)}</span></div>`+
-        `<div style="display:flex;align-items:center;gap:7px;font-size:11.5px;color:#C39A05;font-weight:700;margin-top:7px;font-variant-numeric:tabular-nums"><span style="width:9px;height:9px;border-radius:2px;background:#E0B80D;display:inline-block"></span>Acumulado: ${fmt(d.acumulado)}</div>`;
+        `<div class="lc-tt-row"><span class="lc-tt-k"><span class="lc-tt-dot lc-ent"></span>Entradas</span><span class="lc-tt-v" style="color:var(--tx)">${fmtCard(d.entradas)}</span></div>`+
+        `<div class="lc-tt-row"><span class="lc-tt-k"><span class="lc-tt-dot lc-sai"></span>Saídas</span><span class="lc-tt-v" style="color:var(--tx)">${fmtCard(d.saidas)}</span></div>`+
+        `<div class="lc-tt-row" style="border-top:1px solid var(--bd);margin-top:5px;padding-top:7px"><span class="lc-tt-k" style="font-weight:700;color:var(--tx)">Saldo do mês</span><span class="lc-tt-v" style="color:${d.saldo>=0?'#1A9C5A':'var(--red)'}">${fmtCard(d.saldo)}</span></div>`+
+        `<div style="display:flex;align-items:center;gap:7px;font-size:11.5px;color:#C39A05;font-weight:700;margin-top:7px;font-variant-numeric:tabular-nums"><span style="width:9px;height:9px;border-radius:2px;background:#E0B80D;display:inline-block"></span>Acumulado: ${fmtCard(d.acumulado)}</div>`;
       tipEl.style.left=px+'px';tipEl.style.top=py+'px';tipEl.classList.add('show');
     });
     col.querySelector('.bc-hit').addEventListener('mouseleave',()=>{
@@ -1450,9 +1451,9 @@ function drawLineChart(id,chartWindow){
     const entry=chartWindow[i];
     const lbl=entry?`${MONTHS_FULL[entry.month]} ${entry.year}`:(d.mes||'');
     tipEl.innerHTML=`<div class="lc-tt-mes">${lbl}</div>`+
-      `<div class="lc-tt-row lc-ent-row"><span class="lc-tt-k"><span class="lc-tt-dot lc-ent"></span>Entradas</span><span class="lc-tt-v">${fmt(d.entradas)}</span></div>`+
-      `<div class="lc-tt-row lc-sai-row"><span class="lc-tt-k"><span class="lc-tt-dot lc-sai"></span>Saídas</span><span class="lc-tt-v">${fmt(d.saidas)}</span></div>`+
-      `<div class="lc-tt-row lc-res-row"><span class="lc-tt-k"><span class="lc-tt-dot lc-res"></span>Resultado</span><span class="lc-tt-v${d.resultado<0?' lc-neg':''}">${fmt(d.resultado)}</span></div>`;
+      `<div class="lc-tt-row lc-ent-row"><span class="lc-tt-k"><span class="lc-tt-dot lc-ent"></span>Entradas</span><span class="lc-tt-v">${fmtCard(d.entradas)}</span></div>`+
+      `<div class="lc-tt-row lc-sai-row"><span class="lc-tt-k"><span class="lc-tt-dot lc-sai"></span>Saídas</span><span class="lc-tt-v">${fmtCard(d.saidas)}</span></div>`+
+      `<div class="lc-tt-row lc-res-row"><span class="lc-tt-k"><span class="lc-tt-dot lc-res"></span>Resultado</span><span class="lc-tt-v${d.resultado<0?' lc-neg':''}">${fmtCard(d.resultado)}</span></div>`;
     tipEl.style.left=px+'px';tipEl.style.top=py+'px';tipEl.classList.add('show');
   };
   const hideTip=()=>tipEl.classList.remove('show');
@@ -1658,9 +1659,9 @@ function drawDRELineChart(){
     const py=yPos(topVal)*scaleY+(svgRect.top-plotRect.top);
     const lbl=`${MONTHS_FULL[d.monthIdx]} ${YEAR}`;
     tipEl.innerHTML=`<div class="lc-tt-mes">${lbl}</div>`+
-      `<div class="lc-tt-row lc-ent-row"><span class="lc-tt-k"><span class="lc-tt-dot lc-ent"></span>Rec. Líquida</span><span class="lc-tt-v">${fmt(d.entradas)}</span></div>`+
-      `<div class="lc-tt-row lc-sai-row"><span class="lc-tt-k"><span class="lc-tt-dot lc-sai"></span>Despesas</span><span class="lc-tt-v">${fmt(d.saidas)}</span></div>`+
-      `<div class="lc-tt-row lc-res-row"><span class="lc-tt-k"><span class="lc-tt-dot lc-res"></span>Resultado</span><span class="lc-tt-v${d.resultado<0?' lc-neg':''}">${fmt(d.resultado)}</span></div>`;
+      `<div class="lc-tt-row lc-ent-row"><span class="lc-tt-k"><span class="lc-tt-dot lc-ent"></span>Rec. Líquida</span><span class="lc-tt-v">${fmtCard(d.entradas)}</span></div>`+
+      `<div class="lc-tt-row lc-sai-row"><span class="lc-tt-k"><span class="lc-tt-dot lc-sai"></span>Despesas</span><span class="lc-tt-v">${fmtCard(d.saidas)}</span></div>`+
+      `<div class="lc-tt-row lc-res-row"><span class="lc-tt-k"><span class="lc-tt-dot lc-res"></span>Resultado</span><span class="lc-tt-v${d.resultado<0?' lc-neg':''}">${fmtCard(d.resultado)}</span></div>`;
     tipEl.style.left=px+'px';tipEl.style.top=py+'px';tipEl.classList.add('show');
   };
   const hideTip=()=>tipEl.classList.remove('show');
@@ -1798,9 +1799,9 @@ function renderDRE(c){
   const mCol=kpiMargin>=0?'var(--teal)':'var(--red)';
   const kpiCard=(lbl,val,sub,col,tip)=>`<div class="kpi" style="align-self:start"><div class="kpi-lbl" style="display:flex;align-items:center">${lbl}${tip?`<span class="kpi-info" data-tip="${tip}">?</span>`:''}</div><div class="kpi-val" style="color:${col}">${val}</div><div class="kpi-sub">${sub}</div></div>`;
   const dreKpis=`<div class="dre-kpis">
-    ${kpiCard('Receita Líquida',fmt(kpiRecLiq),kpiMon,'var(--tx)','Receita Operacional Bruta menos Impostos e Taxas do mês.')}
-    ${kpiCard('Total Despesas',fmt(kpiDesp),kpiMon,'var(--tx)','Soma de todas as categorias de despesa lançadas no mês (regime de competência).')}
-    ${kpiCard('Lucro Líquido',fmt(kpiLl),kpiMon,llCol,'Resultado Operacional mais Receitas Não Operacionais menos Despesas Não Operacionais.')}
+    ${kpiCard('Receita Líquida',fmtCard(kpiRecLiq),kpiMon,'var(--tx)','Receita Operacional Bruta menos Impostos e Taxas do mês.')}
+    ${kpiCard('Total Despesas',fmtCard(kpiDesp),kpiMon,'var(--tx)','Soma de todas as categorias de despesa lançadas no mês (regime de competência).')}
+    ${kpiCard('Lucro Líquido',fmtCard(kpiLl),kpiMon,llCol,'Resultado Operacional mais Receitas Não Operacionais menos Despesas Não Operacionais.')}
     ${kpiCard('Margem Líquida',kpiRecLiq!==0?kpiMargin.toFixed(1)+'%':'—',kpiMon,mCol,'Lucro Líquido ÷ Receita Líquida × 100. Indica quanto de cada real de receita líquida vira lucro.')}
   </div>`;
 
@@ -2300,10 +2301,10 @@ function renderFluxo(c){
   const kpiSFCol=kpiSF>=0?'var(--teal)':'var(--red)';
   const fKpi=(lbl,val,sub,col)=>`<div class="kpi" style="align-self:start"><div class="kpi-lbl">${lbl}</div><div class="kpi-val" style="color:${col}">${val}</div><div class="kpi-sub">${sub}</div></div>`;
   const fluxoKpis=`<div class="dre-kpis">
-    ${fKpi('Total Entradas',fmt(kpiEnt),`${YEAR} · regime de caixa`,'var(--tx)')}
-    ${fKpi('Total Saídas',fmt(kpiSai),`${YEAR} · regime de caixa`,'var(--tx)')}
-    ${fKpi('Resultado Operacional',fmt(kpiRes),`${YEAR} · acumulado`,kpiResCol)}
-    ${fKpi('Saldo Final',fmt(kpiSF),lastMesData>=0?`${MONTHS_FULL[lastMesData]}/${YEAR}`:'—',kpiSFCol)}
+    ${fKpi('Total Entradas',fmtCard(kpiEnt),`${YEAR} · regime de caixa`,'var(--tx)')}
+    ${fKpi('Total Saídas',fmtCard(kpiSai),`${YEAR} · regime de caixa`,'var(--tx)')}
+    ${fKpi('Resultado Operacional',fmtCard(kpiRes),`${YEAR} · acumulado`,kpiResCol)}
+    ${fKpi('Saldo Final',fmtCard(kpiSF),lastMesData>=0?`${MONTHS_FULL[lastMesData]}/${YEAR}`:'—',kpiSFCol)}
   </div>`;
 
   const toolbar=`<div class="tbl-hdr" style="display:flex;align-items:center;justify-content:space-between;flex-wrap:wrap;gap:8px"><div class="sec-ttl">Fluxo de Caixa — Regime de Caixa <span class="yr-pill">${YEAR}</span></div><div style="display:flex;gap:6px;align-items:center"><div class="dre-seg"><button class="dre-seg-btn${fluxoView==='anual'?' on':''}" onclick="setFluxoView('anual')">Anual</button><button class="dre-seg-btn${fluxoView==='mensal'?' on':''}" onclick="setFluxoView('mensal')">Mensal</button></div>${fluxoView==='anual'?`<button class="btn btn-ghost" style="font-size:12px" onclick="exportFluxoExcel()">${appIcon('download')}Exportar Excel</button><button class="btn btn-ghost" style="font-size:12px" onclick="toggleAllFluxo()">⊞ Expandir/Recolher tudo</button><button class="btn btn-ghost" style="font-size:12px;${showFluxoProj?'border-color:#58a6ff;color:#58a6ff':''}" onclick="toggleFluxoProj()">${appIcon('chart')} ${showFluxoProj?'Ocultar projetado':'Fluxo Projetado'}</button>`:`<button class="btn btn-ghost" style="font-size:12px" onclick="toggleAllFluxoMes()">⊞ Expandir/Recolher tudo</button>`}</div></div>`;

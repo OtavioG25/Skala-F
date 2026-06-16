@@ -990,9 +990,9 @@ function updateContasCardValues(){
   const doMes=cashMovements().filter(m=>m.tipo===tipo&&!isTransfer(m)&&periodMatch(m.dataPgto));
   const totalMes=doMes.reduce((s,l)=>s+parseMoney(l.valorLiq),0);
   const set=(id,val,sub)=>{const el=document.getElementById(id);if(!el)return;const v=el.querySelector('.kpi-val');const s=el.querySelector('.kpi-sub');if(v)v.textContent=val;if(s)s.textContent=sub;};
-  set('kpi-card-receber',fmt(totalPend),pendentes.length+' lançamento(s)');
-  set('kpi-card-atrasados',fmt(totalAtras),atrasadas.length+' lançamento(s)');
-  set('kpi-card-mes',fmt(totalMes),doMes.length+' lançamento(s)');
+  set('kpi-card-receber',fmtCard(totalPend),pendentes.length+' lançamento(s)');
+  set('kpi-card-atrasados',fmtCard(totalAtras),atrasadas.length+' lançamento(s)');
+  set('kpi-card-mes',fmtCard(totalMes),doMes.length+' lançamento(s)');
   const _periodSuf=(contasRangeMode&&(contasRangeIni||contasRangeFim))?' no período':' em '+compDisplay(mesRef+'-01');
   const lblR=document.getElementById('kpi-lbl-receber');
   if(lblR)lblR.textContent=(isR?'A Receber':'A Pagar')+_periodSuf;
@@ -1094,11 +1094,11 @@ function renderSaldoCards(){
       <div style="font-size:11px;font-weight:600;color:var(--tx2);margin-bottom:5px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis">${esc(c.nome)}</div>
       <div style="display:flex;justify-content:space-between;align-items:baseline;gap:4px;margin-bottom:2px">
         <span style="font-size:10px;color:var(--tx3)">Atual</span>
-        <span style="font-size:12px;font-weight:700;color:${c.atual>=0?'var(--teal)':'var(--red)'};white-space:nowrap">${fmt(c.atual)}</span>
+        <span style="font-size:12px;font-weight:700;color:${c.atual>=0?'var(--teal)':'var(--red)'};white-space:nowrap">${fmtCard(c.atual)}</span>
       </div>
       <div style="display:flex;justify-content:space-between;align-items:baseline;gap:4px">
         <span style="font-size:10px;color:var(--tx3)">Projetado</span>
-        <span style="font-size:11px;font-weight:600;color:${c.projetado>=0?'var(--teal)':'var(--red)'};white-space:nowrap">${fmt(c.projetado)}</span>
+        <span style="font-size:11px;font-weight:600;color:${c.projetado>=0?'var(--teal)':'var(--red)'};white-space:nowrap">${fmtCard(c.projetado)}</span>
       </div>
     </div>`).join('')}
   </div></div>`;
@@ -1415,7 +1415,7 @@ function renderPendentes(c){
 
   c.innerHTML=`
     <div style="margin-bottom:16px">
-      <div class="kpi k-red" style="max-width:320px"><div class="kpi-lbl">A Pagar</div><div class="kpi-val">${fmt(totDesp)}</div><div class="kpi-sub">${allPend.length} lançamento(s)</div></div>
+      <div class="kpi k-red" style="max-width:320px"><div class="kpi-lbl">A Pagar</div><div class="kpi-val">${fmtCard(totDesp)}</div><div class="kpi-sub">${allPend.length} lançamento(s)</div></div>
     </div>
 
     <div class="card" style="margin-bottom:14px" id="lote-bar">
@@ -1630,17 +1630,17 @@ function renderContasTipo(c,tipo){
   <div style="display:flex;gap:12px;margin-bottom:16px;flex-wrap:wrap" id="contas-kpi-row">
     <div id="kpi-card-receber" class="kpi ${isR?'k-teal':'k-red'}${contasCardFilter==='receber'?' k-card-active':''}" style="flex:1;min-width:160px;cursor:pointer" onclick="toggleContasCardFilter('receber')" title="${_tipReceber}">
       <div class="kpi-lbl" id="kpi-lbl-receber">${(isR?'A Receber':'A Pagar')+_periodSuf}</div>
-      <div class="kpi-val">${fmt(totalPend)}</div>
+      <div class="kpi-val">${fmtCard(totalPend)}</div>
       <div class="kpi-sub">${pendentes.length} lançamento(s)</div>
     </div>
     <div id="kpi-card-atrasados" class="kpi k-red${contasCardFilter==='atrasados'?' k-card-active':''}" style="flex:1;min-width:160px;cursor:pointer" onclick="toggleContasCardFilter('atrasados')" title="${_tipAtrasados}">
       <div class="kpi-lbl" id="kpi-lbl-atrasados">${'Atrasados'+_periodSuf}</div>
-      <div class="kpi-val">${fmt(totalAtras)}</div>
+      <div class="kpi-val">${fmtCard(totalAtras)}</div>
       <div class="kpi-sub">${atrasadas.length} lançamento(s)</div>
     </div>
     <div id="kpi-card-mes" class="kpi k-feature${contasCardFilter==='mes'?' k-card-active':''}" style="flex:1;min-width:160px;cursor:pointer" onclick="toggleContasCardFilter('mes')" title="${_tipMes}">
       <div class="kpi-lbl" id="kpi-lbl-mes">${(isR?'Recebidos':'Pagos')+_periodSuf}</div>
-      <div class="kpi-val">${fmt(totalMes)}</div>
+      <div class="kpi-val">${fmtCard(totalMes)}</div>
       <div class="kpi-sub">${doMes.length} lançamento(s)</div>
     </div>
   </div>
