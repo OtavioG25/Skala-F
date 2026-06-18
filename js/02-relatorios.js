@@ -1,6 +1,8 @@
 let _calcDreCache={};
 let _calcFluxoCache={};
 let _calcFluxoProjCache={};
+// Slugs que compõem o grupo "Despesas com Pessoal" (suporta categoria pai 'pessoal' ou categorias individuais)
+const DRE_PESSOAL_SLUGS = ['pessoal','pro_labore_retiradas','empregados','recrutamento'];
 function clearFinanceCalcCache(){
   _calcDreCache={};
   _calcFluxoCache={};
@@ -50,26 +52,31 @@ function calcDRE(year){
     }
   });
 
-  const PESSOAL_SLUG      = 'pessoal';
-  const IMPOSTOS_SLUG     = 'impostos_e_taxas';
-  const EXCL_DESP_SLUGS   = [PESSOAL_SLUG, IMPOSTOS_SLUG];
   const recOpCats = recCats.filter(c=>!isNaoOpDRE(c));
   const recNaoOpCats = recCats.filter(c=>isNaoOpDRE(c));
   const despOpCatsForCalc = despCats.filter(c=>!isNaoOpDRE(c));
   const despNaoOpCats = despCats.filter(c=>isNaoOpDRE(c));
 
+  // Categorias especiais — buscadas uma vez, fora do loop
+  const _impostoCatC   = despOpCatsForCalc.find(c=>['impostos_e_taxas','impostos'].includes(dreCatSlug(c)));
+  const _custosOpCatC  = despOpCatsForCalc.find(c=>dreCatSlug(c)==='custos_operacionais');
+  const _pessoalCatsC  = despOpCatsForCalc.filter(c=>DRE_PESSOAL_SLUGS.includes(dreCatSlug(c)));
+  const EXCL_DESP_SLUGS = [
+    _impostoCatC  ? dreCatSlug(_impostoCatC)  : null,
+    _custosOpCatC ? dreCatSlug(_custosOpCatC) : null,
+    ..._pessoalCatsC.map(dreCatSlug)
+  ].filter(Boolean);
+
   m.forEach(r=>{
     r.recOpBruta = recOpCats.reduce((s,c)=>s+(r['r_'+dreCatSlug(c)]||0),0);
-    // Impostos
-    const impostoCat = despOpCatsForCalc.find(c=>dreCatSlug(c)===IMPOSTOS_SLUG);
-    r.impostos  = impostoCat ? (r['d_'+dreCatSlug(impostoCat)]||0) : 0;
-    r.custosOp  = 0;
-    r.recOpLiq  = r.recOpBruta - r.impostos;
-    // Custo pessoal
-    const pessoalCat = despOpCatsForCalc.find(c=>dreCatSlug(c)===PESSOAL_SLUG);
-    r.cusPessoal = pessoalCat ? (r['d_'+dreCatSlug(pessoalCat)]||0) : 0;
+    // Impostos e Custos Operacionais — ambos deduzidos da Receita Bruta
+    r.impostos  = _impostoCatC  ? (r['d_'+dreCatSlug(_impostoCatC)] ||0) : 0;
+    r.custosOp  = _custosOpCatC ? (r['d_'+dreCatSlug(_custosOpCatC)]||0) : 0;
+    r.recOpLiq  = r.recOpBruta - r.impostos - r.custosOp;
+    // Custo pessoal — soma de todas as categorias do grupo pessoal
+    r.cusPessoal = _pessoalCatsC.reduce((s,c)=>s+(r['d_'+dreCatSlug(c)]||0), 0);
     r.lucOpBruto = r.recOpLiq - r.cusPessoal;
-    // Despesas operacionais (todas as categorias exceto Pessoal e Impostos e Taxas)
+    // Despesas operacionais (exceto Pessoal, Impostos e Custos Operacionais)
     r.despOp = despOpCatsForCalc.filter(c=>!EXCL_DESP_SLUGS.includes(dreCatSlug(c))).reduce((s,c)=>s+(r['d_'+dreCatSlug(c)]||0),0);
     r.resOp  = r.lucOpBruto - r.despOp;
     r.investimentos = 0;
@@ -1800,7 +1807,7 @@ function renderDRE(c){
   const kpiMargin=kpiRecLiq!==0?(kpiLl/kpiRecLiq*100):0;
   const llCol=kpiLl>=0?'var(--teal)':'var(--red)';
   const mCol=kpiMargin>=0?'var(--teal)':'var(--red)';
-  const kpiCard=(lbl,val,sub,col,tip)=>`<div class="kpi" style="align-self:start"><div class="kpi-lbl" style="display:flex;align-items:center">${lbl}${tip?`<span class="kpi-info" data-tip="${tip}">?</span>`:''}</div><div class="kpi-val" style="color:${col}">${val}</div><div class="kpi-sub">${sub}</div></div>`;
+  const kpiCard=(lbl,val,sub,col,tip)=>`<div class="kpi" style="align-self:start"><div class="kpi-lbl" style="display:flex;align-items:center">${lbl}${tip?`<span class="kpi-info" onmouseenter="showTip(event,this.dataset.t)" data-t="${tip}" onmouseleave="hideTip()">?</span>`:''}</div><div class="kpi-val" style="color:${col}">${val}</div><div class="kpi-sub">${sub}</div></div>`;
   const dreKpis=`<div class="dre-kpis">
     ${kpiCard('Receita Líquida',fmtCard(kpiRecLiq),`Acumulado ${YEAR}`,'var(--tx)','Receita Operacional Bruta menos Impostos e Taxas no ano.')}
     ${kpiCard('Total Despesas',fmtCard(kpiDesp),`Acumulado ${YEAR}`,'var(--tx)','Soma de todas as categorias de despesa lançadas no ano (regime de competência).')}
@@ -1826,7 +1833,7 @@ function renderDRE(c){
   if(!window._dreExpanded) window._dreExpanded={};
   window._dreDrillCells=[];
 
-  function row(lbl,k,type='normal',groupId=null,parentId=null,neg=false,numSubs=0,drillInfo=null){
+  function row(lbl,k,type='normal',groupId=null,parentId=null,neg=false,numSubs=0,drillInfo=null,tip=null){
     const isTotal   = type==='total';
     const isSep     = type==='sep';
     const isGroup   = type==='group';
@@ -1875,9 +1882,10 @@ function renderDRE(c){
     if(parentId&&window._dreExpanded[parentId]!==true) style='display:none';
 
     const toggleBtn = hasSubs ? `<span onclick="toggleDRE('${groupId}')" style="cursor:pointer;margin-right:6px;font-size:10px;display:inline-block;width:12px">${expanded?'▼':'▶'}</span>` : `<span style="display:inline-block;width:18px"></span>`;
+    const tipHtml = tip ? `<span class="kpi-info" onmouseenter="showTip(event,this.dataset.t)" data-t="${tip}" onmouseleave="hideTip()">?</span>` : '';
 
     return`<tr class="${cls}" id="dre-row-${groupId||k}" style="${style}">
-      <td style="${tdStyle}">${toggleBtn}${lbl}</td>${cells}
+      <td style="${tdStyle}">${toggleBtn}${lbl}${tipHtml}</td>${cells}
       <td class="${tv<0?'neg':tv>0?'pos':''} tc" style="font-weight:${isTotal||isResult||type==='lucro'?700:400}">${tv!==0?fmt(tv):'—'}</td>
     </tr>`;
   }
@@ -1901,12 +1909,32 @@ function renderDRE(c){
   // Grupos de despesas — dinâmico: Pessoal e Impostos e Taxas têm seções próprias, resto vai em Despesas Operacionais
   const despOpBase   = despCats.filter(c=>!isNaoOpDRE(c));
   const despNaoOpCats= despCats.filter(c=>isNaoOpDRE(c));
-  const impostoCat  = despOpBase.find(c=>(c.slug||slugify(c.nome))==='impostos_e_taxas');
-  const pessoalCat  = despOpBase.find(c=>(c.slug||slugify(c.nome))==='pessoal');
-  const EXCL_SLUGS  = ['pessoal','impostos_e_taxas'];
-  const despOpCats  = despOpBase.filter(c=>!EXCL_SLUGS.includes(c.slug||slugify(c.nome)));
+  const impostoCat   = despOpBase.find(c=>['impostos_e_taxas','impostos'].includes(c.slug||slugify(c.nome)));
+  const custosOpCat  = despOpBase.find(c=>(c.slug||slugify(c.nome))==='custos_operacionais');
+  const pessoalCats  = despOpBase.filter(c=>DRE_PESSOAL_SLUGS.includes(c.slug||slugify(c.nome)));
+  const EXCL_SLUGS   = [
+    impostoCat  ? impostoCat.slug||slugify(impostoCat.nome)   : null,
+    custosOpCat ? custosOpCat.slug||slugify(custosOpCat.nome) : null,
+    ...pessoalCats.map(c=>c.slug||slugify(c.nome))
+  ].filter(Boolean);
+  const despOpCats   = despOpBase.filter(c=>!EXCL_SLUGS.includes(c.slug||slugify(c.nome)));
 
   const g=(cat,tipo)=>cat?groupRows(cat,tipo):'';
+
+  function rowPct(lbl,numKey,denKey,tip=null){
+    const cells=dre.map((m,i)=>{
+      const num=m[numKey]||0,den=m[denKey]||0;
+      const pct=den!==0?(num/den*100):null;
+      const hlSt=i===curMonthIdx?';background:rgba(19,124,60,.06)':'';
+      const col=pct===null?'var(--tx3)':pct>=0?'var(--teal)':'var(--red)';
+      return`<td style="font-size:11px;font-style:italic;color:${col}${hlSt}">${pct!==null?pct.toFixed(1)+'%':'—'}</td>`;
+    }).join('');
+    const tNum=tot(numKey),tDen=tot(denKey);
+    const tPct=tDen!==0?(tNum/tDen*100):null;
+    const tCol=tPct===null?'var(--tx3)':tPct>=0?'var(--teal)':'var(--red)';
+    const tipHtml=tip?`<span class="kpi-info" onmouseenter="showTip(event,this.dataset.t)" data-t="${tip}" onmouseleave="hideTip()">?</span>`:'';
+    return`<tr class="dr"><td style="padding-left:28px;position:sticky;left:0;z-index:2;background:var(--s1);font-style:italic;color:var(--tx2);font-size:11px">${lbl}${tipHtml}</td>${cells}<td class="tc" style="font-style:italic;font-size:11px;color:${tCol}">${tPct!==null?tPct.toFixed(1)+'%':'—'}</td></tr>`;
+  }
 
   const _today=new Date();
   const _emitido=`${String(_today.getDate()).padStart(2,'0')}/${String(_today.getMonth()+1).padStart(2,'0')}/${_today.getFullYear()}`;
@@ -1917,7 +1945,7 @@ function renderDRE(c){
 
   if(!window._dreExpandedMes) window._dreExpandedMes={};
 
-  function rowMes(lbl,k,type='normal',groupId=null,parentId=null,neg=false,numSubs=0,drillInfo=null){
+  function rowMes(lbl,k,type='normal',groupId=null,parentId=null,neg=false,numSubs=0,drillInfo=null,tip=null){
     const isSep=type==='sep';
     const isGroup=type==='group';
     const isSub=type==='sub';
@@ -1934,6 +1962,7 @@ function renderDRE(c){
     if(type==='lucro') cls+=' tot';
     const tdStyle=`padding-left:${isSub?40:isGroup?20:12}px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap`;
     const toggleBtn=hasSubs?`<span onclick="toggleDREMes('${groupId}')" style="cursor:pointer;margin-right:6px;font-size:10px;display:inline-block;width:12px;flex-shrink:0">${expanded?'▼':'▶'}</span>`:`<span style="display:inline-block;width:18px;flex-shrink:0"></span>`;
+    const tipHtml=tip?`<span class="kpi-info" onmouseenter="showTip(event,this.dataset.t)" data-t="${tip}" onmouseleave="hideTip()">?</span>`:'';
     let valTd;
     if(drillInfo&&v!==0){
       const di=window._dreDrillCells.length;
@@ -1943,7 +1972,7 @@ function renderDRE(c){
       valTd=`<td style="text-align:right;color:${col};font-size:12px;white-space:nowrap">${v!==0?fmt(v):'—'}</td>`;
     }
     return`<tr class="${cls}" style="${style}">
-      <td style="${tdStyle}">${toggleBtn}${lbl}</td>
+      <td style="${tdStyle}">${toggleBtn}${lbl}${tipHtml}</td>
       ${valTd}
       <td style="text-align:right;color:var(--tx2);font-size:11px;white-space:nowrap;padding-right:10px">${v!==0?mPct(Math.abs(v)):'—'}</td>
     </tr>`;
@@ -1962,6 +1991,14 @@ function renderDRE(c){
   }
 
   const gMes=(cat,tipo)=>cat?groupRowsMes(cat,tipo):'';
+
+  function rowMesPct(lbl,numKey,denKey,tip=null){
+    const num=dreM[numKey]||0,den=dreM[denKey]||0;
+    const pct=den!==0?(num/den*100):null;
+    const col=pct===null?'var(--tx3)':pct>=0?'var(--teal)':'var(--red)';
+    const tipHtml=tip?`<span class="kpi-info" onmouseenter="showTip(event,this.dataset.t)" data-t="${tip}" onmouseleave="hideTip()">?</span>`:'';
+    return`<tr class="dr"><td style="padding-left:28px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;font-style:italic;color:var(--tx2);font-size:11px">${lbl}${tipHtml}</td><td style="text-align:right;font-style:italic;font-size:12px;white-space:nowrap;color:${col}">${pct!==null?pct.toFixed(1)+'%':'—'}</td><td style="text-align:right;font-size:11px;white-space:nowrap;padding-right:10px;color:var(--tx3)">—</td></tr>`;
+  }
 
   const segBtn=(v,lbl)=>`<button class="dre-seg-btn${dreView===v?' on':''}" onclick="setDREView('${v}')">${lbl}</button>`;
 
@@ -1995,21 +2032,26 @@ function renderDRE(c){
       <tbody>
         ${row('RECEITAS OPERACIONAIS','','sep')}
         ${recOpCats.map(cat=>groupRows(cat,'R')).join('')}
-        ${row('(=) RECEITA OPERACIONAL BRUTA','recOpBruta','result')}
+        ${row('(=) RECEITA OPERACIONAL BRUTA','recOpBruta','result',null,null,false,0,null,'Soma de todas as receitas operacionais lançadas no período (regime de competência).')}
 
-        ${impostoCat?`${row('IMPOSTOS E TAXAS','','sep')}${g(impostoCat,'D')}`:''}
-        ${row('(=) RECEITA OPERACIONAL LÍQUIDA','recOpLiq','result')}
+        ${row('DEDUÇÕES','','sep')}
+        ${impostoCat?g(impostoCat,'D'):''}
+        ${custosOpCat?g(custosOpCat,'D'):''}
+        ${row('(=) RECEITA OPERACIONAL LÍQUIDA','recOpLiq','result',null,null,false,0,null,'Receita Operacional Bruta − Impostos − Custos Operacionais.')}
 
-        ${pessoalCat?`${row('CUSTO COM PESSOAL','','sep')}${g(pessoalCat,'D')}${row('(=) CUSTO COM PESSOAL','cusPessoal','total',null,null,true)}`:''}
-        ${row('(=) LUCRO OPERACIONAL BRUTO','lucOpBruto','result')}
+        ${pessoalCats.length?`${row('DESPESAS COM PESSOAL','','sep')}${pessoalCats.map(cat=>g(cat,'D')).join('')}${row('(=) Total Pessoal','cusPessoal','total',null,null,true,0,null,'Soma das despesas com pessoal: Pro-labore/Retiradas, Empregados e Recrutamento.')}`:''}
+        ${row('(=) LUCRO BRUTO','lucOpBruto','result',null,null,false,0,null,'Receita Operacional Líquida − Total Pessoal.')}
+        ${rowPct('(%) Margem Bruta','lucOpBruto','recOpBruta','Lucro Bruto ÷ Receita Operacional Bruta × 100.')}
 
-        ${despOpCats.length?`${row('DESPESAS OPERACIONAIS','','sep')}${despOpCats.map(cat=>g(cat,'D')).join('')}${row('(=) DESPESAS OPERACIONAIS','despOp','total',null,null,true)}`:''}
-        ${row('(=) RESULTADO OPERACIONAL','resOp','result')}
+        ${despOpCats.length?`${row('DESPESAS OPERACIONAIS','','sep')}${despOpCats.map(cat=>g(cat,'D')).join('')}${row('(=) Total Despesas Operacionais','despOp','total',null,null,true,0,null,'Soma de todas as despesas operacionais (exceto Pessoal, Impostos e Custos Operacionais).')}`:''}
+        ${row('(=) RESULTADO OPERACIONAL','resOp','result',null,null,false,0,null,'Lucro Bruto − Total de Despesas Operacionais.')}
+        ${rowPct('(%) Margem Operacional','resOp','recOpLiq','Resultado Operacional ÷ Receita Operacional Líquida × 100.')}
 
-        ${recNaoOpCats.length?`${row('RECEITAS NÃO OPERACIONAIS','','sep')}${recNaoOpCats.map(cat=>groupRows(cat,'R')).join('')}${row('(=) RECEITAS NÃO OPERACIONAIS','outrasRec','total')}`:''}
-        ${despNaoOpCats.length?`${row('DESPESAS NÃO OPERACIONAIS','','sep')}${despNaoOpCats.map(cat=>groupRows(cat,'D')).join('')}${row('(=) DESPESAS NÃO OPERACIONAIS','despNaoOp','total',null,null,true)}`:''}
+        ${recNaoOpCats.length?`${row('RECEITAS NÃO OPERACIONAIS','','sep')}${recNaoOpCats.map(cat=>groupRows(cat,'R')).join('')}${row('(=) RECEITAS NÃO OPERACIONAIS','outrasRec','total',null,null,false,0,null,'Receitas fora da atividade operacional do escritório.')}`:''}
+        ${despNaoOpCats.length?`${row('DESPESAS NÃO OPERACIONAIS','','sep')}${despNaoOpCats.map(cat=>groupRows(cat,'D')).join('')}${row('(=) DESPESAS NÃO OPERACIONAIS','despNaoOp','total',null,null,true,0,null,'Despesas fora da atividade operacional do escritório.')}`:''}
 
-        ${row('RESULTADO FINAL','ll','lucro')}
+        ${row('RESULTADO LÍQUIDO','ll','lucro',null,null,false,0,null,'Resultado Operacional + Receitas Não Operacionais − Despesas Não Operacionais.')}
+        ${rowPct('(%) Margem Líquida','ll','recOpLiq','Resultado Líquido ÷ Receita Operacional Líquida × 100.')}
       </tbody>
     </table>
     <div style="padding:20px 4px 16px">
@@ -2052,16 +2094,21 @@ function renderDRE(c){
             <tbody>
               ${rowMes('RECEITAS OPERACIONAIS','','sep')}
               ${recOpCats.map(cat=>groupRowsMes(cat,'R')).join('')}
-              ${rowMes('(=) RECEITA OPERACIONAL BRUTA','recOpBruta','result')}
-              ${impostoCat?`${rowMes('IMPOSTOS E TAXAS','','sep')}${gMes(impostoCat,'D')}`:''}
-              ${rowMes('(=) RECEITA OPERACIONAL LÍQUIDA','recOpLiq','result')}
-              ${pessoalCat?`${rowMes('CUSTO COM PESSOAL','','sep')}${gMes(pessoalCat,'D')}${rowMes('(=) CUSTO COM PESSOAL','cusPessoal','total',null,null,true)}`:''}
-              ${rowMes('(=) LUCRO OPERACIONAL BRUTO','lucOpBruto','result')}
-              ${despOpCats.length?`${rowMes('DESPESAS OPERACIONAIS','','sep')}${despOpCats.map(cat=>gMes(cat,'D')).join('')}${rowMes('(=) DESPESAS OPERACIONAIS','despOp','total',null,null,true)}`:''}
-              ${rowMes('(=) RESULTADO OPERACIONAL','resOp','result')}
-              ${recNaoOpCats.length?`${rowMes('RECEITAS NÃO OPERACIONAIS','','sep')}${recNaoOpCats.map(cat=>groupRowsMes(cat,'R')).join('')}${rowMes('(=) RECEITAS NÃO OPERACIONAIS','outrasRec','total')}`:''}
-              ${despNaoOpCats.length?`${rowMes('DESPESAS NÃO OPERACIONAIS','','sep')}${despNaoOpCats.map(cat=>groupRowsMes(cat,'D')).join('')}${rowMes('(=) DESPESAS NÃO OPERACIONAIS','despNaoOp','total',null,null,true)}`:''}
-              ${rowMes('RESULTADO LÍQUIDO','ll','lucro')}
+              ${rowMes('(=) RECEITA OPERACIONAL BRUTA','recOpBruta','result',null,null,false,0,null,'Soma de todas as receitas operacionais lançadas no período (regime de competência).')}
+              ${rowMes('DEDUÇÕES','','sep')}
+              ${impostoCat?gMes(impostoCat,'D'):''}
+              ${custosOpCat?gMes(custosOpCat,'D'):''}
+              ${rowMes('(=) RECEITA OPERACIONAL LÍQUIDA','recOpLiq','result',null,null,false,0,null,'Receita Operacional Bruta − Impostos − Custos Operacionais.')}
+              ${pessoalCats.length?`${rowMes('DESPESAS COM PESSOAL','','sep')}${pessoalCats.map(cat=>gMes(cat,'D')).join('')}${rowMes('(=) Total Pessoal','cusPessoal','total',null,null,true,0,null,'Soma das despesas com pessoal: Pro-labore/Retiradas, Empregados e Recrutamento.')}`:''}
+              ${rowMes('(=) LUCRO BRUTO','lucOpBruto','result',null,null,false,0,null,'Receita Operacional Líquida − Total Pessoal.')}
+              ${rowMesPct('(%) Margem Bruta','lucOpBruto','recOpBruta','Lucro Bruto ÷ Receita Operacional Bruta × 100.')}
+              ${despOpCats.length?`${rowMes('DESPESAS OPERACIONAIS','','sep')}${despOpCats.map(cat=>gMes(cat,'D')).join('')}${rowMes('(=) Total Despesas Operacionais','despOp','total',null,null,true,0,null,'Soma de todas as despesas operacionais (exceto Pessoal, Impostos e Custos Operacionais).')}`:''}
+              ${rowMes('(=) RESULTADO OPERACIONAL','resOp','result',null,null,false,0,null,'Lucro Bruto − Total de Despesas Operacionais.')}
+              ${rowMesPct('(%) Margem Operacional','resOp','recOpLiq','Resultado Operacional ÷ Receita Operacional Líquida × 100.')}
+              ${recNaoOpCats.length?`${rowMes('RECEITAS NÃO OPERACIONAIS','','sep')}${recNaoOpCats.map(cat=>groupRowsMes(cat,'R')).join('')}${rowMes('(=) RECEITAS NÃO OPERACIONAIS','outrasRec','total',null,null,false,0,null,'Receitas fora da atividade operacional do escritório.')}`:''}
+              ${despNaoOpCats.length?`${rowMes('DESPESAS NÃO OPERACIONAIS','','sep')}${despNaoOpCats.map(cat=>groupRowsMes(cat,'D')).join('')}${rowMes('(=) DESPESAS NÃO OPERACIONAIS','despNaoOp','total',null,null,true,0,null,'Despesas fora da atividade operacional do escritório.')}`:''}
+              ${rowMes('RESULTADO LÍQUIDO','ll','lucro',null,null,false,0,null,'Resultado Operacional + Receitas Não Operacionais − Despesas Não Operacionais.')}
+              ${rowMesPct('(%) Margem Líquida','ll','recOpLiq','Resultado Líquido ÷ Receita Operacional Líquida × 100.')}
             </tbody>
           </table>
         </div>

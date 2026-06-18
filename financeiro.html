@@ -153,6 +153,7 @@
     </div>
   </div>
 </div>
+<div id="float-tip" style="position:fixed;z-index:9999;background:var(--tx);color:var(--bg);font-size:11.5px;font-weight:500;line-height:1.5;padding:7px 11px;border-radius:8px;width:220px;white-space:normal;box-shadow:0 4px 16px rgba(0,0,0,.25);display:none;pointer-events:none"></div>
 <div class="overlay" id="confirm-overlay" style="display:none" onclick="if(event.target===this)_cfmClose(false)">
   <div class="modal" style="max-width:420px">
     <div class="modal-hdr"><h2 id="confirm-title">Confirmar</h2><button class="cls" onclick="_cfmClose(false)">✕</button></div>
@@ -176,7 +177,7 @@
     '05-importacoes.js',
     '06-clientes.js'
   ].forEach(function(file){
-    document.write('<script src="' + basePath + file + '?v=2.5.177"><\/script>');
+    document.write('<script src="' + basePath + file + '?v=2.5.182"><\/script>');
   });
 })();
 </script>

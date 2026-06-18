@@ -471,6 +471,22 @@ function canDeleteLancamentos(items){
 
 function setSyncStatus(state,msg){const dot=document.getElementById('sync-dot'),txt=document.getElementById('sync-txt');if(!dot)return;dot.className='sync-dot '+state;if(txt)txt.textContent=msg;}
 
+function showTip(e,text){
+  const el=document.getElementById('float-tip');
+  if(!el)return;
+  el.textContent=text;
+  el.style.left='-9999px';
+  el.style.display='block';
+  const tipH=el.offsetHeight,tipW=el.offsetWidth||220;
+  let left=e.clientX-tipW/2,top=e.clientY-tipH-12;
+  if(left<8)left=8;
+  if(left+tipW>window.innerWidth-8)left=window.innerWidth-8-tipW;
+  if(top<8)top=e.clientY+16;
+  el.style.left=left+'px';
+  el.style.top=top+'px';
+}
+function hideTip(){const el=document.getElementById('float-tip');if(el)el.style.display='none';}
+
 let DATA=[];
 let BAIXAS_DATA=[];
 let _baixasMap=null;
