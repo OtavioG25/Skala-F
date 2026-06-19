@@ -209,8 +209,6 @@ function dateForSchedule(l){
 }
 function toRow(l){const r={id:l.id,tipo:l.tipo,data_comp:l.dataComp||null,data_venc:effectiveVenc(l)||null,data_pgto:l.dataPgto||null,cat:l.cat,sub:l.sub||null,descricao:l.desc||null,cc:l.cc||null,cliente_id:l.clienteId||null,forma:l.forma||null,conta:normalizeConta(l.conta)||null,doc:l.doc||null,valor_bruto:parseMoney(l.valorBruto),ded:parseMoney(l.ded),valor_liq:parseMoney(l.valorLiq),status:l.status,obs:l.obs||null};if(l.parentId)r.parent_id=l.parentId;if(l.adjType)r.adj_type=l.adjType;return r;}
 function fromRow(r){const status=r.status||'Pendente';const legacyVenc=!r.data_venc&&(status==='Pendente'||status==='Parcial')?r.data_pgto||'':'';const dataVenc=r.data_venc||legacyVenc;const dataPgto=(status==='Pago'||status==='Recebido'||status==='Parcial')?r.data_pgto||'':'';return{id:r.id,seq:r.seq||null,tipo:r.tipo,dataComp:r.data_comp||'',dataVenc,dataPgto,cat:r.cat||'',sub:r.sub||'',desc:r.descricao||'',cc:r.cc||'',clienteId:r.cliente_id||'',forma:r.forma||'PIX',conta:r.conta||'',doc:r.doc||'',valorBruto:r.valor_bruto||0,ded:r.ded||0,valorLiq:r.valor_liq||0,status,obs:r.obs||'',parentId:r.parent_id||null,adjType:r.adj_type||null};}
-function extractParcHist(obs){const m=(obs||'').match(/~~P:(\[[\s\S]*?\])~~/);try{return m?JSON.parse(m[1]):[]}catch{return[];}}
-function stripParcHist(obs){return(obs||'').replace(/\s*~~P:\[[\s\S]*?\]~~/,'').trim();}
 function fromBaixaRow(r){
   return{id:r.id,lancamentoId:r.lancamento_id,dataPgto:r.data_pgto||'',conta:r.conta||'',valor:r.valor||0,forma:r.forma||'',tipo:r.tipo||'',origem:r.origem||'manual',obs:r.obs||'',createdAt:r.created_at||''};
 }
@@ -281,14 +279,6 @@ function cashMovements(){
   });
   DATA.forEach(l=>{
     if(!l||l.status==='Cancelado'||getBaixas(l.id).length)return;
-    const hist=extractParcHist(l.obs||'');
-    if(hist.length){
-      hist.forEach((p,i)=>{
-        if(!p.d||parseMoney(p.v)<=0)return;
-        rows.push({...l,id:`legacy-${l.id}-${i}`,lancamentoId:l.id,dataPgto:p.d,dataExtrato:p.d,valorLiq:parseMoney(p.v),status:computedStatus(l),isBaixa:false,isPend:false});
-      });
-      return;
-    }
     const paid=legacyPaidAmount(l);
     if(paid>0&&l.dataPgto){
       rows.push({...l,id:`legacy-${l.id}`,lancamentoId:l.id,dataExtrato:l.dataPgto,valorLiq:paid,status:computedStatus(l),isBaixa:false,isPend:false});
