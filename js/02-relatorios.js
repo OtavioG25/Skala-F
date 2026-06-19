@@ -2075,17 +2075,26 @@ function renderDRE(c){
   const gTri=(cat,tipo)=>cat?groupRowsTri(cat,tipo):'';
 
   // KPI cards do trimestre selecionado
+  const triKpiRecBruta=triAgg.recOpBruta||0;
   const triKpiRecLiq=triAgg.recOpLiq||0;
+  const triKpiDespOp=triAgg.despOp||0;
+  const triKpiResOp=triAgg.resOp||0;
   const triKpiDesp=triAgg.totDesp||0;
   const triKpiLl=triAgg.ll||0;
   const triKpiMargin=triKpiRecLiq!==0?(triKpiLl/triKpiRecLiq*100):0;
+  const triKpiMarOp=triKpiRecLiq!==0?(triKpiResOp/triKpiRecLiq*100):0;
+  const triResOpCol=triKpiResOp>=0?'var(--teal)':'var(--red)';
+  const triMarOpCol=triKpiMarOp>=0?'var(--teal)':'var(--red)';
   const triLlCol=triKpiLl>=0?'var(--teal)':'var(--red)';
   const triMCol=triKpiMargin>=0?'var(--teal)':'var(--red)';
   const triLbl=triQ.lbl+' · '+YEAR;
-  const dreKpisTri=`<div style="display:flex;flex-direction:column;gap:12px">
-    ${kpiCard('Receita Líquida',fmtCard(triKpiRecLiq),triLbl,'var(--tx)','Receita Operacional Bruta menos Impostos e Taxas no trimestre.')}
-    ${kpiCard('Total Despesas',fmtCard(triKpiDesp),triLbl,'var(--tx)','Soma de todas as categorias de despesa lançadas no trimestre (regime de competência).')}
-    ${kpiCard('Lucro Líquido',fmtCard(triKpiLl),triLbl,triLlCol,'Resultado Operacional mais Receitas Não Operacionais menos Despesas Não Operacionais no trimestre.')}
+  const dreKpisTri=`<div class="dre-kpis-tri" style="display:grid;grid-template-columns:1fr 1fr;gap:12px;align-content:start">
+    ${kpiCard('Receita Bruta',fmtCard(triKpiRecBruta),triLbl,'var(--tx)','Soma de todas as receitas operacionais do trimestre (regime de competência), antes de Impostos e Custos Operacionais.')}
+    ${kpiCard('Despesas Operacionais',fmtCard(triKpiDespOp),triLbl,'var(--tx)','Soma das despesas operacionais do trimestre (exceto Pessoal, Impostos e Custos Operacionais).')}
+    ${kpiCard('Resultado Operacional',fmtCard(triKpiResOp),triLbl,triResOpCol,'Lucro Bruto − Total de Despesas Operacionais.')}
+    ${kpiCard('Margem Operacional',triKpiRecLiq!==0?triKpiMarOp.toFixed(1)+'%':'—',triLbl,triMarOpCol,'Resultado Operacional ÷ Receita Operacional Líquida × 100.')}
+    ${kpiCard('Total Despesas',fmtCard(triKpiDesp),triLbl,'var(--tx)','Soma de TODAS as saídas do trimestre: Impostos, Custos Operacionais, Pessoal, Despesas Operacionais e Despesas Não Operacionais.')}
+    ${kpiCard('Lucro Líquido',fmtCard(triKpiLl),triLbl,triLlCol,'Resultado Operacional + Receitas Não Operacionais − Despesas Não Operacionais.')}
     ${kpiCard('Margem Líquida',triKpiRecLiq!==0?triKpiMargin.toFixed(1)+'%':'—',triLbl,triMCol,'Lucro Líquido ÷ Receita Líquida × 100.')}
   </div>`;
 
@@ -2215,7 +2224,7 @@ function renderDRE(c){
           </table>
         </div>
       </div>
-      <div style="flex:1;min-width:0;display:flex;flex-direction:column;gap:12px;overflow-y:auto;padding:42px 0 0">
+      <div style="flex:1;min-width:0;overflow-y:auto;padding:42px 0 0">
         ${dreKpisTri}
       </div>
     </div>
