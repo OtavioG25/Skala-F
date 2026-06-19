@@ -444,6 +444,7 @@ function onDataVencBlur(el){
 
 let TAB='dashboard',prevTAB='',YEAR=new Date().getFullYear(),DASHBOARD_MONTH=new Date().getMonth(),editingId=null,_pickerYear=new Date().getFullYear();
 let dreViewMes=new Date().getMonth();
+let dreViewTri=Math.floor(new Date().getMonth()/3);
 let fluxoViewMes=new Date().getMonth();
 let fluxoDrillDown=null;
 let dreDrillDown=null;
@@ -1575,6 +1576,11 @@ function navDREMes(delta){
   renderDRE(document.getElementById('content'));
 }
 
+function navDRETri(delta){
+  dreViewTri=Math.max(0,Math.min(3,dreViewTri+delta));
+  renderDRE(document.getElementById('content'));
+}
+
 function setFluxoView(v){
   localStorage.setItem('skala_fluxo_view',v);
   renderFluxo(document.getElementById('content'));
@@ -2000,6 +2006,89 @@ function renderDRE(c){
     return`<tr class="dr"><td style="padding-left:28px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;font-style:italic;color:var(--tx2);font-size:11px">${lbl}${tipHtml}</td><td style="text-align:right;font-style:italic;font-size:12px;white-space:nowrap;color:${col}">${pct!==null?pct.toFixed(1)+'%':'—'}</td><td style="text-align:right;font-size:11px;white-space:nowrap;padding-right:10px;color:var(--tx3)">—</td></tr>`;
   }
 
+  // ── Visão Trimestral ─────────────────────────────────────────────
+  const QUARTERS=[
+    {lbl:'1º Trimestre',sub:'Jan–Mar',months:[0,1,2]},
+    {lbl:'2º Trimestre',sub:'Abr–Jun',months:[3,4,5]},
+    {lbl:'3º Trimestre',sub:'Jul–Set',months:[6,7,8]},
+    {lbl:'4º Trimestre',sub:'Out–Dez',months:[9,10,11]},
+  ];
+  const triQ=QUARTERS[dreViewTri];
+  const triMonths=triQ.months;
+  const totTri=k=>triMonths.reduce((s,mi)=>s+(dre[mi][k]||0),0);
+  const triAgg={};
+  triMonths.forEach(mi=>{ Object.keys(dre[mi]).forEach(k=>{ triAgg[k]=(triAgg[k]||0)+(dre[mi][k]||0); }); });
+
+  function rowTri(lbl,k,type='normal',groupId=null,parentId=null,neg=false,numSubs=0,drillInfo=null,tip=null){
+    const isTotal=type==='total',isSep=type==='sep',isGroup=type==='group',isSub=type==='sub',isResult=type==='result';
+    if(isSep) return`<tr class="sep"><td colspan="5" style="position:sticky;left:0;z-index:2;background:#eaf2e7">${lbl}</td></tr>`;
+    const expanded=groupId?(window._dreExpanded[groupId]===true):true;
+    const hasSubs=groupId&&!parentId&&numSubs>0;
+    const cells=triMonths.map(mi=>{
+      const v=(neg?-1:1)*(dre[mi][k]||0);
+      const hlSt=mi===curMonthIdx?';background:rgba(19,124,60,.06)':'';
+      return`<td class="${v<0?'neg':v>0?'pos':''}" style="font-size:11.5px${hlSt}">${v!==0?fmt(v):'—'}</td>`;
+    }).join('');
+    const tv=(neg?-1:1)*totTri(k);
+    const tdStyle=`padding-left:${isSub?40:isGroup?20:12}px;position:sticky;left:0;z-index:2;background:var(--s1)`;
+    let cls='dr';
+    if(isTotal||isResult) cls+=' bold';
+    if(isResult) cls+=' hl';
+    if(type==='lucro') cls+=' tot';
+    let style='';
+    if(parentId&&window._dreExpanded[parentId]!==true) style='display:none';
+    const toggleBtn=hasSubs?`<span onclick="toggleDRE('${groupId}')" style="cursor:pointer;margin-right:6px;font-size:10px;display:inline-block;width:12px">${expanded?'▼':'▶'}</span>`:`<span style="display:inline-block;width:18px"></span>`;
+    const tipHtml=tip?`<span class="kpi-info" onmouseenter="showTip(event,this.dataset.t)" data-t="${tip}" onmouseleave="hideTip()">?</span>`:'';
+    return`<tr class="${cls}" id="dre-row-tri-${groupId||k}" style="${style}">
+      <td style="${tdStyle}">${toggleBtn}${lbl}${tipHtml}</td>${cells}
+      <td class="${tv<0?'neg':tv>0?'pos':''} tc" style="font-weight:${isTotal||isResult||type==='lucro'?700:400}">${tv!==0?fmt(tv):'—'}</td>
+    </tr>`;
+  }
+
+  function rowTriPct(lbl,numKey,denKey,tip=null){
+    const cells=triMonths.map(mi=>{
+      const num=dre[mi][numKey]||0,den=dre[mi][denKey]||0;
+      const pct=den!==0?(num/den*100):null;
+      const hlSt=mi===curMonthIdx?';background:rgba(19,124,60,.06)':'';
+      const col=pct===null?'var(--tx3)':pct>=0?'var(--teal)':'var(--red)';
+      return`<td style="font-size:11px;font-style:italic;color:${col}${hlSt}">${pct!==null?pct.toFixed(1)+'%':'—'}</td>`;
+    }).join('');
+    const tNum=totTri(numKey),tDen=totTri(denKey);
+    const tPct=tDen!==0?(tNum/tDen*100):null;
+    const tCol=tPct===null?'var(--tx3)':tPct>=0?'var(--teal)':'var(--red)';
+    const tipHtml=tip?`<span class="kpi-info" onmouseenter="showTip(event,this.dataset.t)" data-t="${tip}" onmouseleave="hideTip()">?</span>`:'';
+    return`<tr class="dr"><td style="padding-left:28px;position:sticky;left:0;z-index:2;background:var(--s1);font-style:italic;color:var(--tx2);font-size:11px">${lbl}${tipHtml}</td>${cells}<td class="tc" style="font-style:italic;font-size:11px;color:${tCol}">${tPct!==null?tPct.toFixed(1)+'%':'—'}</td></tr>`;
+  }
+
+  function groupRowsTri(cat,tipo){
+    const neg=tipo==='D';
+    const k=tipo==='R'?'r_'+(cat.slug||slugify(cat.nome)):'d_'+(cat.slug||slugify(cat.nome));
+    const gid=k;
+    const subs=(cat.subs||[]).sort((a,b)=>a.ordem-b.ordem);
+    let html=rowTri(cat.nome,k,'group',gid,null,neg,subs.length,{cat:cat.nome,sub:'',tipo});
+    subs.forEach(sub=>{
+      const sk=tipo==='R'?'rs_'+(sub.slug||slugify(sub.nome)):'ds_'+(sub.slug||slugify(sub.nome));
+      html+=rowTri(sub.nome,sk,'sub',sk,gid,neg,0,{cat:cat.nome,sub:sub.nome,tipo});
+    });
+    return html;
+  }
+  const gTri=(cat,tipo)=>cat?groupRowsTri(cat,tipo):'';
+
+  // KPI cards do trimestre selecionado
+  const triKpiRecLiq=triAgg.recOpLiq||0;
+  const triKpiDesp=triAgg.totDesp||0;
+  const triKpiLl=triAgg.ll||0;
+  const triKpiMargin=triKpiRecLiq!==0?(triKpiLl/triKpiRecLiq*100):0;
+  const triLlCol=triKpiLl>=0?'var(--teal)':'var(--red)';
+  const triMCol=triKpiMargin>=0?'var(--teal)':'var(--red)';
+  const triLbl=triQ.lbl+' · '+YEAR;
+  const dreKpisTri=`<div style="display:flex;flex-direction:column;gap:12px">
+    ${kpiCard('Receita Líquida',fmtCard(triKpiRecLiq),triLbl,'var(--tx)','Receita Operacional Bruta menos Impostos e Taxas no trimestre.')}
+    ${kpiCard('Total Despesas',fmtCard(triKpiDesp),triLbl,'var(--tx)','Soma de todas as categorias de despesa lançadas no trimestre (regime de competência).')}
+    ${kpiCard('Lucro Líquido',fmtCard(triKpiLl),triLbl,triLlCol,'Resultado Operacional mais Receitas Não Operacionais menos Despesas Não Operacionais no trimestre.')}
+    ${kpiCard('Margem Líquida',triKpiRecLiq!==0?triKpiMargin.toFixed(1)+'%':'—',triLbl,triMCol,'Lucro Líquido ÷ Receita Líquida × 100.')}
+  </div>`;
+
   const segBtn=(v,lbl)=>`<button class="dre-seg-btn${dreView===v?' on':''}" onclick="setDREView('${v}')">${lbl}</button>`;
 
   c.innerHTML=`
@@ -2014,9 +2103,11 @@ function renderDRE(c){
     <div class="tbl-hdr" style="display:flex;align-items:center;justify-content:space-between">
       <div class="sec-ttl">DRE — Regime de Competência <span class="yr-pill">${YEAR}</span></div>
       <div style="display:flex;gap:6px;align-items:center">
-        <div class="dre-seg">${segBtn('anual','Anual')}${segBtn('mensal','Mensal')}</div>
+        <div class="dre-seg">${segBtn('anual','Anual')}${segBtn('trimestral','Trimestral')}${segBtn('mensal','Mensal')}</div>
         ${dreView==='anual'?`
           <button class="btn btn-ghost" style="font-size:12px;${showPct?'border-color:var(--brand);color:var(--brand);background:rgba(19,124,60,.06)':''}" onclick="toggleDREPct()">% Mensal</button>
+          <button class="btn btn-ghost" style="font-size:12px" onclick="toggleAllDRE()">⊞ Expandir/Recolher tudo</button>
+        `:dreView==='trimestral'?`
           <button class="btn btn-ghost" style="font-size:12px" onclick="toggleAllDRE()">⊞ Expandir/Recolher tudo</button>
         `:`
           <button class="btn btn-ghost" style="font-size:12px" onclick="toggleAllDREMes()">⊞ Expandir/Recolher tudo</button>
@@ -2073,6 +2164,60 @@ function renderDRE(c){
         <div id="dre-line-plot" style="height:220px;position:relative"></div>
       </div>
     </div>
+    </div>
+    `:dreView==='trimestral'?`
+    <div style="flex:1;overflow:hidden;padding:0 20px 16px;display:flex;gap:20px;min-height:0">
+      <div style="flex:0 0 52%;display:flex;flex-direction:column;min-height:0">
+        <div class="dre-mes-nav">
+          <button onclick="navDRETri(-1)" ${dreViewTri===0?'disabled':''}>‹</button>
+          <span>${triQ.lbl} <span class="yr-pill" style="font-size:11px">${YEAR}</span></span>
+          <button onclick="navDRETri(1)" ${dreViewTri===3?'disabled':''}>›</button>
+        </div>
+        <div class="tbl-scroll" style="flex:1;overflow-y:auto">
+          <table class="fin-tbl" id="dre-table-tri" style="width:100%;table-layout:fixed;min-width:0">
+            <colgroup>
+              <col>
+              ${triMonths.map(()=>`<col style="width:110px">`).join('')}
+              <col style="width:110px">
+            </colgroup>
+            <thead><tr>
+              <th style="text-align:left;padding-left:32px;position:sticky;left:0;z-index:3;background:var(--s2)">Descrição</th>
+              ${triMonths.map(mi=>{
+                const hlSt=mi===curMonthIdx?';background-image:linear-gradient(rgba(242,195,0,.28),rgba(242,195,0,.28));color:#7a6200;font-weight:700':'';
+                return`<th style="text-align:right${hlSt}">${MONTHS[mi]}</th>`;
+              }).join('')}
+              <th style="text-align:right;color:var(--brand);font-weight:700">Total</th>
+            </tr></thead>
+            <tbody>
+              ${rowTri('RECEITAS OPERACIONAIS','','sep')}
+              ${recOpCats.map(cat=>groupRowsTri(cat,'R')).join('')}
+              ${rowTri('(=) RECEITA OPERACIONAL BRUTA','recOpBruta','result',null,null,false,0,null,'Soma de todas as receitas operacionais lançadas no período (regime de competência).')}
+
+              ${rowTri('DEDUÇÕES','','sep')}
+              ${impostoCat?gTri(impostoCat,'D'):''}
+              ${custosOpCat?gTri(custosOpCat,'D'):''}
+              ${rowTri('(=) RECEITA OPERACIONAL LÍQUIDA','recOpLiq','result',null,null,false,0,null,'Receita Operacional Bruta − Impostos − Custos Operacionais.')}
+
+              ${pessoalCats.length?`${rowTri('DESPESAS COM PESSOAL','','sep')}${pessoalCats.map(cat=>gTri(cat,'D')).join('')}${rowTri('(=) Total Pessoal','cusPessoal','total',null,null,true,0,null,'Soma das despesas com pessoal: Pro-labore/Retiradas, Empregados e Recrutamento.')}`:''}
+              ${rowTri('(=) LUCRO BRUTO','lucOpBruto','result',null,null,false,0,null,'Receita Operacional Líquida − Total Pessoal.')}
+              ${rowTriPct('(%) Margem Bruta','lucOpBruto','recOpBruta','Lucro Bruto ÷ Receita Operacional Bruta × 100.')}
+
+              ${despOpCats.length?`${rowTri('DESPESAS OPERACIONAIS','','sep')}${despOpCats.map(cat=>gTri(cat,'D')).join('')}${rowTri('(=) Total Despesas Operacionais','despOp','total',null,null,true,0,null,'Soma de todas as despesas operacionais (exceto Pessoal, Impostos e Custos Operacionais).')}`:''}
+              ${rowTri('(=) RESULTADO OPERACIONAL','resOp','result',null,null,false,0,null,'Lucro Bruto − Total de Despesas Operacionais.')}
+              ${rowTriPct('(%) Margem Operacional','resOp','recOpLiq','Resultado Operacional ÷ Receita Operacional Líquida × 100.')}
+
+              ${recNaoOpCats.length?`${rowTri('RECEITAS NÃO OPERACIONAIS','','sep')}${recNaoOpCats.map(cat=>groupRowsTri(cat,'R')).join('')}${rowTri('(=) RECEITAS NÃO OPERACIONAIS','outrasRec','total',null,null,false,0,null,'Receitas fora da atividade operacional do escritório.')}`:''}
+              ${despNaoOpCats.length?`${rowTri('DESPESAS NÃO OPERACIONAIS','','sep')}${despNaoOpCats.map(cat=>groupRowsTri(cat,'D')).join('')}${rowTri('(=) DESPESAS NÃO OPERACIONAIS','despNaoOp','total',null,null,true,0,null,'Despesas fora da atividade operacional do escritório.')}`:''}
+
+              ${rowTri('RESULTADO LÍQUIDO','ll','lucro',null,null,false,0,null,'Resultado Operacional + Receitas Não Operacionais − Despesas Não Operacionais.')}
+              ${rowTriPct('(%) Margem Líquida','ll','recOpLiq','Resultado Líquido ÷ Receita Operacional Líquida × 100.')}
+            </tbody>
+          </table>
+        </div>
+      </div>
+      <div style="flex:1;min-width:0;display:flex;flex-direction:column;gap:12px;overflow-y:auto;padding:42px 0 0">
+        ${dreKpisTri}
+      </div>
     </div>
     `:`
     ${dreKpisMes}
@@ -2132,7 +2277,7 @@ function renderDRE(c){
     `}
   </div>`;
   if(dreView==='anual') setTimeout(()=>drawDRELineChart(),0);
-  else setTimeout(()=>drawDREMesChart(),0);
+  else if(dreView==='mensal') setTimeout(()=>drawDREMesChart(),0);
 
   // #67 — Drill-down panel
   const oldDreDrill=document.getElementById('dre-drill');if(oldDreDrill)oldDreDrill.remove();
