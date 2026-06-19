@@ -2685,8 +2685,12 @@ function renderFluxo(c){
               ${rowFluxoTri('(=) RESULTADO OPERACIONAL','resultadoOp','tot')}
               ${hasNaoOp?`
                 ${rowFluxoTri('NÃO-OPERACIONAL','','sep')}
+                ${rowFluxoTri('ENTRADAS','','subsep')}
                 ${entradasNaoOpRowsTri}
+                ${rowFluxoTri('TOTAL ENTRADAS NÃO OPERACIONAIS','entradasNaoOp','result')}
+                ${rowFluxoTri('SAÍDAS','','subsep')}
                 ${saidasNaoOpRowsTri}
+                ${rowFluxoTri('TOTAL SAÍDAS NÃO OPERACIONAIS','saidasNaoOp','result',null,null,true)}
                 ${rowFluxoTri('(=) RESULTADO NÃO-OPERACIONAL','resultadoNaoOp','tot')}
               `:''}
               ${rowFluxoTri('SALDOS','','sep')}
@@ -2850,8 +2854,12 @@ function renderFluxo(c){
               ${rowFluxoMes('(=) RESULTADO OPERACIONAL','resultadoOp','tot')}
               ${hasNaoOp?`
                 ${rowFluxoMes('NÃO-OPERACIONAL','','sep')}
+                ${rowFluxoMes('ENTRADAS','','subsep')}
                 ${entradasNaoOpRowsMes}
+                ${rowFluxoMes('TOTAL ENTRADAS NÃO OPERACIONAIS','entradasNaoOp','result')}
+                ${rowFluxoMes('SAÍDAS','','subsep')}
                 ${saidasNaoOpRowsMes}
+                ${rowFluxoMes('TOTAL SAÍDAS NÃO OPERACIONAIS','saidasNaoOp','result',null,null,true)}
                 ${rowFluxoMes('(=) RESULTADO NÃO-OPERACIONAL','resultadoNaoOp','tot')}
               `:''}
               ${rowFluxoMes('SALDOS','','sep')}
@@ -2986,8 +2994,12 @@ function renderFluxo(c){
     ${row('(=) RESULTADO OPERACIONAL','resultadoOp','tot')}
     ${hasNaoOp?`
     ${sep('NÃO-OPERACIONAL')}
+    ${subSep('ENTRADAS')}
     ${entradasNaoOpRows}
+    ${row('TOTAL ENTRADAS NÃO OPERACIONAIS','entradasNaoOp','result')}
+    ${subSep('SAÍDAS')}
     ${saidasNaoOpRows}
+    ${row('TOTAL SAÍDAS NÃO OPERACIONAIS','saidasNaoOp','result',null,null,true)}
     ${row('(=) RESULTADO NÃO-OPERACIONAL','resultadoNaoOp','tot')}
     `:''}
     ${sep('SALDOS')}
