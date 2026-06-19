@@ -446,6 +446,7 @@ let TAB='dashboard',prevTAB='',YEAR=new Date().getFullYear(),DASHBOARD_MONTH=new
 let dreViewMes=new Date().getMonth();
 let dreViewTri=Math.floor(new Date().getMonth()/3);
 let fluxoViewMes=new Date().getMonth();
+let fluxoViewTri=Math.floor(new Date().getMonth()/3);
 let fluxoDrillDown=null;
 let dreDrillDown=null;
 const TABS=[
@@ -1591,6 +1592,11 @@ function navFluxoMes(delta){
   renderFluxo(document.getElementById('content'));
 }
 
+function navFluxoTri(delta){
+  fluxoViewTri=Math.max(0,Math.min(3,fluxoViewTri+delta));
+  renderFluxo(document.getElementById('content'));
+}
+
 function exportDREPDF(){
   document.body.classList.add('printing');
   window.onafterprint=()=>document.body.classList.remove('printing');
@@ -2525,7 +2531,231 @@ function renderFluxo(c){
     ${fKpi('Saldo Final',fmtCard(kpiSF),lastMesData>=0?`${MONTHS_FULL[lastMesData]}/${YEAR}`:'—',kpiSFCol)}
   </div>`;
 
-  const toolbar=`<div class="tbl-hdr" style="display:flex;align-items:center;justify-content:space-between;flex-wrap:wrap;gap:8px"><div class="sec-ttl">Fluxo de Caixa — Regime de Caixa <span class="yr-pill">${YEAR}</span></div><div style="display:flex;gap:6px;align-items:center"><div class="dre-seg"><button class="dre-seg-btn${fluxoView==='anual'?' on':''}" onclick="setFluxoView('anual')">Anual</button><button class="dre-seg-btn${fluxoView==='mensal'?' on':''}" onclick="setFluxoView('mensal')">Mensal</button></div>${fluxoView==='anual'?`<button class="btn btn-ghost" style="font-size:12px" onclick="exportFluxoExcel()">${appIcon('download')}Exportar Excel</button><button class="btn btn-ghost" style="font-size:12px" onclick="toggleAllFluxo()">⊞ Expandir/Recolher tudo</button><button class="btn btn-ghost" style="font-size:12px;${showFluxoProj?'border-color:#58a6ff;color:#58a6ff':''}" onclick="toggleFluxoProj()">${appIcon('chart')} ${showFluxoProj?'Ocultar projetado':'Fluxo Projetado'}</button>`:`<button class="btn btn-ghost" style="font-size:12px" onclick="toggleAllFluxoMes()">⊞ Expandir/Recolher tudo</button>`}</div></div>`;
+  const toolbar=`<div class="tbl-hdr" style="display:flex;align-items:center;justify-content:space-between;flex-wrap:wrap;gap:8px"><div class="sec-ttl">Fluxo de Caixa — Regime de Caixa <span class="yr-pill">${YEAR}</span></div><div style="display:flex;gap:6px;align-items:center"><div class="dre-seg"><button class="dre-seg-btn${fluxoView==='anual'?' on':''}" onclick="setFluxoView('anual')">Anual</button><button class="dre-seg-btn${fluxoView==='trimestral'?' on':''}" onclick="setFluxoView('trimestral')">Trimestral</button><button class="dre-seg-btn${fluxoView==='mensal'?' on':''}" onclick="setFluxoView('mensal')">Mensal</button></div>${fluxoView==='anual'?`<button class="btn btn-ghost" style="font-size:12px" onclick="exportFluxoExcel()">${appIcon('download')}Exportar Excel</button><button class="btn btn-ghost" style="font-size:12px" onclick="toggleAllFluxo()">⊞ Expandir/Recolher tudo</button><button class="btn btn-ghost" style="font-size:12px;${showFluxoProj?'border-color:#58a6ff;color:#58a6ff':''}" onclick="toggleFluxoProj()">${appIcon('chart')} ${showFluxoProj?'Ocultar projetado':'Fluxo Projetado'}</button>`:fluxoView==='trimestral'?`<button class="btn btn-ghost" style="font-size:12px" onclick="toggleAllFluxoTri()">⊞ Expandir/Recolher tudo</button>`:`<button class="btn btn-ghost" style="font-size:12px" onclick="toggleAllFluxoMes()">⊞ Expandir/Recolher tudo</button>`}</div></div>`;
+
+  if(fluxoView==='trimestral'){
+    const QUARTERS=[
+      {lbl:'1º Trimestre',sub:'Jan–Mar',months:[0,1,2]},
+      {lbl:'2º Trimestre',sub:'Abr–Jun',months:[3,4,5]},
+      {lbl:'3º Trimestre',sub:'Jul–Set',months:[6,7,8]},
+      {lbl:'4º Trimestre',sub:'Out–Dez',months:[9,10,11]},
+    ];
+    const triQ=QUARTERS[fluxoViewTri];
+    const triMonths=triQ.months;
+    const totTri=k=>triMonths.reduce((s,mi)=>s+(f[mi][k]||0),0);
+    if(!window._fluxoExpandedTri)window._fluxoExpandedTri={};
+
+    function rowFluxoTri(lbl,k,type='normal',groupId=null,parentId=null,neg=false,numSubs=0,drillInfo=null){
+      const isSep=type==='sep',isSubSep=type==='subsep';
+      const isGroup=type==='group',isSub=type==='sub';
+      if(isSep) return`<tr class="sep"><td colspan="5" style="position:sticky;left:0;z-index:2;background:#eaf2e7">${lbl}</td></tr>`;
+      if(isSubSep) return`<tr class="sep"><td colspan="5" style="padding-left:28px;font-size:9px;color:${k||'var(--tx3)'};position:sticky;left:0;z-index:2;background:#eaf2e7">${lbl}</td></tr>`;
+      const hasSubs=groupId&&!parentId&&numSubs>0;
+      const expanded=groupId?(window._fluxoExpandedTri[groupId]===true):true;
+      let style='';
+      if(parentId&&window._fluxoExpandedTri[parentId]!==true)style='display:none';
+      const cells=triMonths.map(mi=>{
+        const v=(neg?-1:1)*(f[mi][k]||0);
+        const hlSt=mi===curMonthIdx?';background:rgba(19,124,60,.06)':'';
+        const col=v<0?'var(--red)':v>0?'var(--teal)':'var(--tx3)';
+        if(drillInfo&&v!==0){
+          const di=window._fluxoDrillCells.length;
+          window._fluxoDrillCells.push({cat:drillInfo.cat,sub:drillInfo.sub,tipo:drillInfo.tipo,mes:mi});
+          return`<td style="text-align:right;color:${col};font-size:11.5px;white-space:nowrap;cursor:pointer;text-decoration:underline dotted${hlSt}" onclick="openFluxoDrillByIdx(${di})">${fmt(v)}</td>`;
+        }
+        return`<td style="text-align:right;color:${col};font-size:11.5px;white-space:nowrap${hlSt}">${v!==0?fmt(v):'—'}</td>`;
+      }).join('');
+      const tv=(neg?-1:1)*totTri(k);
+      const tCol=tv<0?'var(--red)':tv>0?'var(--teal)':'var(--tx3)';
+      let cls='dr';
+      if(type==='total'||type==='result')cls+=' bold';
+      if(type==='result')cls+=' hl';
+      if(type==='tot'||type==='tot-bal')cls+=' tot';
+      const indent=isSub?40:isGroup?20:12;
+      const tdStyle=`padding-left:${indent}px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap`;
+      const toggleBtn=hasSubs?`<span onclick="toggleFluxoTri('${groupId}')" style="cursor:pointer;margin-right:6px;font-size:10px;display:inline-block;width:12px;flex-shrink:0">${expanded?'▼':'▶'}</span>`:`<span style="display:inline-block;width:18px;flex-shrink:0"></span>`;
+      return`<tr class="${cls}" style="${style}"><td style="${tdStyle}">${toggleBtn}${lbl}</td>${cells}<td style="text-align:right;color:${tCol};font-size:11.5px;white-space:nowrap;padding-right:10px;font-weight:${type==='total'||type==='result'||type==='tot'||type==='tot-bal'?700:400}">${tv!==0?fmt(tv):'—'}</td></tr>`;
+    }
+
+    function groupRowsFluxoTri(cat,tipo){
+      const neg=tipo==='D';
+      const k=(tipo==='R'?'r_':'d_')+(cat.slug||slugify(cat.nome));
+      const subs=(cat.subs||[]).sort((a,b)=>(a.ordem||0)-(b.ordem||0));
+      let html=rowFluxoTri(cat.nome,k,'group',k,null,neg,subs.length,{cat:cat.nome,sub:'',tipo});
+      subs.forEach(sub=>{
+        const sk=(tipo==='R'?'rs_':'ds_')+(sub.slug||slugify(sub.nome));
+        html+=rowFluxoTri(sub.nome,sk,'sub',sk,k,neg,0,{cat:cat.nome,sub:sub.nome,tipo});
+      });
+      return html;
+    }
+
+    const entradasOpRowsTri=recCatsVis.filter(c=>(c.fluxo||'operacional')!=='nao_operacional').map(cat=>groupRowsFluxoTri(cat,'R')).join('');
+    const saidasOpRowsTri=despCatsVis.filter(c=>(c.fluxo||'operacional')!=='nao_operacional').map(cat=>groupRowsFluxoTri(cat,'D')).join('');
+    const entradasNaoOpRowsTri=recCatsVis.filter(c=>(c.fluxo||'operacional')==='nao_operacional').map(cat=>groupRowsFluxoTri(cat,'R')).join('');
+    const saidasNaoOpRowsTri=despCatsVis.filter(c=>(c.fluxo||'operacional')==='nao_operacional').map(cat=>groupRowsFluxoTri(cat,'D')).join('');
+
+    const contaRowsTri=contaSet.map(conta=>{
+      const cells=triMonths.map(mi=>{
+        const v=contaFlows[conta][mi];
+        const col=v<0?'var(--red)':v>0?'var(--teal)':'var(--tx3)';
+        const hlSt=mi===curMonthIdx?';background:rgba(19,124,60,.06)':'';
+        return`<td style="text-align:right;color:${col};font-size:11.5px;white-space:nowrap${hlSt}">${v!==0?fmt(v):'—'}</td>`;
+      }).join('');
+      const tv=triMonths.reduce((s,mi)=>s+contaFlows[conta][mi],0);
+      const tCol=tv<0?'var(--red)':tv>0?'var(--teal)':'var(--tx3)';
+      return`<tr class="dr"><td style="padding-left:28px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap"><span style="display:inline-block;width:18px;flex-shrink:0"></span>${esc(conta)}</td>${cells}<td style="text-align:right;color:${tCol};font-size:11.5px;white-space:nowrap;padding-right:10px">${tv!==0?fmt(tv):'—'}</td></tr>`;
+    }).join('');
+    const contaSaldoFinRowsTri=contaSet.map(conta=>{
+      const cells=triMonths.map(mi=>{
+        const v=contaSaldoFin[conta][mi];
+        const col=v<0?'var(--red)':v>0?'var(--teal)':'var(--tx3)';
+        const hlSt=mi===curMonthIdx?';background:rgba(19,124,60,.06)':'';
+        return`<td style="text-align:right;color:${col};font-size:11.5px;white-space:nowrap${hlSt}">${v!==0?fmt(v):'—'}</td>`;
+      }).join('');
+      const lastMi=triMonths[triMonths.length-1];
+      const tv=contaSaldoFin[conta][lastMi];
+      const tCol=tv<0?'var(--red)':tv>0?'var(--teal)':'var(--tx3)';
+      return`<tr class="dr"><td style="padding-left:28px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap"><span style="display:inline-block;width:18px;flex-shrink:0"></span>${esc(conta)}</td>${cells}<td style="text-align:right;color:${tCol};font-size:11.5px;white-space:nowrap;padding-right:10px">${tv!==0?fmt(tv):'—'}</td></tr>`;
+    }).join('');
+    const sfCells=triMonths.map(mi=>{
+      const v=totalSaldoFinVals[mi];
+      const col=v<0?'var(--red)':v>0?'var(--teal)':'var(--tx3)';
+      const hlSt=mi===curMonthIdx?';background:rgba(19,124,60,.06)':'';
+      return`<td style="text-align:right;color:${col};font-size:11.5px;white-space:nowrap;font-weight:700${hlSt}">${v!==0?fmt(v):'—'}</td>`;
+    }).join('');
+    const lastTriMi=triMonths[triMonths.length-1];
+    const sfTv=totalSaldoFinVals[lastTriMi];
+    const sfTCol=sfTv<0?'var(--red)':sfTv>0?'var(--teal)':'var(--tx3)';
+    const totalSaldoFinRowTri=`<tr class="dr tot"><td style="padding-left:12px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap"><span style="display:inline-block;width:18px;flex-shrink:0"></span>SALDO FINAL TOTAL</td>${sfCells}<td style="text-align:right;color:${sfTCol};font-size:11.5px;white-space:nowrap;padding-right:10px;font-weight:700">${sfTv!==0?fmt(sfTv):'—'}</td></tr>`;
+
+    // KPI cards do trimestre
+    const triEnt=triMonths.reduce((s,mi)=>s+(f[mi].entradasOp||0),0);
+    const triSai=triMonths.reduce((s,mi)=>s+(f[mi].saidasOp||0),0);
+    const triRes=triMonths.reduce((s,mi)=>s+(f[mi].resultadoOp||0),0);
+    const triVar=triMonths.reduce((s,mi)=>s+(f[mi].saldoOp||0),0);
+    const firstTriMi=triMonths[0];
+    const triSaldoIni=firstTriMi===0?(totalSaldoFinVals[0]-(f[0].saldoOp||0)):totalSaldoFinVals[firstTriMi-1];
+    const triSaldoFim=totalSaldoFinVals[lastTriMi];
+    const triResCol=triRes>=0?'var(--teal)':'var(--red)';
+    const triVarCol=triVar>=0?'var(--teal)':'var(--red)';
+    const triSIniCol=triSaldoIni>=0?'var(--teal)':'var(--red)';
+    const triSFimCol=triSaldoFim>=0?'var(--teal)':'var(--red)';
+    const triLbl=triQ.lbl+' · '+YEAR;
+    const fKpiTri=(lbl,val,sub,col,tip)=>`<div class="kpi" style="align-self:start"><div class="kpi-lbl" style="display:flex;align-items:center">${lbl}${tip?`<span class="kpi-info" onmouseenter="showTip(event,this.dataset.t)" data-t="${tip}" onmouseleave="hideTip()">?</span>`:''}</div><div class="kpi-val" style="color:${col}">${val}</div><div class="kpi-sub">${sub}</div></div>`;
+    const fluxoKpisTri=`<div style="display:grid;grid-template-columns:1fr 1fr;gap:12px;align-content:start">
+      ${fKpiTri('Total Entradas',fmtCard(triEnt),triLbl,'var(--tx)','Soma de todas as entradas operacionais no trimestre (regime de caixa).')}
+      ${fKpiTri('Total Saídas',fmtCard(triSai),triLbl,'var(--tx)','Soma de todas as saídas operacionais no trimestre (regime de caixa).')}
+      ${fKpiTri('Resultado Operacional',fmtCard(triRes),triLbl,triResCol,'Total Entradas − Total Saídas no trimestre.')}
+      ${fKpiTri('Variação de Caixa',fmtCard(triVar),triLbl,triVarCol,'Variação total do caixa no trimestre (operacional + não-operacional).')}
+      ${fKpiTri('Saldo Inicial',fmtCard(triSaldoIni),'Início do trimestre',triSIniCol,'Saldo final do mês anterior ao trimestre selecionado.')}
+      ${fKpiTri('Saldo Final',fmtCard(triSaldoFim),'Fim do trimestre',triSFimCol,'Saldo final no último mês do trimestre selecionado.')}
+    </div>`;
+
+    c.innerHTML=`<div class="tbl-wrap" style="display:flex;flex-direction:column;height:calc(100vh - 116px);overflow:visible">${toolbar}
+    <div style="flex:1;overflow:hidden;padding:0 20px 16px;display:flex;gap:20px;min-height:0">
+      <div style="flex:0 0 52%;display:flex;flex-direction:column;min-height:0">
+        <div class="dre-mes-nav">
+          <button onclick="navFluxoTri(-1)" ${fluxoViewTri===0?'disabled':''}>‹</button>
+          <span>${triQ.lbl} <span class="yr-pill" style="font-size:11px">${YEAR}</span></span>
+          <button onclick="navFluxoTri(1)" ${fluxoViewTri===3?'disabled':''}>›</button>
+        </div>
+        <div class="tbl-scroll" style="flex:1;overflow-y:auto">
+          <table class="fin-tbl" style="width:100%;table-layout:fixed;min-width:0">
+            <colgroup>
+              <col>
+              ${triMonths.map(()=>`<col style="width:110px">`).join('')}
+              <col style="width:110px">
+            </colgroup>
+            <thead><tr>
+              <th style="text-align:left;padding-left:32px">Descrição</th>
+              ${triMonths.map(mi=>{
+                const hlSt=mi===curMonthIdx?';background-image:linear-gradient(rgba(242,195,0,.28),rgba(242,195,0,.28));color:#7a6200;font-weight:700':'';
+                return`<th style="text-align:right${hlSt}">${MONTHS[mi]}</th>`;
+              }).join('')}
+              <th style="text-align:right;color:var(--brand);font-weight:700;padding-right:10px">Total</th>
+            </tr></thead>
+            <tbody>
+              ${rowFluxoTri('FLUXO OPERACIONAL','','sep')}
+              ${rowFluxoTri('ENTRADAS','','subsep')}
+              ${entradasOpRowsTri}
+              ${rowFluxoTri('TOTAL ENTRADAS OPERACIONAIS','entradasOp','result')}
+              ${rowFluxoTri('SAÍDAS','','subsep')}
+              ${saidasOpRowsTri}
+              ${rowFluxoTri('TOTAL SAÍDAS OPERACIONAIS','saidasOp','result',null,null,true)}
+              ${rowFluxoTri('(=) RESULTADO OPERACIONAL','resultadoOp','tot')}
+              ${hasNaoOp?`
+                ${rowFluxoTri('NÃO-OPERACIONAL','','sep')}
+                ${entradasNaoOpRowsTri}
+                ${saidasNaoOpRowsTri}
+                ${rowFluxoTri('(=) RESULTADO NÃO-OPERACIONAL','resultadoNaoOp','tot')}
+              `:''}
+              ${rowFluxoTri('SALDOS','','sep')}
+              ${rowFluxoTri('VARIAÇÃO NO PERÍODO','','subsep')}
+              ${contaRowsTri}
+              ${rowFluxoTri('VARIAÇÃO TOTAL DE CAIXA','saldoOp','tot')}
+              ${rowFluxoTri('SALDO FINAL POR CONTA','var(--blue)','subsep')}
+              ${contaSaldoFinRowsTri}
+              ${totalSaldoFinRowTri}
+            </tbody>
+          </table>
+        </div>
+      </div>
+      <div style="flex:1;min-width:0;overflow-y:auto;padding:42px 0 0">
+        ${fluxoKpisTri}
+      </div>
+    </div></div>`;
+
+    const oldDrillTri=document.getElementById('fluxo-drill');if(oldDrillTri)oldDrillTri.remove();
+    if(fluxoDrillDown){
+      const d=fluxoDrillDown;
+      const items=cashMovements().filter(l=>{
+        if((l.doc||'').startsWith('TRANSF#'))return false;
+        if(l.tipo!==d.tipo||l.cat!==d.cat)return false;
+        if(d.sub&&l.sub!==d.sub)return false;
+        if(!l.dataPgto||getY(l.dataPgto)!==YEAR||getM(l.dataPgto)!==d.mes)return false;
+        return true;
+      }).sort((a,b)=>(a.dataPgto||'').localeCompare(b.dataPgto||''));
+      const total=items.reduce((s,l)=>s+parseMoney(l.valorLiq),0);
+      const catTitle=d.sub?`${esc(d.cat)} › ${esc(d.sub)}`:esc(d.cat);
+      const drillRows=items.map(l=>`<tr style="cursor:pointer;border-bottom:1px solid var(--bd2)" onclick="openEdit('${l.lancamentoId||l.id}')">
+        <td style="font-size:11px;padding:7px 8px;white-space:nowrap">${dateBR(l.dataPgto)}</td>
+        <td style="font-size:11px;padding:7px 8px;max-width:160px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;color:var(--tx)">${esc(l.desc||l.sub||l.cat)}</td>
+        <td style="font-size:11px;padding:7px 8px;color:var(--tx2);white-space:nowrap">${esc(l.conta||'—')}</td>
+        <td style="font-size:11px;padding:7px 8px;text-align:right;white-space:nowrap;color:${l.tipo==='R'?'var(--teal)':'var(--red)'};font-weight:600">${fmt(l.valorLiq)}</td>
+      </tr>`).join('');
+      const panel=document.createElement('div');
+      panel.id='fluxo-drill';
+      panel.style.cssText='position:fixed;right:0;top:0;height:100vh;width:480px;background:var(--s1);border-left:1px solid var(--bd);box-shadow:-4px 0 24px rgba(0,0,0,.14);z-index:200;display:flex;flex-direction:column;overflow:hidden';
+      panel.innerHTML=`
+        <div style="padding:16px 20px;border-bottom:1px solid var(--bd);display:flex;align-items:flex-start;justify-content:space-between;gap:12px;flex-shrink:0">
+          <div>
+            <div style="font-size:13px;font-weight:700;color:var(--tx)">${catTitle}</div>
+            <div style="font-size:12px;color:var(--tx2);margin-top:3px">${MONTHS_FULL[d.mes]} ${YEAR} · ${items.length} lançamento${items.length!==1?'s':''}</div>
+          </div>
+          <button onclick="closeFluxoDrill()" style="background:none;border:none;cursor:pointer;color:var(--tx2);font-size:22px;line-height:1;padding:0 4px;flex-shrink:0;margin-top:-2px" title="Fechar">×</button>
+        </div>
+        ${items.length?`
+        <div style="flex:1;overflow-y:auto">
+          <table style="width:100%;border-collapse:collapse">
+            <thead><tr style="border-bottom:2px solid var(--bd)">
+              <th style="font-size:10px;font-weight:700;text-align:left;padding:7px 8px;color:var(--tx2);letter-spacing:.06em;text-transform:uppercase">Data</th>
+              <th style="font-size:10px;font-weight:700;text-align:left;padding:7px 8px;color:var(--tx2);letter-spacing:.06em;text-transform:uppercase">Descrição</th>
+              <th style="font-size:10px;font-weight:700;text-align:left;padding:7px 8px;color:var(--tx2);letter-spacing:.06em;text-transform:uppercase">Conta</th>
+              <th style="font-size:10px;font-weight:700;text-align:right;padding:7px 8px;color:var(--tx2);letter-spacing:.06em;text-transform:uppercase">Valor</th>
+            </tr></thead>
+            <tbody>${drillRows}</tbody>
+          </table>
+        </div>
+        <div style="padding:12px 20px;border-top:1px solid var(--bd);display:flex;align-items:center;justify-content:space-between;flex-shrink:0;background:var(--s2)">
+          <span style="font-size:12px;color:var(--tx2);font-weight:600">Total</span>
+          <strong style="font-size:14px;color:${d.tipo==='R'?'var(--teal)':'var(--red)'}">${fmt(total)}</strong>
+        </div>`
+        :`<div style="flex:1;display:flex;align-items:center;justify-content:center;color:var(--tx3);font-size:13px">Nenhum lançamento encontrado</div>`}
+      `;
+      document.body.appendChild(panel);
+    }
+    return;
+  }
 
   if(fluxoView==='mensal'){
     const fluxoM=f[fluxoViewMes];
@@ -2847,6 +3077,21 @@ function toggleAllFluxoMes(){
   const allKeys=[...recCats,...despCats].map(c=>(c.tipo==='R'?'r_':'d_')+(c.slug||slugify(c.nome)));
   const allExpanded=allKeys.length>0&&allKeys.every(k=>window._fluxoExpandedMes[k]===true);
   allKeys.forEach(k=>{window._fluxoExpandedMes[k]=!allExpanded;});
+  _saveScroll(renderFluxo);
+}
+
+function toggleFluxoTri(groupId){
+  if(!window._fluxoExpandedTri)window._fluxoExpandedTri={};
+  window._fluxoExpandedTri[groupId]=window._fluxoExpandedTri[groupId]!==true;
+  _saveScroll(renderFluxo);
+}
+
+function toggleAllFluxoTri(){
+  if(!window._fluxoExpandedTri)window._fluxoExpandedTri={};
+  const recCats=getRecCats(),despCats=getDespCats();
+  const allKeys=[...recCats,...despCats].map(c=>(c.tipo==='R'?'r_':'d_')+(c.slug||slugify(c.nome)));
+  const allExpanded=allKeys.length>0&&allKeys.every(k=>window._fluxoExpandedTri[k]===true);
+  allKeys.forEach(k=>{window._fluxoExpandedTri[k]=!allExpanded;});
   _saveScroll(renderFluxo);
 }
 
