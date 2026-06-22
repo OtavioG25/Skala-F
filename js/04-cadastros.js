@@ -943,6 +943,9 @@ let RECORRENTES_RECEITAS=[];
 let RECORRENTES_DESPESAS=[];
 
 function renderRecorrentes(c){
+  const focusedBusca=document.activeElement&&document.activeElement.id==='rec-busca';
+  const cursorPos=focusedBusca?document.activeElement.selectionStart:null;
+
   const totDesp=RECORRENTES_DESPESAS.reduce((s,r)=>s+r.valor,0);
   const hoje=new Date();
   const mesAtual=`${hoje.getFullYear()}-${String(hoje.getMonth()+1).padStart(2,'0')}`;
@@ -972,10 +975,10 @@ function renderRecorrentes(c){
     </div>
     <div class="tbl-wrap">
       <div class="tbl-hdr"><div class="sec-ttl">${appIcon('arrowUp')}Despesas Recorrentes <span class="yr-pill">${RECORRENTES_DESPESAS.length} itens</span></div><button class="btn btn-ghost" style="font-size:12px" onclick="openEditRecorrente('','D')">${appIcon('plus')}Nova</button></div>
-      <div style="padding:10px 18px 0;display:flex;gap:10px;align-items:center">
-        <input type="text" placeholder="Buscar descrição, categoria..." value="${esc(filterRecBusca)}"
+      <div style="padding:14px 18px;display:flex;gap:10px;align-items:center">
+        <input type="text" id="rec-busca" placeholder="Buscar descrição, categoria..." value="${esc(filterRecBusca)}"
           oninput="filterRecBusca=this.value;renderRecorrentes(document.getElementById('content'))"
-          style="background:var(--s2);border:1px solid var(--bd2);color:var(--tx);border-radius:8px;padding:6px 12px;font-size:13px;width:280px"/>
+          style="background:var(--s2);border:1px solid var(--bd2);color:var(--tx);border-radius:8px;padding:8px 12px;font-size:13px;width:280px"/>
         ${filterRecBusca?`<button class="btn btn-ghost" style="font-size:12px" onclick="filterRecBusca='';renderRecorrentes(document.getElementById('content'))">Limpar</button>`:''}
         <span style="font-size:12px;color:var(--tx3);margin-left:auto">${lista.length} de ${RECORRENTES_DESPESAS.length} item(s)</span>
       </div>
@@ -983,7 +986,7 @@ function renderRecorrentes(c){
         <thead><tr>${REC_COLS.map(renderRecHeadCell).join('')}</tr></thead>
         <tbody>
           ${lista.length===0?`<tr><td colspan="${REC_COLS.length}" style="text-align:center;padding:24px;color:var(--tx3)">Nenhum resultado</td></tr>`:
-          lista.map(r=>`<tr class="lr">
+          lista.map(r=>`<tr class="lr" style="cursor:pointer" onclick="openEditRecorrente('${r.id}','D')">
             <td>${esc(r.desc)}</td>
             <td><span class="cs">${esc(r.cat)}</span></td>
             <td><span class="cs">${esc(r.sub)}</span></td>
@@ -991,12 +994,20 @@ function renderRecorrentes(c){
             <td style="text-align:center">${r.diaVenc?'Dia '+r.diaVenc:'-'}</td>
             <td style="font-size:12px;color:var(--tx2)">${r.compOffset===-1?'-1 (mês ant.)':r.compOffset===1?'+1 (mês seg.)':'0 (mesmo mês)'}</td>
             <td>${esc(r.conta||'-')}</td>
-            <td style="white-space:nowrap"><button class="btn btn-ghost" title="Editar" style="padding:4px 8px;font-size:12px" onclick="openEditRecorrente('${r.id}','D')">${appIcon('edit')}</button> <button class="btn btn-ghost" title="Excluir" style="padding:4px 8px;font-size:12px;color:var(--red)" onclick="deleteRecorrente('${r.id}')">${appIcon('trash')}</button></td>
+            <td style="white-space:nowrap" onclick="event.stopPropagation()"><button class="btn btn-ghost" title="Editar" style="padding:4px 8px;font-size:12px" onclick="openEditRecorrente('${r.id}','D')">${appIcon('edit')}</button> <button class="btn btn-ghost" title="Excluir" style="padding:4px 8px;font-size:12px;color:var(--red)" onclick="deleteRecorrente('${r.id}')">${appIcon('trash')}</button></td>
           </tr>`).join('')}
         </tbody>
       </table></div>
     </div>
   `;
+
+  if(focusedBusca){
+    const inp=document.getElementById('rec-busca');
+    if(inp){
+      inp.focus();
+      if(cursorPos!==null)inp.setSelectionRange(cursorPos,cursorPos);
+    }
+  }
 }
 
 async function gerarRecorrentes(){
