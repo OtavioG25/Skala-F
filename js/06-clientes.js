@@ -382,6 +382,8 @@ function renderClientes(c){
     if(cli){renderClienteDetalhe(cli,c);return;}
     clienteDetalheId=null;
   }
+  const focusedBusca=document.activeElement&&document.activeElement.id==='cli-busca';
+  const cursorPos=focusedBusca?document.activeElement.selectionStart:null;
   const k=_clientesKPIs();
   const list=_sortClientesArr(_clientesFiltered());
   const compLbl=_compShort(k.comp);
@@ -406,7 +408,7 @@ function renderClientes(c){
 
     <div class="card" style="padding:18px 20px">
       <div style="display:flex;gap:12px;align-items:center;margin-bottom:14px;flex-wrap:wrap">
-        <input type="text" placeholder="Buscar por nome, código ou CPF/CNPJ"
+        <input type="text" id="cli-busca" placeholder="Buscar por nome, código ou CPF/CNPJ"
           value="${esc(filterClienteBusca)}"
           oninput="filterClienteBusca=this.value;renderKeepScroll()"
           style="flex:1;min-width:240px;padding:8px 12px;background:var(--s2);border:1px solid var(--bd);border-radius:8px;color:var(--tx);font-size:13px;outline:none">
@@ -430,6 +432,13 @@ function renderClientes(c){
       </div>
     </div>
   `;
+  if(focusedBusca){
+    const inp=document.getElementById('cli-busca');
+    if(inp){
+      inp.focus();
+      if(cursorPos!==null)inp.setSelectionRange(cursorPos,cursorPos);
+    }
+  }
 }
 function _clienteRowHTML(c){
   const ult=_clienteUltimoPgto(c.id);
