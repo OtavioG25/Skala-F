@@ -137,6 +137,7 @@ function calcFluxo(year){
     r.saidasNaoOp=despCats.filter(c=>(c.fluxo||'operacional')==='nao_operacional'&&!FLUXO_DISTRIB_LUCROS_SLUGS.includes(c.slug||slugify(c.nome))).reduce((s,c)=>s+(r['d_'+(c.slug||slugify(c.nome))]||0),0);
     r.resultadoNaoOp=r.entradasNaoOp-r.saidasNaoOp;
     r.distribLucros=despCats.filter(c=>FLUXO_DISTRIB_LUCROS_SLUGS.includes(c.slug||slugify(c.nome))).reduce((s,c)=>s+(r['d_'+(c.slug||slugify(c.nome))]||0),0);
+    r.resultadoLiquido=r.resultadoOp+r.resultadoNaoOp;
   });
   _calcFluxoCache[cacheKey]=m;
   return m;
@@ -1585,6 +1586,18 @@ function navDRETri(delta){
   renderDRE(document.getElementById('content'));
 }
 
+function toggleDREKpis(){
+  const cur=localStorage.getItem('skala_dre_kpis_collapsed')==='1';
+  localStorage.setItem('skala_dre_kpis_collapsed',cur?'0':'1');
+  renderDRE(document.getElementById('content'));
+}
+
+function toggleFluxoKpis(){
+  const cur=localStorage.getItem('skala_fluxo_kpis_collapsed')==='1';
+  localStorage.setItem('skala_fluxo_kpis_collapsed',cur?'0':'1');
+  renderFluxo(document.getElementById('content'));
+}
+
 function setFluxoView(v){
   localStorage.setItem('skala_fluxo_view',v);
   renderFluxo(document.getElementById('content'));
@@ -2109,6 +2122,16 @@ function renderDRE(c){
 
   const segBtn=(v,lbl)=>`<button class="dre-seg-btn${dreView===v?' on':''}" onclick="setDREView('${v}')">${lbl}</button>`;
 
+  const dreKpisCollapsed=localStorage.getItem('skala_dre_kpis_collapsed')==='1';
+  const dreKpisToggle=`<div onclick="toggleDREKpis()"
+    style="cursor:pointer;display:inline-flex;align-items:center;gap:5px;padding:4px 10px;font-size:11px;font-weight:600;color:var(--tx2);background:var(--s2);border:1px solid var(--bd);border-radius:6px;user-select:none;width:fit-content;margin:8px 20px 0;transition:background .15s"
+    onmouseover="this.style.background='var(--s3)'"
+    onmouseout="this.style.background='var(--s2)'"
+    title="${dreKpisCollapsed?'Mostrar indicadores':'Ocultar indicadores'}">
+    <span style="font-size:9px">${dreKpisCollapsed?'▶':'▾'}</span>
+    <span>Indicadores</span>
+  </div>`;
+
   c.innerHTML=`
   <div class="print-hdr">
     <div class="print-hdr-main">
@@ -2134,7 +2157,8 @@ function renderDRE(c){
         <button class="btn btn-ghost" style="font-size:12px" onclick="exportDREPDF()">${appIcon('print')}PDF</button>
       </div>
     </div>
-    ${dreView==='anual'?dreKpis:''}
+    ${dreView==='trimestral'?'':dreKpisToggle}
+    ${dreView==='anual'&&!dreKpisCollapsed?dreKpis:''}
 
     ${dreView==='anual'?`
     <div class="tbl-scroll" style="flex:1;overflow:auto"><table class="fin-tbl resizable" id="dre-table">${renderFinColgroup()}<thead>${renderFinHead(curMonthIdx,true)}</thead>
@@ -2184,8 +2208,9 @@ function renderDRE(c){
     </div>
     </div>
     `:dreView==='trimestral'?`
+    ${dreKpisToggle}
     <div style="flex:1;overflow:hidden;padding:0 20px 16px;display:flex;gap:20px;min-height:0">
-      <div style="flex:0 0 52%;display:flex;flex-direction:column;min-height:0">
+      <div style="flex:${dreKpisCollapsed?'1':'0 0 52%'};display:flex;flex-direction:column;min-height:0">
         <div class="dre-mes-nav">
           <button onclick="navDRETri(-1)" ${dreViewTri===0?'disabled':''}>‹</button>
           <span>${triQ.lbl} <span class="yr-pill" style="font-size:11px">${YEAR}</span></span>
@@ -2233,12 +2258,12 @@ function renderDRE(c){
           </table>
         </div>
       </div>
-      <div style="flex:1;min-width:0;overflow-y:auto;padding:42px 0 0">
+      ${dreKpisCollapsed?'':`<div style="flex:1;min-width:0;overflow-y:auto;padding:42px 0 0">
         ${dreKpisTri}
-      </div>
+      </div>`}
     </div>
     `:`
-    ${dreKpisMes}
+    ${dreKpisCollapsed?'':dreKpisMes}
     <div style="flex:1;overflow:hidden;padding:0 20px 16px;display:flex;gap:20px;min-height:0">
       <div style="flex:0 0 52%;display:flex;flex-direction:column;min-height:0">
         <div class="dre-mes-nav">
@@ -2523,6 +2548,16 @@ function renderFluxo(c){
   const totalSaldoFinVals=Array(12).fill(0);
   contaSet.forEach(conta=>contaSaldoFin[conta].forEach((v,i)=>totalSaldoFinVals[i]+=v));
 
+  const fluxoKpisCollapsed=localStorage.getItem('skala_fluxo_kpis_collapsed')==='1';
+  const fluxoKpisToggle=`<div onclick="toggleFluxoKpis()"
+    style="cursor:pointer;display:inline-flex;align-items:center;gap:5px;padding:4px 10px;font-size:11px;font-weight:600;color:var(--tx2);background:var(--s2);border:1px solid var(--bd);border-radius:6px;user-select:none;width:fit-content;margin:8px 20px 0;transition:background .15s"
+    onmouseover="this.style.background='var(--s3)'"
+    onmouseout="this.style.background='var(--s2)'"
+    title="${fluxoKpisCollapsed?'Mostrar indicadores':'Ocultar indicadores'}">
+    <span style="font-size:9px">${fluxoKpisCollapsed?'▶':'▾'}</span>
+    <span>Indicadores</span>
+  </div>`;
+
   // #66 — KPI Cards
   const lastMesData=f.reduce((b,m,i)=>(m.entradasOp>0||m.saidasOp>0)?i:b,-1);
   const kpiEnt=tot('entradasOp'),kpiSai=tot('saidasOp'),kpiRes=tot('resultadoOp');
@@ -2658,8 +2693,9 @@ function renderFluxo(c){
     </div>`;
 
     c.innerHTML=`<div class="tbl-wrap" style="display:flex;flex-direction:column;height:calc(100vh - 116px);overflow:visible">${toolbar}
+    ${fluxoKpisToggle}
     <div style="flex:1;overflow:hidden;padding:0 20px 16px;display:flex;gap:20px;min-height:0">
-      <div style="flex:0 0 52%;display:flex;flex-direction:column;min-height:0">
+      <div style="flex:${fluxoKpisCollapsed?'1':'0 0 52%'};display:flex;flex-direction:column;min-height:0">
         <div class="dre-mes-nav">
           <button onclick="navFluxoTri(-1)" ${fluxoViewTri===0?'disabled':''}>‹</button>
           <span>${triQ.lbl} <span class="yr-pill" style="font-size:11px">${YEAR}</span></span>
@@ -2699,6 +2735,7 @@ function renderFluxo(c){
                 ${rowFluxoTri('TOTAL SAÍDAS NÃO OPERACIONAIS','saidasNaoOp','result',null,null,true)}
                 ${rowFluxoTri('(=) RESULTADO NÃO-OPERACIONAL','resultadoNaoOp','tot')}
               `:''}
+              ${hasNaoOp||hasDistribLucros?rowFluxoTri('(=) RESULTADO LÍQUIDO','resultadoLiquido','tot'):''}
               ${hasDistribLucros?`
                 ${rowFluxoTri('DISTRIBUIÇÃO DE LUCROS','','sep')}
                 ${distribLucrosCats.map(cat=>groupRowsFluxoTri(cat,'D')).join('')}
@@ -2715,9 +2752,9 @@ function renderFluxo(c){
           </table>
         </div>
       </div>
-      <div style="flex:1;min-width:0;overflow-y:auto;padding:42px 0 0">
+      ${fluxoKpisCollapsed?'':`<div style="flex:1;min-width:0;overflow-y:auto;padding:42px 0 0">
         ${fluxoKpisTri}
-      </div>
+      </div>`}
     </div></div>`;
 
     const oldDrillTri=document.getElementById('fluxo-drill');if(oldDrillTri)oldDrillTri.remove();
@@ -2873,6 +2910,7 @@ function renderFluxo(c){
                 ${rowFluxoMes('TOTAL SAÍDAS NÃO OPERACIONAIS','saidasNaoOp','result',null,null,true)}
                 ${rowFluxoMes('(=) RESULTADO NÃO-OPERACIONAL','resultadoNaoOp','tot')}
               `:''}
+              ${hasNaoOp||hasDistribLucros?rowFluxoMes('(=) RESULTADO LÍQUIDO','resultadoLiquido','tot'):''}
               ${hasDistribLucros?`
                 ${rowFluxoMes('DISTRIBUIÇÃO DE LUCROS','','sep')}
                 ${distribLucrosCats.map(cat=>groupRowsFluxoMes(cat,'D')).join('')}
@@ -2998,7 +3036,8 @@ function renderFluxo(c){
   const oldDrill=document.getElementById('fluxo-drill');if(oldDrill)oldDrill.remove();
 
   c.innerHTML=`<div class="tbl-wrap" style="display:flex;flex-direction:column;height:calc(100vh - 116px)">${toolbar}
-    ${fluxoKpis}
+    ${fluxoKpisToggle}
+    ${fluxoKpisCollapsed?'':fluxoKpis}
     <div class="tbl-scroll" style="flex:1;overflow:auto"><table class="fin-tbl resizable">${renderFinColgroup()}<thead>${renderFinHead(curMonthIdx,true)}</thead><tbody>
     ${sep('FLUXO OPERACIONAL')}
     ${subSep('ENTRADAS')}
@@ -3018,6 +3057,7 @@ function renderFluxo(c){
     ${row('TOTAL SAÍDAS NÃO OPERACIONAIS','saidasNaoOp','result',null,null,true)}
     ${row('(=) RESULTADO NÃO-OPERACIONAL','resultadoNaoOp','tot')}
     `:''}
+    ${hasNaoOp||hasDistribLucros?row('(=) RESULTADO LÍQUIDO','resultadoLiquido','tot'):''}
     ${hasDistribLucros?`
     ${sep('DISTRIBUIÇÃO DE LUCROS')}
     ${distribLucrosCats.map(cat=>groupRows(cat,'D')).join('')}
