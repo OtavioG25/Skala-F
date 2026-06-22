@@ -3,6 +3,8 @@ let _calcFluxoCache={};
 let _calcFluxoProjCache={};
 // Slugs que compõem o grupo "Despesas com Pessoal" (suporta categoria pai 'pessoal' ou categorias individuais)
 const DRE_PESSOAL_SLUGS = ['pessoal','pro_labore_retiradas','empregados','recrutamento'];
+// Slugs de Distribuição/Destinação de Lucros — apresentados em linha própria após o Resultado Não-Operacional no Fluxo de Caixa
+const FLUXO_DISTRIB_LUCROS_SLUGS = ['distribuicao_de_lucros'];
 function clearFinanceCalcCache(){
   _calcDreCache={};
   _calcFluxoCache={};
@@ -132,8 +134,9 @@ function calcFluxo(year){
     r.saidasOp=despCats.filter(c=>(c.fluxo||'operacional')!=='nao_operacional').reduce((s,c)=>s+(r['d_'+(c.slug||slugify(c.nome))]||0),0);
     r.resultadoOp=r.entradasOp-r.saidasOp;
     r.entradasNaoOp=recCats.filter(c=>(c.fluxo||'operacional')==='nao_operacional').reduce((s,c)=>s+(r['r_'+(c.slug||slugify(c.nome))]||0),0);
-    r.saidasNaoOp=despCats.filter(c=>(c.fluxo||'operacional')==='nao_operacional').reduce((s,c)=>s+(r['d_'+(c.slug||slugify(c.nome))]||0),0);
+    r.saidasNaoOp=despCats.filter(c=>(c.fluxo||'operacional')==='nao_operacional'&&!FLUXO_DISTRIB_LUCROS_SLUGS.includes(c.slug||slugify(c.nome))).reduce((s,c)=>s+(r['d_'+(c.slug||slugify(c.nome))]||0),0);
     r.resultadoNaoOp=r.entradasNaoOp-r.saidasNaoOp;
+    r.distribLucros=despCats.filter(c=>FLUXO_DISTRIB_LUCROS_SLUGS.includes(c.slug||slugify(c.nome))).reduce((s,c)=>s+(r['d_'+(c.slug||slugify(c.nome))]||0),0);
   });
   _calcFluxoCache[cacheKey]=m;
   return m;
@@ -2479,8 +2482,11 @@ function renderFluxo(c){
   const subSep=(lbl,color='var(--tx3)')=>`<tr class="sep"><td colspan="14" style="padding-left:28px;font-size:9px;color:${color};position:sticky;left:0;z-index:2;background:#eaf2e7">${lbl}</td></tr>`;
 
   const recCatsVis=recCats.filter(cat=>(cat.slug||slugify(cat.nome))!==TRANSF_SLUG);
-  const despCatsVis=despCats.filter(cat=>(cat.slug||slugify(cat.nome))!==TRANSF_SLUG);
+  const despCatsVisAll=despCats.filter(cat=>(cat.slug||slugify(cat.nome))!==TRANSF_SLUG);
+  const distribLucrosCats=despCatsVisAll.filter(c=>FLUXO_DISTRIB_LUCROS_SLUGS.includes(c.slug||slugify(c.nome)));
+  const despCatsVis=despCatsVisAll.filter(c=>!FLUXO_DISTRIB_LUCROS_SLUGS.includes(c.slug||slugify(c.nome)));
   const hasNaoOp=recCatsVis.some(c=>(c.fluxo||'operacional')==='nao_operacional')||despCatsVis.some(c=>(c.fluxo||'operacional')==='nao_operacional');
+  const hasDistribLucros=distribLucrosCats.length>0;
 
   // Per-account saldo calculation (needed for saldo final in both views)
   const allPaidData=cashMovements().filter(l=>l.dataPgto);
@@ -2693,6 +2699,11 @@ function renderFluxo(c){
                 ${rowFluxoTri('TOTAL SAÍDAS NÃO OPERACIONAIS','saidasNaoOp','result',null,null,true)}
                 ${rowFluxoTri('(=) RESULTADO NÃO-OPERACIONAL','resultadoNaoOp','tot')}
               `:''}
+              ${hasDistribLucros?`
+                ${rowFluxoTri('DISTRIBUIÇÃO DE LUCROS','','sep')}
+                ${distribLucrosCats.map(cat=>groupRowsFluxoTri(cat,'D')).join('')}
+                ${rowFluxoTri('(=) TOTAL DISTRIBUIÇÃO DE LUCROS','distribLucros','tot',null,null,true)}
+              `:''}
               ${rowFluxoTri('SALDOS','','sep')}
               ${rowFluxoTri('VARIAÇÃO NO PERÍODO','','subsep')}
               ${contaRowsTri}
@@ -2862,6 +2873,11 @@ function renderFluxo(c){
                 ${rowFluxoMes('TOTAL SAÍDAS NÃO OPERACIONAIS','saidasNaoOp','result',null,null,true)}
                 ${rowFluxoMes('(=) RESULTADO NÃO-OPERACIONAL','resultadoNaoOp','tot')}
               `:''}
+              ${hasDistribLucros?`
+                ${rowFluxoMes('DISTRIBUIÇÃO DE LUCROS','','sep')}
+                ${distribLucrosCats.map(cat=>groupRowsFluxoMes(cat,'D')).join('')}
+                ${rowFluxoMes('(=) TOTAL DISTRIBUIÇÃO DE LUCROS','distribLucros','tot',null,null,true)}
+              `:''}
               ${rowFluxoMes('SALDOS','','sep')}
               ${rowFluxoMes('VARIAÇÃO NO PERÍODO','','subsep')}
               ${contaRowsMes}
@@ -3001,6 +3017,11 @@ function renderFluxo(c){
     ${saidasNaoOpRows}
     ${row('TOTAL SAÍDAS NÃO OPERACIONAIS','saidasNaoOp','result',null,null,true)}
     ${row('(=) RESULTADO NÃO-OPERACIONAL','resultadoNaoOp','tot')}
+    `:''}
+    ${hasDistribLucros?`
+    ${sep('DISTRIBUIÇÃO DE LUCROS')}
+    ${distribLucrosCats.map(cat=>groupRows(cat,'D')).join('')}
+    ${row('(=) TOTAL DISTRIBUIÇÃO DE LUCROS','distribLucros','tot',null,null,true)}
     `:''}
     ${sep('SALDOS')}
     ${subSep('VARIAÇÃO NO PERÍODO')}
