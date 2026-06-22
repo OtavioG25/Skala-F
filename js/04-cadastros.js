@@ -27,7 +27,7 @@ function openForm(id=null){
     const _now=new Date();
     const _compDefault=String(_now.getMonth()+1).padStart(2,'0')+'/'+_now.getFullYear();
     const _lastConta=localStorage.getItem('skala_last_conta')||'Dominio Conta Digital';
-    formData={id:newId(),tipo:'R',dataComp:'',dataCompView:_compDefault,dataVenc:'',dataPgto:'',cat:'',sub:'',desc:'',cc:'',clienteId:'',forma:'PIX',conta:_lastConta,doc:'',valorBruto:'',ded:'',valorLiq:'',valorJuros:'',valorMulta:'',valorDesconto:'',status:'Pendente',obs:''};
+    formData={id:newId(),tipo:'R',dataComp:'',dataCompView:_compDefault,dataVenc:'',dataPgto:'',cat:'',sub:'',desc:'',cc:'',clienteId:'',forma:'PIX',conta:_lastConta,doc:'',valorBruto:'',ded:'',valorLiq:'',valorJuros:'',valorMulta:'',valorDesconto:'',status:'Pendente',obs:'',recorrente:false};
   }
   document.getElementById('modal-ttl').textContent=id?(formData.tipo==='R'?'Editar Recebimento':'Editar Despesa'):'Novo Lançamento';
   const seqEl=document.getElementById('modal-seq');if(seqEl){const s=l?.seq;seqEl.textContent=s?`#${s}`:'';seqEl.style.display=s?'inline-block':'none';}
@@ -264,6 +264,7 @@ function buildForm(){
     <div><div class="fl">Nº Doc / NF</div><input tabindex="12" type="text" value="${esc(formData.doc)}" oninput="formData.doc=this.value"/></div>
     <div style="grid-column:span 2;border-top:1px solid var(--bd);margin:2px 0 1px"></div>
     <div style="grid-column:span 2"><div class="fl">Observações</div><textarea tabindex="13" rows="1" oninput="formData.obs=this.value">${esc(formData.obs)}</textarea></div>
+    ${formData.tipo==='D'?`<div style="grid-column:span 2;display:flex;align-items:center;gap:8px;font-size:12px;color:var(--tx2);margin-top:-2px"><label style="display:inline-flex;align-items:center;gap:6px;cursor:pointer"><input type="checkbox" tabindex="14" ${formData.recorrente?'checked':''} onchange="formData.recorrente=this.checked" style="cursor:pointer;accent-color:var(--brand)"/>Lançamento recorrente (despesa fixa)</label></div>`:''}
     ${renderBaixasSection(editingId)}
     `;
   const footer=document.getElementById('modal-footer');
@@ -1034,7 +1035,7 @@ async function gerarRecorrentes(){
   }
 
   const anoMes=`${anoStr}-${mesStr}`;
-  const jaExiste=DATA.filter(l=>effectiveVenc(l).startsWith(anoMes)&&l.obs&&l.obs.includes('[recorrente]'));
+  const jaExiste=DATA.filter(l=>effectiveVenc(l).startsWith(anoMes)&&l.recorrente===true);
   if(jaExiste.length>0&&!await openConfirmModal(`Já existem ${jaExiste.length} lançamentos recorrentes para ${mesStr}/${anoStr}. Gerar novamente mesmo assim?`,{title:'Atenção',confirmLabel:'Gerar mesmo assim'}))return;
 
   const lista=comDia.map(r=>{
@@ -1042,7 +1043,7 @@ async function gerarRecorrentes(){
     let compMes=mes+(r.compOffset||0), compAno=ano;
     if(compMes<1){compMes+=12;compAno--;}else if(compMes>12){compMes-=12;compAno++;}
     const dataComp=`${compAno}-${String(compMes).padStart(2,'0')}-01`;
-    return{id:newId(),tipo:'D',dataComp,dataVenc:dataPgto,dataPgto:'',cat:r.cat,sub:r.sub,desc:r.desc,cc:'',forma:'PIX',conta:r.conta||'',doc:'',valorBruto:r.valor,ded:0,valorLiq:r.valor,status:'Pendente',obs:'[recorrente]'};
+    return{id:newId(),tipo:'D',dataComp,dataVenc:dataPgto,dataPgto:'',cat:r.cat,sub:r.sub,desc:r.desc,cc:'',forma:'PIX',conta:r.conta||'',doc:'',valorBruto:r.valor,ded:0,valorLiq:r.valor,status:'Pendente',obs:'[recorrente]',recorrente:true};
   });
 
   setSyncStatus('loading',`Gerando ${lista.length} lançamentos...`);

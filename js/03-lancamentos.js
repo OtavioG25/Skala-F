@@ -449,7 +449,7 @@ function renderContasRow(l,groupId,adjs){
     <td data-pgto onclick="openEdit('${l.id}')" style="${l.dataPgto?'':'opacity:.28;color:var(--tx3)'}">${dateBR(l.dataPgto)||'—'}</td>
     <td onclick="openEdit('${l.id}')" style="color:var(--tx2);font-size:12px">${compDisplay(l.dataComp)||'—'}</td>
     <td title="${esc(l.cat)}" onclick="openEdit('${l.id}')"><span class="ct">${esc(l.cat)}</span>${l.sub?`<div style="font-size:10.5px;color:var(--tx3);margin-top:1px">${esc(l.sub)}</div>`:''}</td>
-    <td class="dc" title="${esc(l.desc||'')}" onclick="openEdit('${l.id}')">${l.obs&&l.obs.includes('[recorrente]')?`<span title="Despesa recorrente" style="font-size:11px;color:var(--tx3);margin-right:3px;display:inline-flex;align-items:center;vertical-align:middle">${appIcon('repeat','app-icon')}</span>`:''}
+    <td class="dc" title="${esc(l.desc||'')}" onclick="openEdit('${l.id}')">${l.recorrente===true?`<span title="Despesa recorrente" style="font-size:11px;color:var(--tx3);margin-right:3px;display:inline-flex;align-items:center;vertical-align:middle">${appIcon('repeat','app-icon')}</span>`:''}
 ${esc(l.desc||'—')}</td>
     <td title="${esc(l.conta||'')}" onclick="openEdit('${l.id}')">${esc(l.conta||'—')}</td>
     <td class="vc ${l.tipo==='R'?'r':'d'}" onclick="openEdit('${l.id}')">${renderValorLancamento(l,adjTotal)}${adjHtml}</td>

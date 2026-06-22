@@ -143,6 +143,423 @@ function calcFluxo(year){
   return m;
 }
 
+// ───────── Análise Recorrente (sub-tela do Fluxo) ─────────
+// Classificação:
+//   Despesa fixa     = l.tipo==='D' && l.recorrente===true   (campo no lançamento)
+//   Receita recorr.  = l.tipo==='R' && categoria.recorrente===true
+// Regime: pagamento (dataPgto), consistente com a aba Fluxo.
+// Janela: 3 últimos meses fechados COM DADOS (varre até 12 atrás).
+
+function _recCatRecorrenteNomes(){
+  return new Set((CATS_DATA?.R||[]).filter(c=>c.recorrente).map(c=>c.nome));
+}
+
+function _isMovRecorrente(l,recRNomes){
+  if(!l||l.status==='Cancelado')return null;
+  if((l.doc||'').startsWith('TRANSF#'))return null;
+  if(l.tipo==='D'&&l.recorrente===true)return 'D';
+  if(l.tipo==='R'&&recRNomes.has(l.cat))return 'R';
+  return null;
+}
+
+// Retorna [{compKey:'YYYY-MM', recR, recD, resultado}] — até 3 meses fechados com movimento.
+function calcRecorrenteMesesComDados(){
+  const recRNomes=_recCatRecorrenteNomes();
+  const now=new Date(),baseY=now.getFullYear(),baseM=now.getMonth();
+  const targets=new Map();
+  for(let i=1;i<=12;i++){
+    const d=new Date(baseY,baseM-i,1);
+    const k=`${d.getFullYear()}-${String(d.getMonth()+1).padStart(2,'0')}`;
+    targets.set(k,{recR:0,recD:0});
+  }
+  cashMovements().forEach(l=>{
+    if(!l.dataPgto)return;
+    const k=String(l.dataPgto).slice(0,7);
+    if(!targets.has(k))return;
+    const tipo=_isMovRecorrente(l,recRNomes);
+    if(!tipo)return;
+    const v=parseMoney(l.valorLiq);
+    if(tipo==='R')targets.get(k).recR+=v;else targets.get(k).recD+=v;
+  });
+  return [...targets.entries()]
+    .sort((a,b)=>a[0]<b[0]?1:-1)
+    .filter(([,v])=>v.recR>0||v.recD>0)
+    .slice(0,3)
+    .map(([compKey,v])=>({compKey,recR:v.recR,recD:v.recD,resultado:v.recR-v.recD}));
+}
+
+function calcRecorrenteMedias(){
+  const serie=calcRecorrenteMesesComDados();
+  if(!serie.length)return{recR:0,recD:0,resultado:0,margem:0,n:0,serie:[]};
+  const recR=serie.reduce((s,r)=>s+r.recR,0)/serie.length;
+  const recD=serie.reduce((s,r)=>s+r.recD,0)/serie.length;
+  const resultado=recR-recD;
+  const margem=recR>0?resultado/recR:0;
+  return{recR,recD,resultado,margem,n:serie.length,serie};
+}
+
+function calcRecorrenteComposicao(){
+  const recRNomes=_recCatRecorrenteNomes();
+  const serie=calcRecorrenteMesesComDados();
+  const n=serie.length||1;
+  const compsSet=new Set(serie.map(s=>s.compKey));
+  const ent={},sai={};
+  cashMovements().forEach(l=>{
+    if(!l.dataPgto)return;
+    const k=String(l.dataPgto).slice(0,7);
+    if(!compsSet.has(k))return;
+    const tipo=_isMovRecorrente(l,recRNomes);
+    if(!tipo)return;
+    const v=parseMoney(l.valorLiq);
+    const cat=l.cat||'(sem categoria)';
+    if(tipo==='R')ent[cat]=(ent[cat]||0)+v;else sai[cat]=(sai[cat]||0)+v;
+  });
+  const toArr=obj=>Object.entries(obj).map(([cat,total])=>({cat,media:total/n})).sort((a,b)=>b.media-a.media);
+  return{entradas:toArr(ent),saidas:toArr(sai),n};
+}
+
+function calcRecorrenteEvolucao6(){
+  const recRNomes=_recCatRecorrenteNomes();
+  const now=new Date(),baseY=now.getFullYear(),baseM=now.getMonth();
+  const buckets=[];
+  for(let i=6;i>=1;i--){
+    const d=new Date(baseY,baseM-i,1);
+    buckets.push({compKey:`${d.getFullYear()}-${String(d.getMonth()+1).padStart(2,'0')}`,year:d.getFullYear(),month:d.getMonth(),recR:0,recD:0});
+  }
+  const byKey=new Map(buckets.map(b=>[b.compKey,b]));
+  cashMovements().forEach(l=>{
+    if(!l.dataPgto)return;
+    const k=String(l.dataPgto).slice(0,7);
+    if(!byKey.has(k))return;
+    const tipo=_isMovRecorrente(l,recRNomes);
+    if(!tipo)return;
+    const v=parseMoney(l.valorLiq);
+    if(tipo==='R')byKey.get(k).recR+=v;else byKey.get(k).recD+=v;
+  });
+  return buckets.map(b=>({...b,resultado:b.recR-b.recD}));
+}
+
+function setFluxoModoRecorrente(v){
+  fluxoModoRecorrente=!!v;
+  render();
+  if(fluxoModoRecorrente)setTimeout(drawRecorrenteEvolucaoChart,30);
+}
+
+// Tabela anual mês-a-mês (categoria + subs) para a sub-tela Análise Recorrente.
+function calcRecorrenteAnual(year){
+  const recRNomes=_recCatRecorrenteNomes();
+  const recCats=getRecCats(),despCats=getDespCats();
+  const catsR=recCats.filter(c=>recRNomes.has(c.nome));
+  const accR={},accD={};
+  catsR.forEach(c=>{
+    const slug=c.slug||slugify(c.nome);
+    accR[slug]={cat:c.nome,slug,meses:Array(12).fill(0),subs:{}};
+    (c.subs||[]).forEach(s=>{const ss=s.slug||slugify(s.nome);accR[slug].subs[ss]={sub:s.nome,slug:ss,meses:Array(12).fill(0)};});
+  });
+  cashMovements().forEach(l=>{
+    if(!l.dataPgto)return;
+    if(getY(l.dataPgto)!==year)return;
+    const tipo=_isMovRecorrente(l,recRNomes);
+    if(!tipo)return;
+    const m=getM(l.dataPgto),v=parseMoney(l.valorLiq);
+    if(tipo==='R'){
+      const c=catsR.find(x=>x.nome===l.cat);if(!c)return;
+      const slug=c.slug||slugify(c.nome);
+      accR[slug].meses[m]+=v;
+      const sub=(c.subs||[]).find(s=>s.nome===l.sub);
+      if(sub){const ss=sub.slug||slugify(sub.nome);accR[slug].subs[ss].meses[m]+=v;}
+    } else {
+      const c=despCats.find(x=>x.nome===l.cat);
+      const slug=c?(c.slug||slugify(c.nome)):slugify(l.cat||'sem-categoria');
+      const nome=c?c.nome:(l.cat||'(sem categoria)');
+      if(!accD[slug])accD[slug]={cat:nome,slug,meses:Array(12).fill(0),subs:{}};
+      accD[slug].meses[m]+=v;
+      if(c){
+        const sub=(c.subs||[]).find(s=>s.nome===l.sub);
+        if(sub){const ss=sub.slug||slugify(sub.nome);if(!accD[slug].subs[ss])accD[slug].subs[ss]={sub:sub.nome,slug:ss,meses:Array(12).fill(0)};accD[slug].subs[ss].meses[m]+=v;}
+      }
+    }
+  });
+  const finalize=obj=>Object.values(obj).map(o=>({
+    ...o,
+    total:o.meses.reduce((s,v)=>s+v,0),
+    subs:Object.values(o.subs).map(s=>({...s,total:s.meses.reduce((acc,v)=>acc+v,0)})).filter(s=>s.total>0).sort((a,b)=>b.total-a.total)
+  })).filter(o=>o.total>0).sort((a,b)=>b.total-a.total);
+  const arrR=finalize(accR),arrD=finalize(accD);
+  const totRecMes=Array(12).fill(0),totDespMes=Array(12).fill(0);
+  arrR.forEach(o=>o.meses.forEach((v,i)=>totRecMes[i]+=v));
+  arrD.forEach(o=>o.meses.forEach((v,i)=>totDespMes[i]+=v));
+  const totResMes=totRecMes.map((v,i)=>v-totDespMes[i]);
+  const sum=a=>a.reduce((s,v)=>s+v,0);
+  return{receitas:arrR,despesas:arrD,totRecMes,totDespMes,totResMes,totRec:sum(totRecMes),totDesp:sum(totDespMes),totRes:sum(totResMes)};
+}
+
+function toggleFluxoRec(gid){
+  if(!window._fluxoRecExpanded)window._fluxoRecExpanded={};
+  window._fluxoRecExpanded[gid]=!window._fluxoRecExpanded[gid];
+  render();
+  setTimeout(drawRecorrenteEvolucaoChart,30);
+}
+
+function _renderRecorrenteTabela(year){
+  const data=calcRecorrenteAnual(year);
+  if(!window._fluxoRecExpanded)window._fluxoRecExpanded={};
+  const thisYear=new Date().getFullYear();
+  const curMonthIdx=year===thisYear?new Date().getMonth():-1;
+  const cellSt='font-size:11.5px;text-align:right;padding:6px 8px';
+  const stickySt='position:sticky;left:0;z-index:2;background:var(--s1)';
+  const hl=i=>i===curMonthIdx?';background:rgba(19,124,60,.06)':'';
+  const monthHeaders=MONTHS.map((m,i)=>`<th style="text-align:right;font-size:11px;color:var(--tx2);padding:8px 8px;font-weight:600${hl(i)}">${m}</th>`).join('');
+
+  function rowCat(o,neg){
+    const sign=neg?-1:1;
+    const hasSubs=o.subs.length>0;
+    const gid=(neg?'d_':'r_')+o.slug;
+    const exp=window._fluxoRecExpanded[gid]===true;
+    const cells=o.meses.map((v,i)=>{const sv=sign*v;return`<td style="${cellSt}${hl(i)}" class="${sv<0?'neg':sv>0?'pos':''}">${v!==0?fmt(sv):'—'}</td>`;}).join('');
+    const tv=sign*o.total;
+    const toggle=hasSubs
+      ?`<span onclick="toggleFluxoRec('${gid}')" style="cursor:pointer;margin-right:6px;font-size:10px;display:inline-block;width:12px">${exp?'▼':'▶'}</span>`
+      :`<span style="display:inline-block;width:18px"></span>`;
+    let html=`<tr class="dr"><td style="${stickySt};padding-left:12px">${toggle}${esc(o.cat)}</td>${cells}<td class="${tv<0?'neg':tv>0?'pos':''} tc" style="font-weight:600;padding:6px 10px">${fmt(tv)}</td></tr>`;
+    if(hasSubs){
+      o.subs.forEach(s=>{
+        const sc=s.meses.map((v,i)=>{const sv=sign*v;return`<td style="${cellSt}${hl(i)}" class="${sv<0?'neg':sv>0?'pos':''}">${v!==0?fmt(sv):'—'}</td>`;}).join('');
+        const stv=sign*s.total;
+        html+=`<tr class="dr" style="${exp?'':'display:none'}"><td style="${stickySt};padding-left:40px;color:var(--tx2);font-size:12px">${esc(s.sub)}</td>${sc}<td class="${stv<0?'neg':stv>0?'pos':''} tc" style="padding:6px 10px">${fmt(stv)}</td></tr>`;
+      });
+    }
+    return html;
+  }
+
+  const sep=lbl=>`<tr class="sep"><td colspan="14" style="${stickySt};background:#eaf2e7;padding:5px 12px;font-size:10px;font-weight:700;letter-spacing:.06em;color:var(--tx2)">${lbl}</td></tr>`;
+  const recRows=data.receitas.map(o=>rowCat(o,false)).join('');
+  const despRows=data.despesas.map(o=>rowCat(o,true)).join('');
+  const totRecCells=data.totRecMes.map((v,i)=>`<td style="${cellSt};font-weight:700${hl(i)}" class="pos">${v!==0?fmt(v):'—'}</td>`).join('');
+  const totDespCells=data.totDespMes.map((v,i)=>`<td style="${cellSt};font-weight:700${hl(i)}" class="neg">${v!==0?fmt(-v):'—'}</td>`).join('');
+  const totResCells=data.totResMes.map((v,i)=>`<td style="${cellSt};font-weight:700${hl(i)}" class="${v<0?'neg':v>0?'pos':''}">${v!==0?fmt(v):'—'}</td>`).join('');
+  const margemMes=data.totRecMes.map((r,i)=>r>0?(data.totResMes[i]/r)*100:null);
+  const margemCells=margemMes.map((p,i)=>{
+    if(p===null)return`<td style="${cellSt};color:var(--tx3)${hl(i)}">—</td>`;
+    const col=p<0?'var(--red)':'var(--tx2)';
+    return`<td style="${cellSt};color:${col}${hl(i)}">${p.toFixed(1).replace('.',',')}%</td>`;
+  }).join('');
+  const margemAno=data.totRec>0?(data.totRes/data.totRec)*100:null;
+  const margemAnoCell=margemAno===null?'—':`${margemAno.toFixed(1).replace('.',',')}%`;
+
+  return`
+    <div class="card" style="padding:0;margin-top:22px;overflow:hidden">
+      <div style="padding:14px 20px 10px;border-bottom:1px solid var(--bd);display:flex;align-items:baseline;gap:10px;flex-wrap:wrap">
+        <div class="card-ttl" style="margin:0">Recorrente mês a mês <span class="yr-pill">${year}</span></div>
+        <div style="font-size:12px;color:var(--tx2)">Clique nas categorias para detalhar por subcategoria</div>
+      </div>
+      <div style="overflow-x:auto">
+        <table class="dre" style="width:100%;border-collapse:collapse">
+          <thead>
+            <tr>
+              <th style="${stickySt};background:var(--s2);text-align:left;font-size:11px;color:var(--tx2);padding:8px 12px;font-weight:600">Categoria</th>
+              ${monthHeaders}
+              <th style="text-align:right;font-size:11px;color:var(--tx2);padding:8px 10px;font-weight:600">Total</th>
+            </tr>
+          </thead>
+          <tbody>
+            ${data.receitas.length?sep('ENTRADAS RECORRENTES'):''}
+            ${recRows}
+            ${data.receitas.length?`<tr class="dr tot"><td style="${stickySt};padding-left:12px;font-weight:700">Total Entradas</td>${totRecCells}<td class="pos tc" style="font-weight:700;padding:6px 10px">${fmt(data.totRec)}</td></tr>`:''}
+            ${data.despesas.length?sep('SAÍDAS FIXAS'):''}
+            ${despRows}
+            ${data.despesas.length?`<tr class="dr tot"><td style="${stickySt};padding-left:12px;font-weight:700">Total Saídas</td>${totDespCells}<td class="neg tc" style="font-weight:700;padding:6px 10px">${fmt(-data.totDesp)}</td></tr>`:''}
+            <tr class="dr bold hl"><td style="${stickySt};padding-left:12px;font-weight:700">Resultado Recorrente</td>${totResCells}<td class="${data.totRes<0?'neg':'pos'} tc" style="font-weight:700;padding:6px 10px">${fmt(data.totRes)}</td></tr>
+            <tr class="dr"><td style="${stickySt};padding-left:12px;font-size:12px;color:var(--tx2)">Margem Recorrente</td>${margemCells}<td class="tc" style="padding:6px 10px;font-size:12px;color:${margemAno!==null&&margemAno<0?'var(--red)':'var(--tx2)'}">${margemAnoCell}</td></tr>
+          </tbody>
+        </table>
+      </div>
+    </div>`;
+}
+
+function renderFluxoRecorrente(c){
+  const med=calcRecorrenteMedias();
+  const comp=calcRecorrenteComposicao();
+  const positivo=med.resultado>=0;
+  const margemPct=med.recR>0?Math.round(med.margem*100):0;
+
+  const heroBg=positivo
+    ?'linear-gradient(135deg,var(--brand-dark),var(--brand),var(--brand-mid))'
+    :'linear-gradient(135deg,#7a1010,#a32020,#cc3030)';
+
+  const avisoN=med.n>0&&med.n<3
+    ?`<div style="font-size:11px;color:var(--orange);margin-top:6px;display:flex;align-items:center;gap:5px"><span style="font-size:13px">⚠</span>Baseado em apenas ${med.n} mês${med.n>1?'es':''} fechado${med.n>1?'s':''} com dados</div>`
+    :'';
+
+  const semDados=med.n===0
+    ?`<div class="card" style="padding:28px 24px;text-align:center;color:var(--tx2);margin-top:14px">
+        <div style="font-size:15px;font-weight:600;color:var(--tx);margin-bottom:8px">Ainda não há dados recorrentes</div>
+        <div style="font-size:13px;max-width:520px;margin:0 auto;line-height:1.55">Marque algumas despesas como recorrentes (toggle no modal de lançamento) e/ou ative a flag <em>recorrente</em> em categorias de receita.</div>
+      </div>`
+    :'';
+
+  const nLbl=med.n||3;
+  const ttRec=`Soma dos recebimentos (regime de caixa, data de pagamento) de lançamentos cuja categoria de receita está marcada como recorrente. Média dos últimos ${nLbl} mês(es) fechado(s) com movimento.`;
+  const ttDes=`Soma dos pagamentos (regime de caixa, data de pagamento) de lançamentos marcados individualmente como recorrentes (toggle no modal). Média dos últimos ${nLbl} mês(es) fechado(s) com movimento.`;
+  const ttRes=`Receita recorrente − despesa fixa, calculado mês a mês e depois mediado nos últimos ${nLbl} mês(es) fechado(s). Representa o piso garantido do escritório se nada variar.`;
+  const infoIcon='<span style="display:inline-flex;align-items:center;justify-content:center;width:14px;height:14px;border-radius:50%;border:1px solid currentColor;font-size:9px;font-weight:700;opacity:.55;margin-left:6px;cursor:help">i</span>';
+
+  const cardKpi=(lbl,val,sub,col,tip)=>`
+    <div class="kpi" style="align-self:start;cursor:help" title="${esc(tip)}">
+      <div class="kpi-lbl" style="display:inline-flex;align-items:center">${lbl}${infoIcon}</div>
+      <div class="kpi-val" style="color:${col}">${val}</div>
+      <div class="kpi-sub">${sub}</div>
+    </div>`;
+
+  const heroInfoIcon='<span style="display:inline-flex;align-items:center;justify-content:center;width:14px;height:14px;border-radius:50%;border:1px solid rgba(255,255,255,.7);color:rgba(255,255,255,.9);font-size:9px;font-weight:700;margin-left:6px;cursor:help">i</span>';
+  const cardHero=`
+    <div class="kpi" style="background:${heroBg};color:#fff;border:none;cursor:help" title="${esc(ttRes)}">
+      <div class="kpi-lbl" style="color:rgba(255,255,255,.85);display:inline-flex;align-items:center">Resultado Recorrente${heroInfoIcon}</div>
+      <div class="kpi-val" style="color:#fff">${fmtCard(med.resultado)}</div>
+      <div class="kpi-sub" style="color:rgba(255,255,255,.85)">seu piso garantido · média mensal</div>
+    </div>`;
+
+  const folga=Math.abs(med.resultado);
+  let leitura='';
+  if(med.n>0){
+    if(positivo){
+      leitura=`
+        <div style="background:var(--s1);border:1px solid var(--bd);border-radius:12px;padding:18px 22px;box-shadow:var(--shadow);flex:1 1 320px;min-width:0;align-self:stretch;display:flex;flex-direction:column;justify-content:center">
+          <div style="display:flex;align-items:baseline;gap:14px;flex-wrap:wrap">
+            <div style="font-size:13px;color:var(--tx2)">Margem recorrente</div>
+            <div style="font-size:24px;font-weight:700;color:var(--teal)">${margemPct}%</div>
+          </div>
+          <div style="margin-top:10px;font-size:13.5px;color:var(--tx)">Seu recorrente cobre as despesas fixas com folga de <strong style="color:var(--teal)">${fmt(folga)}/mês</strong>.</div>
+          <div style="margin-top:14px;padding:12px 14px;background:rgba(19,124,60,.08);border-left:3px solid var(--brand);border-radius:6px;font-size:13px;color:var(--tx)">
+            <strong>💡 Espaço para novos custos fixos:</strong> até <strong style="color:var(--brand-dark)">${fmt(folga)}/mês</strong> mantém o escritório no azul recorrente.
+          </div>
+        </div>`;
+    } else {
+      leitura=`
+        <div style="background:var(--s1);border:1px solid var(--bd);border-radius:12px;padding:18px 22px;box-shadow:var(--shadow);flex:1 1 320px;min-width:0;align-self:stretch;display:flex;flex-direction:column;justify-content:center">
+          <div style="display:flex;align-items:baseline;gap:14px;flex-wrap:wrap">
+            <div style="font-size:13px;color:var(--tx2)">Margem recorrente</div>
+            <div style="font-size:24px;font-weight:700;color:var(--red)">${margemPct}%</div>
+          </div>
+          <div style="margin-top:10px;font-size:13.5px;color:var(--tx)"><strong style="color:var(--red)">Atenção:</strong> suas despesas fixas superam a receita recorrente em <strong style="color:var(--red)">${fmt(folga)}/mês</strong>.</div>
+        </div>`;
+    }
+  }
+
+  const tabelaAnual=med.n>0?_renderRecorrenteTabela(YEAR):'';
+
+  const evolucao=med.n>0?`
+    <div class="card" style="padding:14px 18px;flex:1 1 480px;min-width:0">
+      <div style="display:flex;align-items:baseline;justify-content:space-between;gap:10px;margin-bottom:6px">
+        <div class="card-ttl" style="margin:0;font-size:13px">Evolução do Resultado Recorrente</div>
+        <div style="font-size:11px;color:var(--tx2)">Últimos 6 meses</div>
+      </div>
+      <div id="rec-evolucao-plot" style="width:100%"></div>
+    </div>`:'';
+
+  c.innerHTML=`
+    <div class="card" style="padding:14px 20px;display:flex;align-items:center;gap:12px;flex-wrap:wrap">
+      <button class="btn btn-ghost" style="font-size:12px" onclick="setFluxoModoRecorrente(false)">← Voltar ao Fluxo</button>
+      <div class="sec-ttl" style="margin:0">Análise Recorrente</div>
+      <div style="font-size:12px;color:var(--tx2);margin-left:auto">Base: média dos últimos ${med.n||3} meses fechados · regime de caixa</div>
+    </div>
+    ${semDados}
+    ${med.n>0?`
+    <div class="card" style="padding:18px 20px;margin-top:14px">
+      <div style="display:grid;grid-template-columns:repeat(3,1fr);gap:14px">
+        ${cardKpi('Receita Recorrente',fmtCard(med.recR),'média mensal','var(--teal)',ttRec)}
+        ${cardKpi('Despesa Fixa',fmtCard(med.recD),'média mensal','var(--red)',ttDes)}
+        ${cardHero}
+      </div>
+      ${avisoN}
+    </div>
+    ${tabelaAnual}
+    ${med.n>0?`<div style="display:flex;gap:18px;margin-top:22px;flex-wrap:wrap;align-items:stretch">${evolucao}${leitura}</div>`:''}
+    `:''}
+  `;
+  if(med.n>0)setTimeout(drawRecorrenteEvolucaoChart,30);
+}
+
+function drawRecorrenteEvolucaoChart(){
+  const plot=document.getElementById('rec-evolucao-plot');if(!plot)return;
+  const data=calcRecorrenteEvolucao6();
+  const N=data.length;if(!N)return;
+  const W=720,H=210,padT=26,padB=28,padX=14;
+  const innerW=W-padX*2,innerH=H-padT-padB,colW=innerW/N;
+  const allVals=data.flatMap(d=>[d.recR,d.recD,d.resultado]);
+  const vMax=Math.max(...allVals,0),vMin=Math.min(...allVals,0);
+  const range=(vMax-vMin)||1;
+  const yOf=v=>padT+innerH-((v-vMin)/range)*innerH;
+  const yZero=yOf(0);
+  const xOf=i=>padX+colW*i+colW/2;
+  const buildPts=key=>data.map((d,i)=>({x:xOf(i),y:yOf(d[key]),v:d[key]}));
+  const ptsRec=buildPts('recR'),ptsDes=buildPts('recD'),ptsRes=buildPts('resultado');
+  const smoothPath=pts=>N>1?pts.map((p,i)=>{
+    if(i===0)return`M${p.x.toFixed(1)},${p.y.toFixed(1)}`;
+    const prev=pts[i-1],cx=(prev.x+p.x)/2;
+    return`C${cx.toFixed(1)},${prev.y.toFixed(1)} ${cx.toFixed(1)},${p.y.toFixed(1)} ${p.x.toFixed(1)},${p.y.toFixed(1)}`;
+  }).join(' '):'';
+  const pathRec=smoothPath(ptsRec),pathDes=smoothPath(ptsDes),pathRes=smoothPath(ptsRes);
+  const areaRes=N>1?pathRes+` L${ptsRes[N-1].x.toFixed(1)},${yZero.toFixed(1)} L${ptsRes[0].x.toFixed(1)},${yZero.toFixed(1)} Z`:'';
+  let grid='';
+  for(let g=0;g<=3;g++){const y=padT+(innerH/3)*g;grid+=`<line x1="${padX}" y1="${y.toFixed(1)}" x2="${W-padX}" y2="${y.toFixed(1)}" stroke="rgba(19,124,60,0.10)" stroke-width="1" stroke-dasharray="4 4"/>`;}
+  const zeroLine=`<line x1="${padX}" y1="${yZero.toFixed(1)}" x2="${W-padX}" y2="${yZero.toFixed(1)}" stroke="var(--bd2)" stroke-width="1"/>`;
+  const fmtK=v=>{const s=v<0?'-':'',a=Math.abs(v);return s+'R$'+(a>=1000?(a/1000).toLocaleString('pt-BR',{maximumFractionDigits:1})+'k':a.toLocaleString('pt-BR',{maximumFractionDigits:0}));};
+  const labels=data.map((d,i)=>{
+    const m=MONTHS[d.month];
+    return`<text x="${xOf(i).toFixed(1)}" y="${(padT+innerH+16).toFixed(1)}" text-anchor="middle" style="font-size:10px;fill:var(--tx2);font-weight:500">${m}</text>`;
+  }).join('');
+  const dotsRec=ptsRec.map(p=>`<circle cx="${p.x.toFixed(1)}" cy="${p.y.toFixed(1)}" r="3" fill="var(--s1)" stroke="#1A9C5A" stroke-width="2"/>`).join('');
+  const dotsDes=ptsDes.map(p=>`<circle cx="${p.x.toFixed(1)}" cy="${p.y.toFixed(1)}" r="3" fill="var(--s1)" stroke="#E0B80D" stroke-width="2"/>`).join('');
+  const dotsRes=ptsRes.map(p=>`<circle cx="${p.x.toFixed(1)}" cy="${p.y.toFixed(1)}" r="3.5" fill="var(--s1)" stroke="${p.v<0?'#9c1f1f':'#0b5a30'}" stroke-width="2.2"/>`).join('');
+  const hits=ptsRes.map((p,i)=>`<rect x="${(padX+colW*i).toFixed(1)}" y="0" width="${colW.toFixed(1)}" height="${H}" fill="transparent" style="cursor:pointer" class="rec-hit" data-i="${i}"/>`).join('');
+  const legend=`<g>
+    <rect x="${padX}" y="6" width="10" height="3" fill="url(#recRecGrad)" rx="1"/><text x="${padX+14}" y="10" style="font-size:10px;fill:var(--tx2)">Receita rec.</text>
+    <rect x="${padX+90}" y="6" width="10" height="3" fill="url(#recDesGrad)" rx="1"/><text x="${padX+104}" y="10" style="font-size:10px;fill:var(--tx2)">Despesa fixa</text>
+    <rect x="${padX+180}" y="6" width="10" height="3" fill="url(#recResGrad)" rx="1"/><text x="${padX+194}" y="10" style="font-size:10px;fill:var(--tx2)">Resultado</text>
+  </g>`;
+  let tip=document.getElementById('rec-evolucao-tip');
+  if(!tip){tip=document.createElement('div');tip.id='rec-evolucao-tip';tip.style.cssText='position:fixed;pointer-events:none;background:#00532c;color:#fff;border-radius:8px;padding:10px 13px;opacity:0;transform:translate(-50%,calc(-100% - 10px));transition:opacity .12s;white-space:nowrap;z-index:1000;box-shadow:0 4px 20px rgba(0,83,44,.30);font-size:12px';document.body.appendChild(tip);}
+  const svg=`<svg viewBox="0 0 ${W} ${H}" style="display:block;width:100%;height:auto;overflow:visible">
+    <defs>
+      <linearGradient id="recArea" x1="0" y1="0" x2="0" y2="1"><stop offset="0%" stop-color="rgba(19,124,60,0.18)"/><stop offset="100%" stop-color="rgba(19,124,60,0)"/></linearGradient>
+      <linearGradient id="recDesGrad" x1="0" y1="0" x2="0" y2="1"><stop offset="0%" stop-color="#F8D43D"/><stop offset="100%" stop-color="#E0B80D"/></linearGradient>
+      <linearGradient id="recRecGrad" x1="0" y1="0" x2="0" y2="1"><stop offset="0%" stop-color="#1A9C5A"/><stop offset="100%" stop-color="#007A48"/></linearGradient>
+      <linearGradient id="recResGrad" x1="0" y1="0" x2="0" y2="1"><stop offset="0%" stop-color="#1a9d4d"/><stop offset="100%" stop-color="#0b5a30"/></linearGradient>
+    </defs>
+    ${grid}
+    ${zeroLine}
+    ${legend}
+    ${areaRes?`<path fill="url(#recArea)" d="${areaRes}"/>`:''}
+    ${pathRec?`<path fill="none" stroke="url(#recRecGrad)" stroke-width="2" stroke-linejoin="round" stroke-linecap="round" d="${pathRec}"/>`:''}
+    ${pathDes?`<path fill="none" stroke="url(#recDesGrad)" stroke-width="2" stroke-linejoin="round" stroke-linecap="round" d="${pathDes}"/>`:''}
+    ${pathRes?`<path fill="none" stroke="url(#recResGrad)" stroke-width="2.5" stroke-linejoin="round" stroke-linecap="round" d="${pathRes}"/>`:''}
+    ${dotsRec}
+    ${dotsDes}
+    ${dotsRes}
+    ${labels}
+    ${hits}
+  </svg>`;
+  [...plot.querySelectorAll('svg')].forEach(s=>s.remove());
+  plot.insertAdjacentHTML('afterbegin',svg);
+  const fmtBRL=v=>'R$ '+Math.abs(v).toLocaleString('pt-BR',{minimumFractionDigits:2,maximumFractionDigits:2});
+  [...plot.querySelectorAll('.rec-hit')].forEach(hit=>{
+    const i=+hit.dataset.i;
+    hit.addEventListener('mouseenter',()=>{
+      const svgEl=plot.querySelector('svg'),rect=svgEl.getBoundingClientRect();
+      const d=data[i],lbl=`${MONTHS_FULL[d.month]}/${d.year}`;
+      tip.innerHTML=`<div style="font-size:10px;font-weight:700;letter-spacing:.06em;text-transform:uppercase;color:#F8D43D;margin-bottom:6px">${lbl}</div>
+        <div style="display:flex;justify-content:space-between;gap:18px;line-height:1.7"><span style="color:rgba(255,255,255,.82)">Receita rec.</span><span style="font-weight:700">${fmtBRL(d.recR)}</span></div>
+        <div style="display:flex;justify-content:space-between;gap:18px;line-height:1.7"><span style="color:rgba(255,255,255,.82)">Despesa fixa</span><span style="font-weight:700">${fmtBRL(d.recD)}</span></div>
+        <div style="display:flex;justify-content:space-between;gap:18px;border-top:1px solid rgba(255,255,255,.18);margin-top:4px;padding-top:6px;line-height:1.7"><span style="color:rgba(255,255,255,.82)">Resultado</span><span style="font-weight:700;color:${d.resultado<0?'#FF9B8E':'#fff'}">${d.resultado<0?'-':''}${fmtBRL(d.resultado)}</span></div>`;
+      tip.style.left=(rect.left+ptsRes[i].x*(rect.width/W))+'px';
+      tip.style.top=(rect.top+window.scrollY+ptsRes[i].y*(rect.height/H))+'px';
+      tip.style.opacity='1';
+    });
+    hit.addEventListener('mouseleave',()=>{tip.style.opacity='0';});
+  });
+}
+
 function _projTooltip(src){
   const t={manual:'Valor manual',pendentes:'Pendentes do mês',pendentes_cur:'Realizado + pendentes',media_3:'Projeção automática (média 3 meses)',media_6:'Projeção automática (média 6 meses)',ultimo_mes:'Projeção automática (último mês)',parent_manual:'Override manual na categoria-pai — subs ocultados',nao_projetar:'Categoria não projetada'};
   return t[src]||'';
@@ -451,6 +868,7 @@ let dreViewMes=new Date().getMonth();
 let dreViewTri=Math.floor(new Date().getMonth()/3);
 let fluxoViewMes=new Date().getMonth();
 let fluxoViewTri=Math.floor(new Date().getMonth()/3);
+let fluxoModoRecorrente=false;
 let fluxoDrillDown=null;
 let dreDrillDown=null;
 const TABS=[
@@ -2425,6 +2843,7 @@ function toggleAllDRE(){
 }
 
 function renderFluxo(c){
+  if(fluxoModoRecorrente){renderFluxoRecorrente(c);return;}
   const fluxoView=localStorage.getItem('skala_fluxo_view')||'anual';
   const f=calcFluxo(YEAR);
   const recCats=getRecCats();
@@ -2572,7 +2991,7 @@ function renderFluxo(c){
     ${fKpi('Saldo Final',fmtCard(kpiSF),lastMesData>=0?`${MONTHS_FULL[lastMesData]}/${YEAR}`:'—',kpiSFCol)}
   </div>`;
 
-  const toolbar=`<div class="tbl-hdr" style="display:flex;align-items:center;justify-content:space-between;flex-wrap:wrap;gap:8px"><div class="sec-ttl">Fluxo de Caixa — Regime de Caixa <span class="yr-pill">${YEAR}</span></div><div style="display:flex;gap:6px;align-items:center"><div class="dre-seg"><button class="dre-seg-btn${fluxoView==='anual'?' on':''}" onclick="setFluxoView('anual')">Anual</button><button class="dre-seg-btn${fluxoView==='trimestral'?' on':''}" onclick="setFluxoView('trimestral')">Trimestral</button><button class="dre-seg-btn${fluxoView==='mensal'?' on':''}" onclick="setFluxoView('mensal')">Mensal</button></div>${fluxoView==='anual'?`<button class="btn btn-ghost" style="font-size:12px" onclick="exportFluxoExcel()">${appIcon('download')}Exportar Excel</button><button class="btn btn-ghost" style="font-size:12px" onclick="toggleAllFluxo()">⊞ Expandir/Recolher tudo</button><button class="btn btn-ghost" style="font-size:12px;${showFluxoProj?'border-color:#58a6ff;color:#58a6ff':''}" onclick="toggleFluxoProj()">${appIcon('chart')} ${showFluxoProj?'Ocultar projetado':'Fluxo Projetado'}</button>`:fluxoView==='trimestral'?`<button class="btn btn-ghost" style="font-size:12px" onclick="toggleAllFluxoTri()">⊞ Expandir/Recolher tudo</button>`:`<button class="btn btn-ghost" style="font-size:12px" onclick="toggleAllFluxoMes()">⊞ Expandir/Recolher tudo</button>`}</div></div>`;
+  const toolbar=`<div class="tbl-hdr" style="display:flex;align-items:center;justify-content:space-between;flex-wrap:wrap;gap:8px"><div class="sec-ttl">Fluxo de Caixa — Regime de Caixa <span class="yr-pill">${YEAR}</span></div><div style="display:flex;gap:6px;align-items:center"><div class="dre-seg"><button class="dre-seg-btn${fluxoView==='anual'?' on':''}" onclick="setFluxoView('anual')">Anual</button><button class="dre-seg-btn${fluxoView==='trimestral'?' on':''}" onclick="setFluxoView('trimestral')">Trimestral</button><button class="dre-seg-btn${fluxoView==='mensal'?' on':''}" onclick="setFluxoView('mensal')">Mensal</button></div><button class="btn btn-ghost" style="font-size:12px" onclick="setFluxoModoRecorrente(true)" title="Ver piso recorrente: receita recorrente − despesa fixa">${appIcon('repeat')}Análise Recorrente</button>${fluxoView==='anual'?`<button class="btn btn-ghost" style="font-size:12px" onclick="exportFluxoExcel()">${appIcon('download')}Exportar Excel</button><button class="btn btn-ghost" style="font-size:12px" onclick="toggleAllFluxo()">⊞ Expandir/Recolher tudo</button><button class="btn btn-ghost" style="font-size:12px;${showFluxoProj?'border-color:#58a6ff;color:#58a6ff':''}" onclick="toggleFluxoProj()">${appIcon('chart')} ${showFluxoProj?'Ocultar projetado':'Fluxo Projetado'}</button>`:fluxoView==='trimestral'?`<button class="btn btn-ghost" style="font-size:12px" onclick="toggleAllFluxoTri()">⊞ Expandir/Recolher tudo</button>`:`<button class="btn btn-ghost" style="font-size:12px" onclick="toggleAllFluxoMes()">⊞ Expandir/Recolher tudo</button>`}</div></div>`;
 
   if(fluxoView==='trimestral'){
     const QUARTERS=[
