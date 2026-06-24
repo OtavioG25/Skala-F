@@ -202,7 +202,10 @@ function _saveSession(d){
   localStorage.setItem('sb_token',d.access_token);
   localStorage.setItem('sb_refresh',d.refresh_token);
   localStorage.setItem('sb_expires',Date.now()+d.expires_in*1000);
-  if(d.user){localStorage.setItem('sb_user',JSON.stringify({email:d.user.email||'',name:d.user.user_metadata?.full_name||d.user.email||'',role:d.user.user_metadata?.role||d.user.user_metadata?.cargo||''}));}
+  if(d.user){
+    localStorage.setItem('sb_user',JSON.stringify({email:d.user.email||'',name:d.user.user_metadata?.full_name||d.user.email||'',role:d.user.user_metadata?.role||d.user.user_metadata?.cargo||''}));
+    if(d.user.email)localStorage.setItem('sb_last_email',d.user.email);
+  }
 }
 function _clearSession(){
   ['sb_token','sb_refresh','sb_expires','sb_user'].forEach(k=>localStorage.removeItem(k));
@@ -241,6 +244,7 @@ async function doLogin(){
     const data=await res.json();
     if(!res.ok)throw new Error(data.error_description||data.msg||'Credenciais inválidas.');
     _saveSession(data);
+    sessionStorage.setItem('sb_session_active','1');
     _hideLogin();
     pushTab('dashboard');
     init();
@@ -258,17 +262,37 @@ async function doLogout(){
     }).catch(()=>{});
   }
   _clearSession();
+  sessionStorage.removeItem('sb_session_active');
   _showLogin();
   history.pushState({},'',BASE_PATH);
 }
 
 async function startApp(){
+  // Sessão "viva" só dentro da mesma aba: sessionStorage sobrevive ao F5
+  // mas é descartado quando a aba é fechada. Assim o F5 não pede senha,
+  // mas reabrir o app pede.
+  const sessionAlive=sessionStorage.getItem('sb_session_active')==='1';
   const token=localStorage.getItem('sb_token');
+  const lastEmail=localStorage.getItem('sb_last_email')||'';
+
+  const showLoginPrefilled=()=>{
+    _clearSession();
+    sessionStorage.removeItem('sb_session_active');
+    _showLogin();
+    const emailEl=document.getElementById('login-email');
+    const passEl=document.getElementById('login-pass');
+    if(emailEl){
+      emailEl.value=lastEmail;
+      setTimeout(()=>{(lastEmail?passEl:emailEl)?.focus();},50);
+    }
+  };
+
+  if(!sessionAlive||!token){showLoginPrefilled();return;}
+
   const expires=parseInt(localStorage.getItem('sb_expires')||'0');
-  if(!token){_showLogin();return;}
   if(Date.now()>expires-60000){
     const ok=await _refreshToken();
-    if(!ok){_showLogin();return;}
+    if(!ok){showLoginPrefilled();return;}
   }
   if(!localStorage.getItem('sb_user')){
     try{
@@ -278,8 +302,6 @@ async function startApp(){
   }
   _hideLogin();
   init();
-  // Renova o token automaticamente enquanto a aba estiver aberta.
-  // Verifica a cada 4 min e renova se faltar menos de 5 min para vencer.
   setInterval(async()=>{
     const exp=parseInt(localStorage.getItem('sb_expires')||'0');
     if(Date.now()>exp-300000){

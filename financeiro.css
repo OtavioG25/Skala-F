@@ -311,8 +311,9 @@ input::placeholder{color:var(--tx3)}
 /* Skala visual refresh --------------------------------------------------- */
 #login-screen{
   background:
-    linear-gradient(135deg,rgba(11,90,48,.94),rgba(19,124,60,.90),rgba(26,157,77,.88)),
-    radial-gradient(circle at top right,rgba(242,195,0,.24),transparent 32%);
+    radial-gradient(circle at top right,rgba(242,195,0,.24),transparent 32%),
+    linear-gradient(135deg,#0b5a30,#137c3c,#1a9d4d),
+    var(--bg);
 }
 .login-box{background:rgba(255,255,255,.96);border-color:rgba(255,255,255,.42);box-shadow:0 28px 80px rgba(4,35,19,.28)}
 .login-ico{background:linear-gradient(135deg,var(--brand-dark),var(--brand-mid));color:#fff;border-radius:12px}
