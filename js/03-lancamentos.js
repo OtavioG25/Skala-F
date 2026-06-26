@@ -1050,7 +1050,10 @@ function filterContasTbody(){
     if(contasCardFilter==='receber')
       filtered=filtered.filter(l=>openAmount(l)>0.005&&(useRange?inRange(effectiveVenc(l)):(effectiveVenc(l)||'').startsWith(mesRef)));
     else if(contasCardFilter==='atrasados')
-      filtered=filtered.filter(l=>openAmount(l)>0.005&&effectiveVenc(l)&&effectiveVenc(l)<hoje);
+      filtered=filtered.filter(l=>{
+        if(!(openAmount(l)>0.005)||!effectiveVenc(l)||effectiveVenc(l)>=hoje)return false;
+        return useRange?inRange(effectiveVenc(l)):(effectiveVenc(l)||'').startsWith(mesRef);
+      });
     else if(contasCardFilter==='mes'){
       const movs=cashMovements();
       filtered=filtered.filter(l=>movs.some(m=>{

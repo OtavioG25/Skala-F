@@ -114,6 +114,11 @@ function renderContas(c){
       <button class="btn btn-pri" style="margin-top:16px" onclick="adicionarConta()">${appIcon('plus')}Nova Conta</button>
     </div>
     <div class="card" style="padding:18px 20px">
+      <div class="card-ttl">Reserva de Lucros</div>
+      <div style="margin-top:4px;font-size:12.5px;color:var(--tx2);margin-bottom:14px">Configure o saldo inicial da reserva Skala para acompanhar automaticamente o crescimento da conta investimento na sub-tela Distribuição de Lucros.</div>
+      ${(()=>{const b=getReservaBase();return b&&b.data?`<div style="padding:12px 14px;border:1px solid var(--bd);border-radius:12px;background:var(--s2);display:flex;align-items:center;gap:12px;flex-wrap:wrap"><div style="flex:1;min-width:0"><div style="font-size:12px;color:var(--tx2)">Base configurada</div><div style="font-size:14px;font-weight:600;color:var(--tx);margin-top:2px">${dateBR(b.data)} · ${fmt(b.valor)}</div></div><button class="btn btn-ghost" style="font-size:12px" onclick="openReservaBaseModal()">Editar</button></div>`:`<button class="btn btn-pri" style="font-size:13px" onclick="openReservaBaseModal()">Configurar base da reserva</button>`})()}
+    </div>
+    <div class="card" style="padding:18px 20px">
       <div class="card-ttl">${appIcon('lock')}Fechamento mensal <span class="yr-pill">${YEAR}</span></div>
       <div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(82px,1fr));gap:8px">
         ${months.map((p,i)=>`<button class="btn ${closed.has(p)?'btn-pri':'btn-ghost'}" style="justify-content:center;font-size:12px" onclick="toggleClosedPeriod('${p}')" title="${closed.has(p)?'Mes fechado - clique para reabrir':'Mes aberto - clique para fechar'}">${MONTHS[i]}</button>`).join('')}

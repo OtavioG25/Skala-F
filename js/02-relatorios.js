@@ -245,6 +245,331 @@ function setFluxoModoRecorrente(v){
   if(fluxoModoRecorrente)setTimeout(drawRecorrenteEvolucaoChart,30);
 }
 
+// ============================================================
+// Sub-tela: Distribuição de Lucros (dentro do Fluxo)
+// ============================================================
+function setFluxoModoDistrib(v){
+  fluxoModoDistrib=!!v;
+  if(fluxoModoDistrib && distribTri==null){
+    const now=new Date();
+    distribTriYear=YEAR;
+    distribTri=Math.floor(now.getMonth()/3)+1;
+  }
+  render();
+}
+function trimestreMonths(tri){const s=(tri-1)*3;return[s,s+1,s+2];}
+function trimestreFromMonth(m){return Math.floor(m/3)+1;}
+function isMesFechado(year,mIdx){
+  const hoje=new Date(),ya=hoje.getFullYear(),ma=hoje.getMonth();
+  if(year<ya)return true;
+  if(year>ya)return false;
+  return mIdx<ma;
+}
+function calcDistribTrimestre(year,tri){
+  const f=calcFluxo(year);
+  const meses=trimestreMonths(tri);
+  const detalhe=meses.map(mi=>{
+    const resOp=f[mi].resultadoOp||0;
+    return{mIdx:mi,fechado:isMesFechado(year,mi),resOp,reserva:resOp*0.20,distribuir:resOp*0.80};
+  });
+  const resOpAcum=detalhe.reduce((s,d)=>s+d.resOp,0);
+  return{tri,year,detalhe,resOpAcum,reserva:resOpAcum*0.20,distribuir:resOpAcum*0.80};
+}
+function getReservaBase(){
+  try{return JSON.parse(localStorage.getItem('skala_reserva_base')||'null');}catch{return null;}
+}
+function setReservaBase(data,valor){
+  localStorage.setItem('skala_reserva_base',JSON.stringify({data,valor}));
+}
+function calcReservaSkalaAcumulada(cutoffDate){
+  const base=getReservaBase();
+  if(!base||!base.data)return null;
+  const baseDate=new Date(base.data+'T00:00:00');
+  const baseY=baseDate.getFullYear();
+  const baseM=baseDate.getMonth();
+  const hojeStr=(()=>{const d=new Date();return`${d.getFullYear()}-${String(d.getMonth()+1).padStart(2,'0')}-${String(d.getDate()).padStart(2,'0')}`;})();
+  // cutoff = data de corte (último dia do trimestre selecionado), nunca além de hoje
+  const cutoff=(cutoffDate&&cutoffDate<hojeStr)?cutoffDate:hojeStr;
+  const cutoffY=parseInt(cutoff.slice(0,4),10);
+
+  // 1) Aportes trimestrais (lucro: 20% / prejuízo: 100%) desde a base, até o cutoff
+  //    Inclui meses já passados mesmo dentro de trimestre ainda aberto,
+  //    para que a reserva cresça mês a mês sem esperar o trimestre fechar.
+  let somaReservas=0;
+  const trimestresIncluidos=[];
+  for(let y=baseY;y<=cutoffY;y++){
+    for(let t=1;t<=4;t++){
+      const meses=trimestreMonths(t);
+      const primeiroMes=meses[0];
+      if(y===baseY&&primeiroMes<baseM)continue;
+      const f=calcFluxo(y);
+      let resTri=0,hasMonth=false;
+      meses.forEach(mi=>{
+        // Mês incluído se já começou (cutoff >= 1º dia desse mês)
+        const monthStart=`${y}-${String(mi+1).padStart(2,'0')}-01`;
+        if(monthStart<=cutoff){resTri+=(f[mi].resultadoOp||0);hasMonth=true;}
+      });
+      if(!hasMonth)continue;
+      const aporte=resTri>=0?resTri*0.20:resTri;
+      somaReservas+=aporte;
+      trimestresIncluidos.push({year:y,tri:t,resTri,aporte});
+    }
+  }
+
+  // 2) Saídas e entradas não-operacionais desde a base
+  const _isReembols=s=>s.includes('reembols');
+  const _isPrejuizoAplic=s=>s.includes('prejuiz')||s.includes('aplicac');
+  const _naoOpDespAll=(CATS_DATA.D||[]).filter(c=>(c.fluxo||'operacional')==='nao_operacional').map(c=>c.slug||slugify(c.nome)).filter(s=>!FLUXO_DISTRIB_LUCROS_SLUGS.includes(s)&&!_isReembols(s));
+  // investimentos + doações + prejuízo de aplicação = tudo que reduz a reserva
+  const _naoOpDespSlugs=new Set(_naoOpDespAll);
+  const _naoOpRecSlugs=new Set((CATS_DATA.R||[]).filter(c=>(c.fluxo||'operacional')==='nao_operacional').map(c=>c.slug||slugify(c.nome)).filter(s=>!_isReembols(s)));
+  let somaInvest=0,somaRendimentos=0;
+  cashMovements().forEach(l=>{
+    if(!l.dataPgto||l.dataPgto<base.data||l.dataPgto>cutoff)return;
+    const slug=slugify(l.cat||'');
+    if(l.tipo==='D'&&_naoOpDespSlugs.has(slug))somaInvest+=(l.valorLiq||0);
+    if(l.tipo==='R'&&_naoOpRecSlugs.has(slug))somaRendimentos+=(l.valorLiq||0);
+  });
+
+  const total=(base.valor||0)+somaReservas-somaInvest+somaRendimentos;
+  return{base,cutoff,somaReservas,somaInvest,somaRendimentos,total,trimestresIncluidos};
+}
+
+// Retorna detalhamento da reserva para UM trimestre: saldo no início + movimentos só do tri
+function calcReservaTriDetalhe(year, tri){
+  const base=getReservaBase();
+  if(!base||!base.data)return null;
+
+  // Primeiro dia do trimestre selecionado
+  const firstM=trimestreMonths(tri)[0];
+  const triStartStr=`${year}-${String(firstM+1).padStart(2,'0')}-01`;
+
+  // Saldo no INÍCIO do trimestre = reserva acumulada até o dia anterior ao início do tri
+  const prevDate=new Date(triStartStr+'T00:00:00');
+  prevDate.setDate(prevDate.getDate()-1);
+  const prevStr=prevDate.toISOString().slice(0,10);
+  const reservaInicio= prevStr < base.data
+    ? {total:base.valor}
+    : calcReservaSkalaAcumulada(prevStr);
+  const saldoInicio=reservaInicio?reservaInicio.total:base.valor;
+
+  // Aporte do trimestre: 20% do resultado operacional dos meses do tri até cutoff
+  const hoje=(()=>{const d=new Date();return`${d.getFullYear()}-${String(d.getMonth()+1).padStart(2,'0')}-${String(d.getDate()).padStart(2,'0')}`;})();
+  const lastM=trimestreMonths(tri)[2];
+  const lastDay=new Date(year,lastM+1,0).getDate();
+  const triEndStr=`${year}-${String(lastM+1).padStart(2,'0')}-${String(lastDay).padStart(2,'0')}`;
+  const cutoff=triEndStr<hoje?triEndStr:hoje;
+
+  const f=calcFluxo(year);
+  let resTri=0;
+  trimestreMonths(tri).forEach(mi=>{
+    const monthStart=`${year}-${String(mi+1).padStart(2,'0')}-01`;
+    if(monthStart<=cutoff)resTri+=(f[mi].resultadoOp||0);
+  });
+  const aporteTri=resTri>=0?resTri*0.20:resTri;
+
+  // Separa categorias não-op de despesa:
+  //   prejuizoAplicSlugs: categorias de prejuízo de aplicação (netear com rendimentos)
+  //   investDoacSlugs: investimentos + doações (linha própria)
+  const isReembols=s=>s.includes('reembols');
+  const isPrejuizoAplic=s=>s.includes('prejuiz')||s.includes('aplicac');
+  const naoOpDespAll=(CATS_DATA.D||[]).filter(c=>(c.fluxo||'operacional')==='nao_operacional').map(c=>c.slug||slugify(c.nome)).filter(s=>!FLUXO_DISTRIB_LUCROS_SLUGS.includes(s)&&!isReembols(s));
+  const prejuizoAplicSlugs=new Set(naoOpDespAll.filter(isPrejuizoAplic));
+  const investDoacSlugs=new Set(naoOpDespAll.filter(s=>!isPrejuizoAplic(s)));
+  const naoOpRecSlugs=new Set((CATS_DATA.R||[]).filter(c=>(c.fluxo||'operacional')==='nao_operacional').map(c=>c.slug||slugify(c.nome)).filter(s=>!isReembols(s)));
+  let investTri=0,rendTri=0,prejuizoAplicTri=0;
+  cashMovements().forEach(l=>{
+    if(!l.dataPgto||l.dataPgto<triStartStr||l.dataPgto>cutoff)return;
+    const slug=slugify(l.cat||'');
+    if(l.tipo==='D'&&investDoacSlugs.has(slug))investTri+=(l.valorLiq||0);
+    if(l.tipo==='D'&&prejuizoAplicSlugs.has(slug))prejuizoAplicTri+=(l.valorLiq||0);
+    if(l.tipo==='R'&&naoOpRecSlugs.has(slug))rendTri+=(l.valorLiq||0);
+  });
+  const netRendimentos=rendTri-prejuizoAplicTri; // positivo = ganho líquido, negativo = perda líquida
+
+  const saldoFim=saldoInicio+aporteTri-investTri+netRendimentos;
+  return{saldoInicio,aporteTri,resTri,investTri,netRendimentos,rendTri,prejuizoAplicTri,saldoFim,cutoff,triStartStr,isFuture:triStartStr>hoje};
+}
+
+function distribTriNav(delta){
+  let t=distribTri+delta,y=distribTriYear;
+  if(t<1){t=4;y--;}
+  if(t>4){t=1;y++;}
+  distribTri=t;distribTriYear=y;
+  render();
+}
+function distribTriLabel(tri,year){
+  const labels={1:'1º Trimestre · Jan–Mar',2:'2º Trimestre · Abr–Jun',3:'3º Trimestre · Jul–Set',4:'4º Trimestre · Out–Dez'};
+  return`${labels[tri]} · ${year}`;
+}
+
+function renderFluxoDistrib(c){
+  const tri=distribTri,year=distribTriYear;
+  const r=calcDistribTrimestre(year,tri);
+  const rd=calcReservaTriDetalhe(year,tri);
+  const hojeMes=new Date().getMonth(),hojeAno=new Date().getFullYear();
+
+  const heroBg='linear-gradient(135deg,var(--brand-dark),var(--brand),var(--brand-mid))';
+  const fKpi=(lbl,val,sub,col)=>`<div class="kpi" style="align-self:start"><div class="kpi-lbl">${lbl}</div><div class="kpi-val" style="color:${col}">${val}</div><div class="kpi-sub">${sub}</div></div>`;
+  const cardHero=`
+    <div class="kpi" style="background:${heroBg};color:#fff;border:none;align-self:start">
+      <div class="kpi-lbl" style="color:rgba(255,255,255,.85)">A Distribuir (80%)</div>
+      <div class="kpi-val" style="color:#fff">${fmtCard(r.distribuir)}</div>
+      <div class="kpi-sub" style="color:rgba(255,255,255,.85)">valor a distribuir entre sócios e equipe</div>
+    </div>`;
+
+  const resCol=r.resOpAcum>=0?'var(--teal)':'var(--red)';
+  const saidasReserva=rd?rd.investTri:0;
+  const cards=`
+    <div class="dre-kpis">
+      ${cardHero}
+      ${fKpi('Resultado Operacional',fmtCard(r.resOpAcum),`${distribTriLabel(tri,year)} · acumulado`,resCol)}
+      ${fKpi('Reserva Skala (20%)',fmtCard(r.reserva),'retido para a reserva','var(--blue)')}
+      ${fKpi('Saídas da Reserva',fmtCard(saidasReserva),'investimentos e doações do trimestre','var(--red)')}
+    </div>`;
+
+  // Bloco 2 — mês a mês do trimestre
+  const linhas=r.detalhe.map(d=>{
+    const isCur=(year===hojeAno&&d.mIdx===hojeMes);
+    const parcial=!d.fechado&&!(year>hojeAno||(year===hojeAno&&d.mIdx>hojeMes));
+    const futuro=(year>hojeAno)||(year===hojeAno&&d.mIdx>hojeMes);
+    let styleRow='';
+    if(isCur)styleRow=`background:rgba(227,179,65,.12)`;
+    const fontSt=parcial||futuro?'font-style:italic;color:var(--blue)':'';
+    const sufixo=parcial?' <span style="font-size:10px;color:var(--blue);font-weight:500">(parcial)</span>':futuro?' <span style="font-size:10px;color:var(--tx3);font-weight:500">(futuro)</span>':'';
+    return`<tr style="${styleRow}">
+      <td style="padding:9px 14px;${fontSt}">${MONTHS_FULL[d.mIdx]}${sufixo}</td>
+      <td style="padding:9px 14px;text-align:right;${fontSt};color:${d.resOp<0?'var(--red)':d.resOp>0?'var(--teal)':'var(--tx2)'}">${d.resOp!==0?fmt(d.resOp):'—'}</td>
+      <td style="padding:9px 14px;text-align:right;${fontSt}">${d.reserva!==0?fmt(d.reserva):'—'}</td>
+      <td style="padding:9px 14px;text-align:right;${fontSt};font-weight:600">${d.distribuir!==0?fmt(d.distribuir):'—'}</td>
+    </tr>`;
+  }).join('');
+  const totalRow=`<tr style="background:rgba(19,124,60,.08);font-weight:700">
+    <td style="padding:11px 14px">TOTAL ${distribTriLabel(tri,year).split('·')[0].trim()}</td>
+    <td style="padding:11px 14px;text-align:right;color:${resCol}">${fmt(r.resOpAcum)}</td>
+    <td style="padding:11px 14px;text-align:right;color:var(--blue)">${fmt(r.reserva)}</td>
+    <td style="padding:11px 14px;text-align:right;color:var(--brand-dark)">${fmt(r.distribuir)}</td>
+  </tr>`;
+  const tabelaMes=`
+    <div class="card" style="padding:0;margin-top:14px;overflow:hidden">
+      <div style="padding:14px 18px;border-bottom:1px solid var(--bd)">
+        <div class="card-ttl" style="margin:0">Detalhamento mês a mês</div>
+        <div style="font-size:11px;color:var(--tx2);margin-top:3px">Meses ainda não fechados aparecem em itálico</div>
+      </div>
+      <table style="width:100%;border-collapse:collapse;font-size:13px">
+        <thead>
+          <tr style="background:var(--s2);color:var(--tx2);font-size:11px;text-transform:uppercase;letter-spacing:.3px">
+            <th style="padding:10px 14px;text-align:left;font-weight:600">Mês</th>
+            <th style="padding:10px 14px;text-align:right;font-weight:600">Resultado Operacional</th>
+            <th style="padding:10px 14px;text-align:right;font-weight:600">Reserva (20%)</th>
+            <th style="padding:10px 14px;text-align:right;font-weight:600">A Distribuir (80%)</th>
+          </tr>
+        </thead>
+        <tbody>${linhas}${totalRow}</tbody>
+      </table>
+    </div>`;
+
+  // Bloco 3 — Reserva Skala acumulada
+  const base=getReservaBase();
+  let blocoReserva='';
+  if(!base||!base.data){
+    blocoReserva=`
+      <div class="card" style="padding:22px 22px;margin-top:14px;border-left:3px solid var(--gold)">
+        <div style="display:flex;align-items:center;justify-content:space-between;gap:14px;flex-wrap:wrap">
+          <div>
+            <div style="font-size:14px;font-weight:600;color:var(--tx);margin-bottom:4px">Reserva Skala na conta investimento</div>
+            <div style="font-size:13px;color:var(--tx2);max-width:560px;line-height:1.5">Configure uma base inicial (data + valor) para começar a acompanhar quanto do saldo da aplicação é da Skala. Recomendado: usar o primeiro dia de um trimestre (01/jan, 01/abr, 01/jul, 01/out).</div>
+          </div>
+          <button class="btn btn-pri" style="font-size:12.5px" onclick="openReservaBaseModal()">Configurar base da reserva</button>
+        </div>
+      </div>`;
+  } else if(rd){
+    const triLbl=distribTriLabel(tri,year);
+    const futuroNote=rd.isFuture?`<div style="font-size:11px;color:var(--orange);margin-top:6px">⚠ Trimestre ainda não iniciado — valores zerados</div>`:'';
+    blocoReserva=`
+      <div class="card" style="padding:22px 24px;margin-top:14px;border-left:3px solid var(--gold)">
+        <div style="display:flex;align-items:flex-start;justify-content:space-between;gap:18px;flex-wrap:wrap">
+          <div style="flex:1 1 260px;min-width:0">
+            <div style="font-size:13px;color:var(--tx2);margin-bottom:6px">Reserva Skala — ${triLbl.split('·')[0].trim()}</div>
+            <div style="font-size:22px;font-weight:700;color:var(--gold);line-height:1.2">${fmt(rd.saldoFim)}</div>
+            <div style="font-size:11.5px;color:var(--tx3);margin-top:6px">Posição em ${dateBR(rd.cutoff)}</div>
+            ${futuroNote}
+          </div>
+          <div style="flex:1 1 300px;min-width:0;font-size:12.5px;color:var(--tx);line-height:1.9">
+            <div style="display:flex;justify-content:space-between;gap:14px"><span style="color:var(--tx2)">Saldo no início do trimestre</span><span style="font-weight:600">${fmt(rd.saldoInicio)}</span></div>
+            <div style="display:flex;justify-content:space-between;gap:14px"><span style="color:var(--tx2)">+ Aporte do trimestre (20%)</span><span style="color:${rd.aporteTri<0?'var(--red)':'var(--teal)'}">${rd.aporteTri!==0?fmt(rd.aporteTri):'—'}</span></div>
+            <div style="display:flex;justify-content:space-between;gap:14px"><span style="color:var(--tx2)">− Investimentos / doações</span><span style="color:var(--red)">${rd.investTri>0?fmt(rd.investTri):'—'}</span></div>
+            <div style="display:flex;justify-content:space-between;gap:14px"><span style="color:var(--tx2)">${rd.netRendimentos>=0?'+ Rendimentos líquidos de aplicação':'− Prejuízo líquido de aplicação'}</span><span style="color:${rd.netRendimentos>=0?'var(--teal)':'var(--red)'}">${rd.netRendimentos!==0?fmt(Math.abs(rd.netRendimentos)):'—'}</span></div>
+            <div style="border-top:1px solid var(--bd);margin-top:6px;padding-top:8px;display:flex;justify-content:space-between;gap:14px;font-weight:700"><span>= Saldo no fim do trimestre</span><span style="color:var(--gold)">${fmt(rd.saldoFim)}</span></div>
+          </div>
+        </div>
+      </div>`;
+  }
+
+  const seletor=`
+    <div style="display:flex;align-items:center;gap:10px;margin-left:auto">
+      <button class="btn btn-ghost" style="font-size:14px;padding:4px 10px" onclick="distribTriNav(-1)" title="Trimestre anterior">‹</button>
+      <div style="font-size:13px;font-weight:600;color:var(--tx);min-width:200px;text-align:center">${distribTriLabel(tri,year)}</div>
+      <button class="btn btn-ghost" style="font-size:14px;padding:4px 10px" onclick="distribTriNav(1)" title="Próximo trimestre">›</button>
+    </div>`;
+
+  c.innerHTML=`
+    <div class="card" style="padding:14px 20px;display:flex;align-items:center;gap:12px;flex-wrap:wrap">
+      <button class="btn btn-ghost" style="font-size:12px" onclick="setFluxoModoDistrib(false)">← Voltar ao Fluxo</button>
+      <div class="sec-ttl" style="margin:0">Distribuição de Lucros</div>
+      ${seletor}
+    </div>
+    <div style="margin-top:14px">${cards}</div>
+    ${tabelaMes}
+    ${blocoReserva}
+  `;
+}
+
+function openReservaBaseModal(){
+  const cur=getReservaBase()||{data:'',valor:0};
+  const html=`
+    <div class="overlay" id="reserva-base-overlay" onclick="if(event.target===this)closeReservaBaseModal()">
+      <div class="modal" style="max-width:460px">
+        <div class="modal-hdr">
+          <div class="modal-ttl">Configurar base da Reserva Skala</div>
+          <button class="modal-x" onclick="closeReservaBaseModal()">×</button>
+        </div>
+        <div class="modal-bd" style="padding:18px 22px">
+          <div style="font-size:12.5px;color:var(--tx2);line-height:1.55;margin-bottom:16px">
+            Informe a data e o valor da reserva Skala existente na conta investimento nessa data. A partir daqui, o sistema acompanha automaticamente aportes trimestrais, rendimentos e investimentos.
+            <div style="margin-top:6px;color:var(--brand-dark);font-weight:600">Dica: use o primeiro dia de um trimestre (01/jan, 01/abr, 01/jul ou 01/out).</div>
+          </div>
+          <div class="frm-row" style="display:flex;flex-direction:column;gap:6px;margin-bottom:14px">
+            <label style="font-size:11.5px;color:var(--tx2);font-weight:600">Data da base</label>
+            <input type="date" id="reserva-base-data" value="${cur.data||''}" style="padding:9px 11px;border:1px solid var(--bd);border-radius:7px;background:var(--s2);color:var(--tx);font-size:13px">
+          </div>
+          <div class="frm-row" style="display:flex;flex-direction:column;gap:6px">
+            <label style="font-size:11.5px;color:var(--tx2);font-weight:600">Saldo da reserva Skala nessa data (R$)</label>
+            <input type="text" id="reserva-base-valor" value="${cur.valor?fmt(cur.valor):''}" placeholder="0,00" style="padding:9px 11px;border:1px solid var(--bd);border-radius:7px;background:var(--s2);color:var(--tx);font-size:13px">
+          </div>
+        </div>
+        <div class="modal-ft" style="display:flex;justify-content:space-between;padding:14px 22px;border-top:1px solid var(--bd)">
+          <button class="btn btn-ghost" onclick="closeReservaBaseModal()">Cancelar</button>
+          <button class="btn btn-pri" onclick="saveReservaBase()">Salvar</button>
+        </div>
+      </div>
+    </div>`;
+  document.body.insertAdjacentHTML('beforeend',html);
+}
+function closeReservaBaseModal(){
+  const el=document.getElementById('reserva-base-overlay');
+  if(el)el.remove();
+}
+function saveReservaBase(){
+  const data=document.getElementById('reserva-base-data').value;
+  const valor=parseMoney(document.getElementById('reserva-base-valor').value);
+  if(!data){toast('Informe a data da base','err');return;}
+  setReservaBase(data,valor);
+  closeReservaBaseModal();
+  toast('Base da reserva salva','ok');
+  render();
+}
+
 // Tabela anual mês-a-mês (categoria + subs) para a sub-tela Análise Recorrente.
 function calcRecorrenteAnual(year){
   const recRNomes=_recCatRecorrenteNomes();
@@ -802,8 +1127,14 @@ function compToView(v){
 }
 function compDisplay(v){
   if(!v)return'';
-  if(/^\d{4}-\d{2}-\d{2}$/.test(v))return v.slice(0,7);
-  if(/^\d{4}-\d{2}$/.test(v))return v;
+  let ym=v;
+  if(/^\d{4}-\d{2}-\d{2}$/.test(v))ym=v.slice(0,7);
+  if(/^\d{4}-\d{2}$/.test(ym)){
+    const[y,m]=ym.split('-');
+    const mi=parseInt(m,10)-1;
+    if(mi>=0&&mi<12&&typeof MONTHS!=='undefined')return MONTHS[mi]+'/'+y;
+    return ym;
+  }
   return v;
 }
 function compFromView(v){
@@ -869,6 +1200,9 @@ let dreViewTri=Math.floor(new Date().getMonth()/3);
 let fluxoViewMes=new Date().getMonth();
 let fluxoViewTri=Math.floor(new Date().getMonth()/3);
 let fluxoModoRecorrente=false;
+let fluxoModoDistrib=false;
+let distribTri=null;
+let distribTriYear=new Date().getFullYear();
 let fluxoDrillDown=null;
 let dreDrillDown=null;
 const TABS=[
@@ -2844,6 +3178,7 @@ function toggleAllDRE(){
 
 function renderFluxo(c){
   if(fluxoModoRecorrente){renderFluxoRecorrente(c);return;}
+  if(fluxoModoDistrib){renderFluxoDistrib(c);return;}
   const fluxoView=localStorage.getItem('skala_fluxo_view')||'anual';
   const f=calcFluxo(YEAR);
   const recCats=getRecCats();
@@ -2991,7 +3326,7 @@ function renderFluxo(c){
     ${fKpi('Saldo Final',fmtCard(kpiSF),lastMesData>=0?`${MONTHS_FULL[lastMesData]}/${YEAR}`:'—',kpiSFCol)}
   </div>`;
 
-  const toolbar=`<div class="tbl-hdr" style="display:flex;align-items:center;justify-content:space-between;flex-wrap:wrap;gap:8px"><div class="sec-ttl">Fluxo de Caixa — Regime de Caixa <span class="yr-pill">${YEAR}</span></div><div style="display:flex;gap:6px;align-items:center"><div class="dre-seg"><button class="dre-seg-btn${fluxoView==='anual'?' on':''}" onclick="setFluxoView('anual')">Anual</button><button class="dre-seg-btn${fluxoView==='trimestral'?' on':''}" onclick="setFluxoView('trimestral')">Trimestral</button><button class="dre-seg-btn${fluxoView==='mensal'?' on':''}" onclick="setFluxoView('mensal')">Mensal</button></div><button class="btn btn-ghost" style="font-size:12px" onclick="setFluxoModoRecorrente(true)" title="Ver piso recorrente: receita recorrente − despesa fixa">${appIcon('repeat')}Análise Recorrente</button>${fluxoView==='anual'?`<button class="btn btn-ghost" style="font-size:12px" onclick="exportFluxoExcel()">${appIcon('download')}Exportar Excel</button><button class="btn btn-ghost" style="font-size:12px" onclick="toggleAllFluxo()">⊞ Expandir/Recolher tudo</button><button class="btn btn-ghost" style="font-size:12px;${showFluxoProj?'border-color:#58a6ff;color:#58a6ff':''}" onclick="toggleFluxoProj()">${appIcon('chart')} ${showFluxoProj?'Ocultar projetado':'Fluxo Projetado'}</button>`:fluxoView==='trimestral'?`<button class="btn btn-ghost" style="font-size:12px" onclick="toggleAllFluxoTri()">⊞ Expandir/Recolher tudo</button>`:`<button class="btn btn-ghost" style="font-size:12px" onclick="toggleAllFluxoMes()">⊞ Expandir/Recolher tudo</button>`}</div></div>`;
+  const toolbar=`<div class="tbl-hdr" style="display:flex;align-items:center;justify-content:space-between;flex-wrap:wrap;gap:8px"><div class="sec-ttl">Fluxo de Caixa — Regime de Caixa <span class="yr-pill">${YEAR}</span></div><div style="display:flex;gap:6px;align-items:center"><div class="dre-seg"><button class="dre-seg-btn${fluxoView==='anual'?' on':''}" onclick="setFluxoView('anual')">Anual</button><button class="dre-seg-btn${fluxoView==='trimestral'?' on':''}" onclick="setFluxoView('trimestral')">Trimestral</button><button class="dre-seg-btn${fluxoView==='mensal'?' on':''}" onclick="setFluxoView('mensal')">Mensal</button></div><button class="btn btn-ghost" style="font-size:12px" onclick="setFluxoModoRecorrente(true)" title="Ver piso recorrente: receita recorrente − despesa fixa">${appIcon('repeat')}Análise Recorrente</button><button class="btn btn-ghost" style="font-size:12px" onclick="setFluxoModoDistrib(true)" title="Quanto há a distribuir e quanto da reserva é da Skala">${appIcon('chart')}Distribuição de Lucros</button>${fluxoView==='anual'?`<button class="btn btn-ghost" style="font-size:12px" onclick="exportFluxoExcel()">${appIcon('download')}Exportar Excel</button><button class="btn btn-ghost" style="font-size:12px" onclick="toggleAllFluxo()">⊞ Expandir/Recolher tudo</button><button class="btn btn-ghost" style="font-size:12px;${showFluxoProj?'border-color:#58a6ff;color:#58a6ff':''}" onclick="toggleFluxoProj()">${appIcon('chart')} ${showFluxoProj?'Ocultar projetado':'Fluxo Projetado'}</button>`:fluxoView==='trimestral'?`<button class="btn btn-ghost" style="font-size:12px" onclick="toggleAllFluxoTri()">⊞ Expandir/Recolher tudo</button>`:`<button class="btn btn-ghost" style="font-size:12px" onclick="toggleAllFluxoMes()">⊞ Expandir/Recolher tudo</button>`}</div></div>`;
 
   if(fluxoView==='trimestral'){
     const QUARTERS=[
