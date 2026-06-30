@@ -276,10 +276,21 @@ function calcDistribTrimestre(year,tri){
   return{tri,year,detalhe,resOpAcum,reserva:resOpAcum*0.20,distribuir:resOpAcum*0.80};
 }
 function getReservaBase(){
-  try{return JSON.parse(localStorage.getItem('skala_reserva_base')||'null');}catch{return null;}
+  return typeof RESERVA_BASE!=='undefined'?RESERVA_BASE:null;
 }
-function setReservaBase(data,valor){
-  localStorage.setItem('skala_reserva_base',JSON.stringify({data,valor}));
+async function loadReservaBase(){
+  // tenta banco; fallback para localStorage legado (migração única)
+  let val=await dbLoadConfig('reserva_skala_base');
+  if(!val){
+    try{val=JSON.parse(localStorage.getItem('skala_reserva_base')||'null');}catch{}
+    if(val){await dbSaveConfig('reserva_skala_base',val);localStorage.removeItem('skala_reserva_base');}
+  }
+  RESERVA_BASE=val||null;
+}
+async function setReservaBase(data,valor){
+  const val={data,valor};
+  await dbSaveConfig('reserva_skala_base',val);
+  RESERVA_BASE=val;
 }
 function calcReservaSkalaAcumulada(cutoffDate){
   const base=getReservaBase();
@@ -560,14 +571,16 @@ function closeReservaBaseModal(){
   const el=document.getElementById('reserva-base-overlay');
   if(el)el.remove();
 }
-function saveReservaBase(){
+async function saveReservaBase(){
   const data=document.getElementById('reserva-base-data').value;
   const valor=parseMoney(document.getElementById('reserva-base-valor').value);
   if(!data){toast('Informe a data da base','err');return;}
-  setReservaBase(data,valor);
-  closeReservaBaseModal();
-  toast('Base da reserva salva','ok');
-  render();
+  try{
+    await setReservaBase(data,valor);
+    closeReservaBaseModal();
+    toast('Base da reserva salva','ok');
+    render();
+  }catch(e){toast('Erro ao salvar: '+e.message,'err');}
 }
 
 // Tabela anual mês-a-mês (categoria + subs) para a sub-tela Análise Recorrente.
@@ -1236,6 +1249,7 @@ async function init(){
       loadContasFromDB(),
       loadClientesFromDB(),
       dbLoadProjecoes().catch(e=>{console.warn('Falha ao carregar projecoes_manuais',e);return[];}),
+      loadReservaBase().catch(e=>{console.warn('Falha ao carregar reserva_skala_base',e);}),
     ]);
     DATA=rows.map(fromRow);
     BAIXAS_DATA=(baixaRows||[]).map(fromBaixaRow);

@@ -197,6 +197,13 @@ async function dbDeleteProjecao(catSlug,tipo,comp){
   await sbFetch('DELETE',`projecoes_manuais?cat_slug=eq.${encodeURIComponent(catSlug)}&tipo=eq.${encodeURIComponent(tipo)}&comp=eq.${encodeURIComponent(comp)}`);
   PROJECOES=PROJECOES.filter(p=>!(p.catSlug===catSlug&&p.tipo===tipo&&p.comp===comp));
 }
+async function dbLoadConfig(chave){
+  const rows=await sbFetch('GET',`configuracoes?chave=eq.${encodeURIComponent(chave)}&select=valor&limit=1`);
+  return(rows&&rows.length)?rows[0].valor:null;
+}
+async function dbSaveConfig(chave,valor){
+  await sbFetch('POST',`configuracoes?on_conflict=chave`,{chave,valor},{'Prefer':'resolution=merge-duplicates,return=minimal'});
+}
 
 function isPendingStatus(l){
   return l.status==='Pendente'||l.status==='Parcial';
@@ -482,6 +489,7 @@ let BAIXAS_DATA=[];
 let _baixasMap=null;
 function _invalidateBaixasCache(){_baixasMap=null;}
 let PROJECOES=[];
+let RESERVA_BASE=null;
 let DATA_VERSION=0;
 let _cashMovementsCache=null;
 function touchFinanceData(){
