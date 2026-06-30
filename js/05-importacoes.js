@@ -1188,7 +1188,7 @@ async function confirmarImport(){
       const clienteId=await _resolveClienteIdForEntry(entry,clienteCache);
       const item={...entry,id,forma,clienteId:clienteId||''};
       const saved=await dbInsert(item);
-      DATA.unshift(fromRow({...toRow(item),id:saved?.id||id}));
+      DATA.unshift(saved ? fromRow(saved) : fromRow({...toRow(item),id}));
       inserted++;
     }catch(e){errors++;console.error('Erro ao importar linha',entry?.desc,e);}
     _updImpProg(inserted+skipped+errors);
