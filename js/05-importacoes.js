@@ -24,7 +24,7 @@ function ensureXLSX(){
   if(_xlsxLoadPromise)return _xlsxLoadPromise;
   _xlsxLoadPromise=new Promise((resolve,reject)=>{
     const s=document.createElement('script');
-    s.src='https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js';
+    s.src='https://cdn.jsdelivr.net/npm/xlsx-js-style@1.2.0/dist/xlsx.bundle.js';
     s.onload=()=>window.XLSX?resolve(window.XLSX):reject(new Error('Biblioteca XLSX não ficou disponível.'));
     s.onerror=()=>reject(new Error('Não foi possível carregar a biblioteca XLSX.'));
     document.head.appendChild(s);
@@ -69,30 +69,181 @@ async function exportDREExcel(){
   const recCats=getRecCats().filter(c=>!isExclDRE(c));
   const despCats=getDespCats().filter(c=>!isExclDRE(c));
   const tot=k=>dre.reduce((s,m)=>s+(m[k]||0),0);
-  const rows=[['DRE — Regime de Competência '+YEAR],[],['Descrição',...MONTHS,'Total']];
-  const addRow=(lbl,k)=>rows.push([lbl,...dre.map(m=>m[k]||0),tot(k)]);
-  const addSep=(lbl)=>rows.push([lbl]);
-  const recOpCats=recCats.filter(c=>!isNaoOpDRE(c));
+
+  const recOpCats   =recCats.filter(c=>!isNaoOpDRE(c));
   const recNaoOpCats=recCats.filter(c=>isNaoOpDRE(c));
-  const despOpBase=despCats.filter(c=>!isNaoOpDRE(c));
+  const despOpBase  =despCats.filter(c=>!isNaoOpDRE(c));
   const despNaoOpCats=despCats.filter(c=>isNaoOpDRE(c));
-  const impostoCat=despOpBase.find(c=>dreCatSlug(c)==='impostos_e_taxas');
-  const pessoalCat=despOpBase.find(c=>dreCatSlug(c)==='pessoal');
-  const despOpCats=despOpBase.filter(c=>!['pessoal','impostos_e_taxas'].includes(dreCatSlug(c)));
-  addSep('RECEITAS OPERACIONAIS');
-  recOpCats.forEach(cat=>{addRow(cat.nome,'r_'+dreCatSlug(cat));(cat.subs||[]).sort((a,b)=>a.ordem-b.ordem).forEach(sub=>addRow('  '+sub.nome,'rs_'+dreCatSlug(sub)));});
-  addRow('(=) RECEITA OPERACIONAL BRUTA','recOpBruta');
-  if(impostoCat){addSep('IMPOSTOS E TAXAS');addRow(impostoCat.nome,'d_'+dreCatSlug(impostoCat));(impostoCat.subs||[]).sort((a,b)=>a.ordem-b.ordem).forEach(sub=>addRow('  '+sub.nome,'ds_'+dreCatSlug(sub)));}
-  addRow('(=) RECEITA OPERACIONAL LÍQUIDA','recOpLiq');
-  if(pessoalCat){addSep('CUSTO COM PESSOAL');addRow(pessoalCat.nome,'d_'+dreCatSlug(pessoalCat));(pessoalCat.subs||[]).sort((a,b)=>a.ordem-b.ordem).forEach(sub=>addRow('  '+sub.nome,'ds_'+dreCatSlug(sub)));addRow('(=) CUSTO COM PESSOAL','cusPessoal');}
-  addRow('(=) LUCRO OPERACIONAL BRUTO','lucOpBruto');
-  if(despOpCats.length){addSep('DESPESAS OPERACIONAIS');despOpCats.forEach(cat=>{addRow(cat.nome,'d_'+dreCatSlug(cat));(cat.subs||[]).sort((a,b)=>a.ordem-b.ordem).forEach(sub=>addRow('  '+sub.nome,'ds_'+dreCatSlug(sub)));});addRow('(=) DESPESAS OPERACIONAIS','despOp');}
-  addRow('(=) RESULTADO OPERACIONAL','resOp');
-  if(recNaoOpCats.length){addSep('RECEITAS NÃO OPERACIONAIS');recNaoOpCats.forEach(cat=>{addRow(cat.nome,'r_'+dreCatSlug(cat));(cat.subs||[]).sort((a,b)=>a.ordem-b.ordem).forEach(sub=>addRow('  '+sub.nome,'rs_'+dreCatSlug(sub)));});addRow('(=) RECEITAS NÃO OPERACIONAIS','outrasRec');}
-  if(despNaoOpCats.length){addSep('DESPESAS NÃO OPERACIONAIS');despNaoOpCats.forEach(cat=>addRow(cat.nome,'d_'+dreCatSlug(cat)));addRow('(=) DESPESAS NÃO OPERACIONAIS','despNaoOp');}
-  rows.push([]);
-  addRow('RESULTADO FINAL','ll');
-  const ws=XLSX.utils.aoa_to_sheet(rows);
+  const impostoCat  =despOpBase.find(c=>['impostos_e_taxas','impostos'].includes(dreCatSlug(c)));
+  const custosOpCat =despOpBase.find(c=>dreCatSlug(c)==='custos_operacionais');
+  const pessoalCats =despOpBase.filter(c=>DRE_PESSOAL_SLUGS.includes(dreCatSlug(c)));
+  const EXCL_SLUGS  =[
+    impostoCat  ?dreCatSlug(impostoCat) :null,
+    custosOpCat ?dreCatSlug(custosOpCat):null,
+    ...pessoalCats.map(dreCatSlug)
+  ].filter(Boolean);
+  const despOpCats  =despOpBase.filter(c=>!EXCL_SLUGS.includes(dreCatSlug(c)));
+
+  // ── 1. Monta lista de "items" (cada um vira uma linha do Excel) ─────
+  const items=[];
+  const pushCatGroup=(cat,tipo,neg)=>{
+    const k=tipo==='R'?'r_'+dreCatSlug(cat):'d_'+dreCatSlug(cat);
+    items.push({type:'cat',lbl:cat.nome,key:k,neg});
+    (cat.subs||[]).sort((a,b)=>a.ordem-b.ordem).forEach(sub=>{
+      const sk=tipo==='R'?'rs_'+(sub.slug||slugify(sub.nome)):'ds_'+(sub.slug||slugify(sub.nome));
+      items.push({type:'sub',lbl:sub.nome,key:sk,neg});
+    });
+  };
+
+  items.push({type:'sep',lbl:'RECEITAS OPERACIONAIS'});
+  recOpCats.forEach(cat=>pushCatGroup(cat,'R',false));
+  items.push({type:'result',lbl:'(=) RECEITA OPERACIONAL BRUTA',key:'recOpBruta',neg:false});
+
+  items.push({type:'sep',lbl:'DEDUÇÕES'});
+  if(impostoCat) pushCatGroup(impostoCat,'D',true);
+  if(custosOpCat) pushCatGroup(custosOpCat,'D',true);
+  items.push({type:'result',lbl:'(=) RECEITA OPERACIONAL LÍQUIDA',key:'recOpLiq',neg:false});
+
+  if(pessoalCats.length){
+    items.push({type:'sep',lbl:'DESPESAS COM PESSOAL'});
+    pessoalCats.forEach(cat=>pushCatGroup(cat,'D',true));
+    items.push({type:'total',lbl:'(=) Total Pessoal',key:'cusPessoal',neg:true});
+  }
+  items.push({type:'result',lbl:'(=) LUCRO BRUTO',key:'lucOpBruto',neg:false});
+  items.push({type:'pct',lbl:'(%) Margem Bruta',numKey:'lucOpBruto',denKey:'recOpBruta'});
+
+  if(despOpCats.length){
+    items.push({type:'sep',lbl:'DESPESAS OPERACIONAIS'});
+    despOpCats.forEach(cat=>pushCatGroup(cat,'D',true));
+    items.push({type:'total',lbl:'(=) Total Despesas Operacionais',key:'despOp',neg:true});
+  }
+  items.push({type:'result',lbl:'(=) RESULTADO OPERACIONAL',key:'resOp',neg:false});
+  items.push({type:'pct',lbl:'(%) Margem Operacional',numKey:'resOp',denKey:'recOpLiq'});
+
+  if(recNaoOpCats.length){
+    items.push({type:'sep',lbl:'RECEITAS NÃO OPERACIONAIS'});
+    recNaoOpCats.forEach(cat=>pushCatGroup(cat,'R',false));
+    items.push({type:'total',lbl:'(=) RECEITAS NÃO OPERACIONAIS',key:'outrasRec',neg:false});
+  }
+  if(despNaoOpCats.length){
+    items.push({type:'sep',lbl:'DESPESAS NÃO OPERACIONAIS'});
+    despNaoOpCats.forEach(cat=>pushCatGroup(cat,'D',true));
+    items.push({type:'total',lbl:'(=) DESPESAS NÃO OPERACIONAIS',key:'despNaoOp',neg:true});
+  }
+
+  items.push({type:'blank'});
+  items.push({type:'lucro',lbl:'RESULTADO LÍQUIDO',key:'ll',neg:false});
+  items.push({type:'pct',lbl:'(%) Margem Líquida',numKey:'ll',denKey:'recOpLiq'});
+
+  // ── 2. Materializa em AoA ───────────────────────────────────────────
+  const NCOLS=2+MONTHS.length; // Descrição + 12 meses + Total
+  const aoa=[
+    ['DRE — Regime de Competência '+YEAR],
+    [],
+    ['Descrição',...MONTHS,'Total']
+  ];
+  const itemRow=[]; // índice do item → índice da linha no sheet
+  items.forEach(it=>{
+    let row;
+    if(it.type==='sep') row=[it.lbl];
+    else if(it.type==='blank') row=[];
+    else if(it.type==='pct'){
+      const cells=dre.map(m=>{
+        const n=m[it.numKey]||0,d=m[it.denKey]||0;
+        return d!==0?n/d:null;
+      });
+      const tN=tot(it.numKey),tD=tot(it.denKey);
+      const totPct=tD!==0?tN/tD:null;
+      row=[it.lbl,...cells.map(v=>v===null?'—':v),totPct===null?'—':totPct];
+    } else {
+      const vals=dre.map(m=>(it.neg?-1:1)*(m[it.key]||0));
+      const tv=vals.reduce((s,v)=>s+v,0);
+      row=[it.lbl,...vals,tv];
+    }
+    itemRow.push(aoa.length);
+    aoa.push(row);
+  });
+
+  const ws=XLSX.utils.aoa_to_sheet(aoa);
+
+  // ── 3. Larguras, merges, freeze ─────────────────────────────────────
+  ws['!cols']=[{wch:44},...MONTHS.map(()=>({wch:13})),{wch:14}];
+  ws['!merges']=[{s:{r:0,c:0},e:{r:0,c:NCOLS-1}}]; // título
+  ws['!views']=[{state:'frozen',xSplit:1,ySplit:3}];
+  ws['!rows']=[];
+  ws['!rows'][0]={hpt:24};
+  ws['!rows'][2]={hpt:20};
+  ws['!outline']={above:true,summaryBelow:false}; // resumo (cat) acima do detalhe (subs)
+
+  // ── 4. Helper de estilos ────────────────────────────────────────────
+  const NUM_FMT='#,##0.00;[Red](#,##0.00);"—"';
+  const PCT_FMT='0.0%;[Red]-0.0%;"—"';
+  const BORDER_THIN={top:{style:'thin',color:{rgb:'D8E0D6'}},bottom:{style:'thin',color:{rgb:'D8E0D6'}},left:{style:'thin',color:{rgb:'D8E0D6'}},right:{style:'thin',color:{rgb:'D8E0D6'}}};
+  const setStyle=(r,c,style,numFmt)=>{
+    const addr=XLSX.utils.encode_cell({r,c});
+    if(!ws[addr]) ws[addr]={t:'s',v:''};
+    ws[addr].s=Object.assign({},ws[addr].s,style);
+    if(numFmt) ws[addr].z=numFmt;
+  };
+
+  // Título
+  setStyle(0,0,{font:{bold:true,sz:15,color:{rgb:'0B5A30'}},alignment:{horizontal:'left',vertical:'center'}});
+  // Header
+  for(let c=0;c<NCOLS;c++){
+    setStyle(2,c,{
+      font:{bold:true,color:{rgb:'FFFFFF'},sz:11},
+      fill:{patternType:'solid',fgColor:{rgb:'137C3C'}},
+      alignment:{horizontal:c===0?'left':'right',vertical:'center'},
+      border:BORDER_THIN
+    });
+  }
+
+  // ── 5. Estilos por item + outline ───────────────────────────────────
+  items.forEach((it,i)=>{
+    const r=itemRow[i];
+    if(it.type==='blank') return;
+
+    if(it.type==='sep'){
+      ws['!merges'].push({s:{r,c:0},e:{r,c:NCOLS-1}});
+      setStyle(r,0,{
+        font:{bold:true,sz:11,color:{rgb:'0B5A30'}},
+        fill:{patternType:'solid',fgColor:{rgb:'EAF2E7'}},
+        alignment:{horizontal:'left',vertical:'center'},
+        border:BORDER_THIN
+      });
+      ws['!rows'][r]={hpt:18};
+      return;
+    }
+
+    let labelStyle, valueStyle, numFmt=NUM_FMT;
+
+    if(it.type==='lucro'){
+      labelStyle={font:{bold:true,sz:12,color:{rgb:'FFFFFF'}},fill:{patternType:'solid',fgColor:{rgb:'137C3C'}},alignment:{horizontal:'left',vertical:'center'},border:BORDER_THIN};
+      valueStyle={font:{bold:true,sz:12,color:{rgb:'FFFFFF'}},fill:{patternType:'solid',fgColor:{rgb:'137C3C'}},alignment:{horizontal:'right',vertical:'center'},border:BORDER_THIN};
+      ws['!rows'][r]={hpt:20};
+    } else if(it.type==='result'){
+      labelStyle={font:{bold:true,sz:11,color:{rgb:'0B5A30'}},fill:{patternType:'solid',fgColor:{rgb:'F0F7EE'}},alignment:{horizontal:'left',vertical:'center'},border:BORDER_THIN};
+      valueStyle={font:{bold:true,sz:11,color:{rgb:'0B5A30'}},fill:{patternType:'solid',fgColor:{rgb:'F0F7EE'}},alignment:{horizontal:'right',vertical:'center'},border:BORDER_THIN};
+    } else if(it.type==='total'){
+      labelStyle={font:{bold:true},alignment:{horizontal:'left',vertical:'center'},border:BORDER_THIN};
+      valueStyle={font:{bold:true},alignment:{horizontal:'right',vertical:'center'},border:BORDER_THIN};
+    } else if(it.type==='pct'){
+      labelStyle={font:{italic:true,color:{rgb:'606060'},sz:10},alignment:{horizontal:'left',indent:1,vertical:'center'},border:BORDER_THIN};
+      valueStyle={font:{italic:true,color:{rgb:'606060'},sz:10},alignment:{horizontal:'right',vertical:'center'},border:BORDER_THIN};
+      numFmt=PCT_FMT;
+    } else if(it.type==='sub'){
+      labelStyle={font:{color:{rgb:'606060'},sz:10},alignment:{horizontal:'left',indent:2,vertical:'center'},border:BORDER_THIN};
+      valueStyle={font:{color:{rgb:'606060'},sz:10},alignment:{horizontal:'right',vertical:'center'},border:BORDER_THIN};
+      ws['!rows'][r]={level:1}; // colapsável sob a categoria pai
+    } else { // 'cat'
+      labelStyle={alignment:{horizontal:'left',vertical:'center'},border:BORDER_THIN};
+      valueStyle={alignment:{horizontal:'right',vertical:'center'},border:BORDER_THIN};
+    }
+
+    setStyle(r,0,labelStyle);
+    for(let c=1;c<NCOLS;c++) setStyle(r,c,valueStyle,numFmt);
+  });
+
   const wb=XLSX.utils.book_new();
   XLSX.utils.book_append_sheet(wb,ws,'DRE');
   XLSX.writeFile(wb,`DRE_${YEAR}.xlsx`);
@@ -625,12 +776,31 @@ function parseFaturamentoXLS(wb){
         }
         i++;
       }
-      // lê vencimento da linha Parcela (data em col 31, formato M/D/YY ex: "5/20/26")
+      // lê vencimento da linha Parcela — tenta col 31 primeiro, depois varre a linha toda
+      // formatos aceitos: M/D/YY (US, ex: "5/20/26") e D/M/YYYY (BR, ex: "20/05/2026")
       if(rows[i]&&findCol(rows[i],'Parcela')>=0){
         const pr=rows[i];
-        const raw=normCell(pr[31]);
-        const mdy=raw.match(/^(\d{1,2})\/(\d{1,2})\/(\d{2})$/);
-        if(mdy)cliente.vencimento=`${mdy[2].padStart(2,'0')}/${mdy[1].padStart(2,'0')}/20${mdy[3]}`;
+        const tryParseVenc=raw=>{
+          if(!raw)return'';
+          // M/D/YY — formato US que o XLSX.js às vezes usa (ano 2 dígitos)
+          const mdy2=raw.match(/^(\d{1,2})\/(\d{1,2})\/(\d{2})$/);
+          if(mdy2)return`${mdy2[2].padStart(2,'0')}/${mdy2[1].padStart(2,'0')}/20${mdy2[3]}`;
+          // D/M/YYYY ou DD/MM/YYYY — formato BR (ano 4 dígitos), sem trocar dia e mês
+          const dmy4=raw.match(/^(\d{1,2})\/(\d{1,2})\/(\d{4})$/);
+          if(dmy4)return`${dmy4[1].padStart(2,'0')}/${dmy4[2].padStart(2,'0')}/${dmy4[3]}`;
+          return'';
+        };
+        // tenta col 31; se não achar, varre toda a linha
+        let venc=tryParseVenc(normCell(pr[31]));
+        if(!venc){
+          for(let ci=0;ci<pr.length;ci++){
+            if(ci===31)continue;
+            venc=tryParseVenc(normCell(pr[ci]));
+            if(venc)break;
+          }
+        }
+        if(venc)cliente.vencimento=venc;
+        console.log('[IMPORT XLS] Parcela row col31=',normCell(pr[31]),'→ venc=',venc||'(não encontrado)');
         i++;
       }
       if(cliente.nome||cliente.codigo)clientes.push(cliente);
