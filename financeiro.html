@@ -8,6 +8,22 @@
 <meta http-equiv="Expires" content="0"/>
 <title>Financeiro — Escritório</title>
 <script>
+(function loadFavicon(){
+  const isLocalServer = ['localhost', '127.0.0.1'].includes(location.hostname);
+  const base = location.protocol === 'file:' || isLocalServer ? '' : '/Skala-F/';
+  [
+    ['icon','image/png','32x32', base+'favicon-32x32.png'],
+    ['icon','image/png','16x16', base+'favicon-16x16.png'],
+    ['shortcut icon','image/x-icon','',  base+'favicon.ico']
+  ].forEach(function([rel,type,sizes,href]){
+    var l=document.createElement('link');
+    l.rel=rel; l.type=type; l.href=href;
+    if(sizes) l.setAttribute('sizes',sizes);
+    document.head.appendChild(l);
+  });
+})();
+</script>
+<script>
 (function loadAppCss(){
   const isLocalServer = ['localhost', '127.0.0.1'].includes(location.hostname);
   const cssPath = location.protocol === 'file:' || isLocalServer
