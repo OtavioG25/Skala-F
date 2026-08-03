@@ -130,7 +130,7 @@ const sbFetch=async(method,path,body=null,extraHeaders={})=>{
 async function dbLoad(){
   const PAGE=1000;let all=[],offset=0,chunk;
   do{
-    chunk=await sbFetch('GET',`${TABLE}?order=created_at.desc&select=*&limit=${PAGE}&offset=${offset}`);
+    chunk=await sbFetch('GET',`${TABLE}?order=created_at.desc,id.asc&select=*&limit=${PAGE}&offset=${offset}`);
     if(!chunk||!chunk.length)break;
     all=all.concat(chunk);offset+=PAGE;
   }while(chunk.length===PAGE);
@@ -144,7 +144,7 @@ const BAIXAS_TABLE='baixas_lancamentos';
 async function dbLoadBaixas(){
   const PAGE=1000;let all=[],offset=0,chunk;
   do{
-    chunk=await sbFetch('GET',`${BAIXAS_TABLE}?order=data_pgto.asc,created_at.asc&select=*&limit=${PAGE}&offset=${offset}`);
+    chunk=await sbFetch('GET',`${BAIXAS_TABLE}?order=data_pgto.asc,created_at.asc,id.asc&select=*&limit=${PAGE}&offset=${offset}`);
     if(!chunk||!chunk.length)break;
     all=all.concat(chunk);offset+=PAGE;
   }while(chunk.length===PAGE);

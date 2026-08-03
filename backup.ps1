@@ -50,7 +50,7 @@ foreach ($TAB in $TABELAS) {
     $FROM = 0
     $SIZE = 1000
     do {
-        $URI = "$URL/rest/v1/" + $TAB + "?select=*&limit=$SIZE&offset=$FROM"
+        $URI = "$URL/rest/v1/" + $TAB + "?select=*&order=id.asc&limit=$SIZE&offset=$FROM"
         try {
             $RESP = Invoke-RestMethod `
                 -Uri $URI `
